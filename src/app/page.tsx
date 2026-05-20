@@ -300,8 +300,8 @@ export default function Home() {
           return
         }
         const data = await res.json()
-        if (data.success) {
-          setUser({ role: data.role, slotsLimit: data.slotsLimit, securityKey: data.securityKey })
+        if (data.authenticated && data.user) {
+          setUser({ role: data.user.role, slotsLimit: data.user.slotsLimit, securityKey: data.user.securityKey })
         } else {
           window.location.href = '/login'
         }

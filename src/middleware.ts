@@ -21,7 +21,8 @@ export async function middleware(request: NextRequest) {
     // Basic structural verification of the cookie: must be "username|sha256Hash"
     // Deep verification will be done securely at the API and page level
     // using the getAuthUser helper which verifies the hash against the database.
-    const parts = auth.value.split('|')
+    const decodedValue = decodeURIComponent(auth.value)
+    const parts = decodedValue.split('|')
     if (parts.length === 2 && parts[0] && parts[1].length === 64) {
         return NextResponse.next()
     }
