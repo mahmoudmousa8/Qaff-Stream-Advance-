@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Qaff Studio — Install Script (with Admin Master Panel)
+# Qaff Stream Advance — Native Host Installer (No Docker)
 # Ubuntu 22.04 / 24.04
 # Run: chmod +x install.sh && sudo ./install.sh
 #
+
 set -euo pipefail
 
 BOLD="\033[1m"
@@ -19,23 +20,22 @@ export NEEDRESTART_MODE=a
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="$PROJECT_DIR/.env"
 ENV_EXAMPLE="$PROJECT_DIR/.env.example"
-ADMIN_DIR="/opt/qaff-admin"
 
 echo -e "${BOLD}════════════════════════════════════════════${NC}"
-echo -e "${BOLD}  Qaff Studio + Admin Panel — Installer${NC}"
+echo -e "${BOLD}  Qaff Stream Advance — Native Installer${NC}"
 echo -e "${BOLD}════════════════════════════════════════════${NC}\n"
 
 # ════════════════════════════════════════════
-# 1. Timezone
+# 1. Timezone Configuration
 # ════════════════════════════════════════════
-echo -e "${GREEN}[1/10]${NC} Setting timezone to Africa/Cairo..."
+echo -e "${GREEN}[1/8]${NC} Setting timezone to Africa/Cairo..."
 sudo timedatectl set-timezone Africa/Cairo 2>/dev/null || true
 echo -e "  ✅ Timezone: $(timedatectl show --property=Timezone --value 2>/dev/null || echo 'Africa/Cairo')"
 
 # ════════════════════════════════════════════
-# 2. Kernel & Network Tuning for High Load
+# 2. Kernel & Network Tuning for High-Load RTMP Streams
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[2/10]${NC} Applying High-Load Kernel & Network limits..."
+echo -e "\n${GREEN}[2/8]${NC} Applying High-Load Kernel & Network limits..."
 
 cat << 'EOF' > /tmp/qaff-tune.sh
 #!/bin/bash
@@ -63,16 +63,13 @@ ensure_min_sysctl "net.ipv4.tcp_tw_reuse" 1
 ensure_min_sysctl "net.ipv4.tcp_keepalive_time" 600
 ensure_min_sysctl "net.ipv4.tcp_keepalive_intvl" 60
 ensure_min_sysctl "net.ipv4.tcp_keepalive_probes" 10
-ensure_min_sysctl "net.ipv4.tcp_rmem" "4096 87380 16777216"   # Fallback array strings don't parse well in GT, handled below instead.
 ensure_min_sysctl "net.ipv4.tcp_max_tw_buckets" 2000000
 ensure_min_sysctl "net.core.rmem_max" 16777216
 ensure_min_sysctl "net.core.wmem_max" 16777216
 
-# Ensure conntrack module is loaded before applying sysctl
 modprobe nf_conntrack 2>/dev/null || true
 ensure_min_sysctl "net.netfilter.nf_conntrack_max" 2000000
 
-# Overwrite string/multi-value parameters safely
 echo "net.ipv4.ip_local_port_range = 1024 65535" >> $TARGET_CONF
 echo "net.core.default_qdisc = fq" >> $TARGET_CONF
 echo "net.ipv4.tcp_congestion_control = bbr" >> $TARGET_CONF
@@ -83,7 +80,6 @@ echo "net.netfilter.nf_conntrack_tcp_timeout_time_wait = 10" >> $TARGET_CONF
 
 sysctl -p $TARGET_CONF >/dev/null 2>&1
 
-# Setup security limits
 mkdir -p /etc/security/limits.d
 cat << 'LIMITS' > /etc/security/limits.d/99-qaff.conf
 * soft nofile 2097152
@@ -94,7 +90,6 @@ root soft nofile 2097152
 root hard nofile 2097152
 LIMITS
 
-# Setup systemd global limits
 mkdir -p /etc/systemd/system.conf.d/
 cat << 'SYSCONF' > /etc/systemd/system.conf.d/limits.conf
 [Manager]
@@ -105,77 +100,33 @@ systemctl daemon-reload
 EOF
 
 sudo bash /tmp/qaff-tune.sh
-echo -e "  ✅ Kernel Limits and BBR Congestion Control configured"
-
-# Setup Persistent NIC Tuning (txqueuelen, ethtool ring buffers / CPU queues)
-cat << 'NIC_TUNE' > /tmp/qaff-nic-tune.sh
-#!/bin/bash
-MAIN_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
-if [ -n "$MAIN_IFACE" ]; then
-    # Increase transmit queue length
-    ip link set "$MAIN_IFACE" txqueuelen 10000 2>/dev/null || true
-    
-    # Increase Ring Buffers to absorb bursts
-    ethtool -G "$MAIN_IFACE" rx 4096 tx 4096 2>/dev/null || true
-    
-    # Scale NIC hardware queues to match CPU cores
-    CPU=$(nproc)
-    ethtool -L "$MAIN_IFACE" combined $CPU 2>/dev/null || \
-    ethtool -L "$MAIN_IFACE" rx $CPU tx $CPU 2>/dev/null || true
-fi
-NIC_TUNE
-
-sudo mv /tmp/qaff-nic-tune.sh /usr/local/bin/qaff-nic-tune.sh
-sudo chmod +x /usr/local/bin/qaff-nic-tune.sh
-
-cat << 'NIC_SERVICE' > /tmp/qaff-nic-tune.service
-[Unit]
-Description=Qaff Studio NIC Advanced Tuning
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/qaff-nic-tune.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-NIC_SERVICE
-
-sudo mv /tmp/qaff-nic-tune.service /etc/systemd/system/qaff-nic-tune.service
-sudo systemctl daemon-reload 2>/dev/null || true
-sudo systemctl enable qaff-nic-tune.service 2>/dev/null || true
-sudo systemctl start qaff-nic-tune.service 2>/dev/null || true
-
-echo -e "  ✅ Advanced NIC Queue and Ring Buffer Tuning configured"
+rm -f /tmp/qaff-tune.sh
+echo -e "  ✅ High-Load Kernel Limits and BBR Congestion Control configured"
 
 # ════════════════════════════════════════════
-# 3. System packages
+# 3. Installing Host Packages
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[3/10]${NC} Installing system packages..."
+echo -e "\n${GREEN}[3/8]${NC} Installing system packages..."
 sudo apt-get update -qq
-DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
-  curl wget unzip openssl \
-  build-essential \
-  sqlite3 ethtool \
-  ffmpeg
+sudo apt-get install -y -qq \
+  curl wget unzip openssl build-essential sqlite3 ethtool ffmpeg git fail2ban
 
 if ! command -v ffmpeg &>/dev/null; then
   echo -e "  ${RED}ffmpeg install failed!${NC}" && exit 1
 fi
 echo -e "  ✅ ffmpeg: $(ffmpeg -version 2>&1 | head -1 | cut -d' ' -f3)"
-echo -e "  ✅ System packages installed"
+echo -e "  ✅ SQLite3: $(sqlite3 --version | cut -d' ' -f1)"
+echo -e "  ✅ System packages installed successfully"
 
 # ════════════════════════════════════════════
-# 3. Node.js 20.x
+# 4. Setting up Node.js 20 & PM2 & tsx
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[3/9]${NC} Setting up Node.js 20.x..."
+echo -e "\n${GREEN}[4/8]${NC} Setting up Node.js 20.x & PM2..."
 
 install_node20() {
   echo -e "  ${YELLOW}Installing Node.js 20.x via NodeSource...${NC}"
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - 2>&1 | grep -E "(found|adding|Executing)" || true
-  sudo apt-get install -y nodejs
-  echo -e "  ✅ Node.js $(node -v)"
+  sudo apt-get install -y -qq nodejs
 }
 
 if command -v node &>/dev/null; then
@@ -184,52 +135,38 @@ if command -v node &>/dev/null; then
     echo -e "  ✅ Node.js $(node -v) — OK"
   else
     echo -e "  ${YELLOW}Node.js v${NODE_VER} found, upgrading to 20...${NC}"
-    sudo apt-get remove -y nodejs nodejs-doc 2>/dev/null || true
+    sudo apt-get remove -y -qq nodejs nodejs-doc 2>/dev/null || true
     install_node20
   fi
 else
   install_node20
 fi
+
+echo -e "  ✅ Node.js: $(node -v)"
 echo -e "  ✅ npm: $(npm -v)"
 
-# ════════════════════════════════════════════
-# 4. PM2 + tsx
-# ════════════════════════════════════════════
-echo -e "\n${GREEN}[4/9]${NC} Setting up PM2..."
-if command -v pm2 &>/dev/null; then
-  echo -e "  ✅ PM2 $(pm2 -v) already installed"
-else
+# Install PM2 and tsx interpreter globally
+if ! command -v pm2 &>/dev/null; then
+  echo -e "  Installing PM2..."
   sudo npm install -g pm2 2>&1 | tail -2
-  echo -e "  ✅ PM2 $(pm2 -v) installed"
 fi
-
 if ! command -v tsx &>/dev/null; then
+  echo -e "  Installing tsx..."
   sudo npm install -g tsx 2>&1 | tail -2
 fi
+echo -e "  ✅ PM2: $(pm2 -v)"
 echo -e "  ✅ tsx: $(tsx -v 2>/dev/null || echo 'installed')"
 
 # ════════════════════════════════════════════
-# 5. Docker Engine
+# 5. Preparing Project Directories & Environment
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[5/9]${NC} Setting up Docker..."
-if command -v docker &>/dev/null; then
-  echo -e "  ✅ Docker $(docker --version | cut -d' ' -f3 | tr -d ',') already installed"
-else
-  echo -e "  ${YELLOW}Installing Docker Engine...${NC}"
-  curl -fsSL https://get.docker.com | sudo bash 2>&1 | tail -5
-  echo -e "  ✅ Docker installed"
-fi
+echo -e "\n${GREEN}[5/8]${NC} Creating directories & environment..."
+for dir in data data/videos data/upload data/download data/logs; do
+  mkdir -p "$PROJECT_DIR/$dir"
+done
+chmod -R 755 "$PROJECT_DIR/data"
 
-# Add current user to docker group
-sudo usermod -aG docker "$(whoami)" 2>/dev/null || true
-# Allow docker socket access for PM2 processes
-sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
-echo -e "  ✅ Docker socket ready"
-
-# ════════════════════════════════════════════
-# 6. .env Setup
-# ════════════════════════════════════════════
-echo -e "\n${GREEN}[6/9]${NC} Setting up .env..."
+# Setup .env file
 if [ -f "$ENV_FILE" ]; then
   echo -e "  ✅ .env already exists — keeping existing"
 else
@@ -243,201 +180,135 @@ if grep -q "change-me-to-a-random-secure-string" "$ENV_FILE" 2>/dev/null; then
   echo -e "  ✅ SESSION_SECRET auto-generated"
 fi
 
-# ════════════════════════════════════════════
-# 7. Directories + Firewall
-# ════════════════════════════════════════════
-echo -e "\n${GREEN}[7/9]${NC} Directories & Firewall..."
-for dir in data data/videos data/upload data/download data/logs; do
-  mkdir -p "$PROJECT_DIR/$dir"
-done
-sudo mkdir -p /var/log/qaff
-sudo chown -R "$(whoami):$(whoami)" /var/log/qaff 2>/dev/null || true
-chmod -R 755 "$PROJECT_DIR/data"
-
-# Primary bind-mount root for all local client data
-sudo mkdir -p /opt/qaff-data
-sudo chown -R 1000:1000 /opt/qaff-data
-sudo chmod 755 /opt/qaff-data
-echo -e "  ✅ Primary bind-mount root created at /opt/qaff-data"
-echo -e "  ✅ Directories created"
-
+# Ensure firewall permissions
 if command -v ufw &>/dev/null; then
-  sudo ufw allow 22/tcp   2>/dev/null || true
+  sudo ufw allow 22/tcp 2>/dev/null || true
   sudo ufw allow 3000/tcp 2>/dev/null || true
-  sudo ufw allow 4000/tcp 2>/dev/null || true   # Admin Panel
-  # Allow client ports range 31000–32999
-  sudo ufw allow 31000:32999/tcp 2>/dev/null || true
+  sudo ufw allow 3002/tcp 2>/dev/null || true
+  sudo ufw allow 1935/tcp 2>/dev/null || true
   sudo ufw --force enable 2>/dev/null || true
-  echo -e "  ✅ UFW: ports 22, 3000, 4000, 31000-32999 opened"
-else
-  echo -e "  ${YELLOW}UFW not found — skipping firewall setup${NC}"
+  echo -e "  ✅ UFW: ports 22, 3000 (web), 3002 (stream manager), 1935 (RTMP ingest) opened"
 fi
 
 # ════════════════════════════════════════════
-# 8. npm install + Prisma + Build (Main App)
+# 6. Installing Dependencies & Building Dashboard Natively
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[8/9]${NC} Installing dependencies & building main app..."
+echo -e "\n${GREEN}[6/8]${NC} Building Next.js Web App & Stream Manager natively..."
 cd "$PROJECT_DIR"
 
+# Install production and development dependencies natively
 npm install --production=false 2>&1 | tail -3
 echo -e "  ✅ npm install complete"
 
-# Fix Git ownership issues for future pulls
-git config --global --add safe.directory "$PROJECT_DIR" 2>/dev/null || true
-sudo git config --global --add safe.directory "$PROJECT_DIR" 2>/dev/null || true
-
+# Initialize SQLite database
 npx prisma generate 2>&1 | tail -2
 npx prisma db push 2>&1 | tail -2
-echo -e "  ✅ Database initialized"
+echo -e "  ✅ SQLite database initialized"
 
-if node -e "
-const { PrismaClient } = require('@prisma/client');
-const p = new PrismaClient();
-p.adminUser.count().then(c => { process.exit(c > 0 ? 1 : 0); }).catch(() => process.exit(0));
-" 2>/dev/null; then
-  node scripts/set-admin-password.mjs Admin 2>/dev/null || true
-  echo -e "  ✅ Default app password set: Admin"
-else
-  echo -e "  ✅ App admin password already set"
-fi
+# Seed default admin/client credentials
+node scripts/seed.mjs
+echo -e "  ✅ Default users and slots seeded successfully"
 
+# Build dashboard production bundle
 sudo rm -rf "$PROJECT_DIR/.next"
 npm run build 2>&1 | tail -5
-echo -e "  ✅ Production build complete"
-
-# Build Docker image
-echo -e "\n  ${YELLOW}Building qaff-studio Docker image (this may take a few minutes)...${NC}"
-docker build -t qaff-studio:latest "$PROJECT_DIR" 2>&1 | tail -5
-echo -e "  ✅ Docker image qaff-studio:latest built"
+echo -e "  ✅ Production build compiled"
 
 # ════════════════════════════════════════════
-# 9. Admin Panel Setup
+# 7. Installing and Configuring MediaMTX Natively (Systemd)
 # ════════════════════════════════════════════
-echo -e "\n${GREEN}[9/9]${NC} Setting up Qaff Admin Panel..."
+echo -e "\n${GREEN}[7/8]${NC} Setting up MediaMTX Live Ingest Receiver natively..."
 
-# Copy admin panel files to /opt/qaff-admin
-sudo mkdir -p "$ADMIN_DIR"
-sudo cp -r "$PROJECT_DIR/qaff-admin/." "$ADMIN_DIR/"
-sudo chown -R "$(whoami):$(whoami)" "$ADMIN_DIR"
-mkdir -p "$ADMIN_DIR/data/logs"
+sudo mkdir -p /opt/mediamtx
+cd /opt/mediamtx
 
-# Install admin panel dependencies
-cd "$ADMIN_DIR"
-sudo npm install --production 2>&1 | tail -3
-echo -e "  ✅ Admin panel dependencies installed"
-echo -e "  ✅ Admin panel ready at /opt/qaff-admin"
-
-
-# ════════════════════════════════════════════
-# Auto-mount additional disk (e.g. /dev/sdb) if present and not yet mounted
-# ════════════════════════════════════════════
-echo -e "\n${CYAN}[DISK] Checking for additional disks to auto-mount...${NC}"
-EXTRA_DISK=""
-for DEV in /dev/sdb /dev/sdc /dev/vdb /dev/vdc; do
-  if [ -b "$DEV" ] && ! lsblk -no MOUNTPOINT "$DEV" | grep -q '/'; then
-    EXTRA_DISK="$DEV"
-    break
-  fi
-done
-
-if [ -n "$EXTRA_DISK" ]; then
-  MOUNT_POINT="/mnt/storage"
-  echo -e "  Found extra disk: ${EXTRA_DISK}. Mounting at ${MOUNT_POINT}..."
-
-  # Format only if no filesystem found
-  FSTYPE=$(blkid -o value -s TYPE "$EXTRA_DISK" 2>/dev/null || echo "")
-  if [ -z "$FSTYPE" ]; then
-    echo "  No filesystem found — formatting as ext4..."
-    sudo mkfs.ext4 -F "$EXTRA_DISK"
-  else
-    echo "  Existing filesystem: ${FSTYPE} — skipping format."
-  fi
-
-  sudo mkdir -p "$MOUNT_POINT"
-  sudo mount "$EXTRA_DISK" "$MOUNT_POINT" 2>/dev/null || true
-
-  # Add to /etc/fstab for permanent mount on every reboot (if not already there)
-  DISK_UUID=$(blkid -s UUID -o value "$EXTRA_DISK")
-  if [ -n "$DISK_UUID" ] && ! grep -q "$DISK_UUID" /etc/fstab; then
-    echo "UUID=${DISK_UUID}  ${MOUNT_POINT}  ext4  defaults,nofail  0  2" | sudo tee -a /etc/fstab > /dev/null
-    echo "  ✅ Added disk UUID=${DISK_UUID} to /etc/fstab (permanent mount)."
-  fi
-
-  # Symlink docker volumes and videos storage to the extra disk
-  sudo mkdir -p "${MOUNT_POINT}/qaff-data"
-  sudo chown -R "$(whoami):$(whoami)" "${MOUNT_POINT}/qaff-data"
-  echo "  ✅ Extra disk ready at ${MOUNT_POINT}. Use ${MOUNT_POINT}/qaff-data for client volumes."
-else
-  echo "  No unmounted extra disk found — using primary disk."
+MTX_VER="v1.9.0"
+if [ ! -f "/opt/mediamtx/mediamtx" ]; then
+  echo -e "  Downloading MediaMTX ${MTX_VER}..."
+  sudo wget -q --show-progress https://github.com/bluenviron/mediamtx/releases/download/${MTX_VER}/mediamtx_${MTX_VER}_linux_amd64.tar.gz
+  sudo tar -xzf mediamtx_${MTX_VER}_linux_amd64.tar.gz
+  sudo rm -f mediamtx_${MTX_VER}_linux_amd64.tar.gz
+  echo -e "  ✅ MediaMTX binary extracted"
 fi
 
+# Write MediaMTX configuration
+sudo bash -c "cat << 'EOF' > /opt/mediamtx/mediamtx.yml
+# MediaMTX Native Ingest & Direct Relay Configuration
+paths:
+  all:
+    # Disable default rtsp/webrtc output logs to keep syslog clean
+    source: publisher
+EOF"
+
+# Create Systemd service for MediaMTX
+sudo bash -c "cat << 'EOF' > /etc/systemd/system/mediamtx.service
+[Unit]
+Description=MediaMTX Live Ingest Receiver
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/mediamtx
+ExecStart=/opt/mediamtx/mediamtx
+Restart=always
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mediamtx
+
+[Install]
+WantedBy=multi-user.target
+EOF"
+
+sudo systemctl daemon-reload
+sudo systemctl enable mediamtx
+sudo systemctl restart mediamtx
+echo -e "  ✅ MediaMTX service enabled and running natively on port 1935 (systemctl status mediamtx)"
+
 # ════════════════════════════════════════════
-# Start Admin Panel via PM2 (Port 4000 — strictly enforced)
+# 8. Start Native Dashboard and Stream Manager via PM2
 # ════════════════════════════════════════════
-cd "$ADMIN_DIR"
-echo -e "\n${GREEN}Starting Admin Panel via PM2 on port 4000...${NC}"
+echo -e "\n${GREEN}[8/8]${NC} Launching App Services via PM2..."
+cd "$PROJECT_DIR"
 
-# Kill ANYTHING currently using port 4000 (safety guard)
-echo "  Clearing port 4000 if occupied..."
-PORT4000_PID=$(lsof -ti:4000 2>/dev/null || true)
-if [ -n "$PORT4000_PID" ]; then
-  echo "  Killing process(es) on port 4000: $PORT4000_PID"
-  kill -9 $PORT4000_PID 2>/dev/null || true
-  sleep 1
-fi
+# Clean up any stale PM2 processes
+pm2 delete qaff-web qaff-stream-manager 2>/dev/null || true
 
-# Remove any stale PM2 entry and start fresh
-sudo pm2 delete qaff-admin 2>/dev/null || true
-sudo pm2 start server.js --name "qaff-admin" 2>/dev/null
-sudo pm2 save 2>/dev/null || true
+# Start services via ecosystem.config.cjs
+pm2 start ecosystem.config.cjs
+pm2 save
 
-# Ensure PM2 auto-starts on every server reboot
-echo "  Configuring PM2 auto-start on boot..."
-PM2_STARTUP_CMD=$(sudo pm2 startup systemd -u root --hp /root 2>/dev/null | grep "sudo env" | grep -v "^\[" || true)
+# Setup PM2 Startup script
+PM2_STARTUP_CMD=$(sudo pm2 startup systemd -u "$USER" --hp "$HOME" 2>/dev/null | grep "sudo env" | grep -v "^\[" || true)
 if [ -n "$PM2_STARTUP_CMD" ]; then
   eval "$PM2_STARTUP_CMD" 2>/dev/null || true
 fi
-sudo pm2 save --force 2>/dev/null || true
-echo -e "  ✅ Admin panel started on port 4000 (auto-restarts on reboot)"
+pm2 save --force
 
-# ════════════════════════════════════════════
-# 10. Disable Auto-Updates & Reboots
-# ════════════════════════════════════════════
-echo -e "\n${GREEN}[10/10]${NC} Disabling Unattended Upgrades & Auto-Reboots..."
-sudo systemctl stop unattended-upgrades 2>/dev/null || true
-sudo systemctl disable unattended-upgrades 2>/dev/null || true
-# Overwrite apt config to disable auto updates completely
-cat << 'EOF' | sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null
-APT::Periodic::Update-Package-Lists "0";
-APT::Periodic::Download-Upgradeable-Packages "0";
-APT::Periodic::AutocleanInterval "0";
-APT::Periodic::Unattended-Upgrade "0";
-EOF
-echo -e "  ✅ System auto-updates and auto-reboots disabled for stability."
-
-# ════════════════════════════════════════════
-# Done — user manages clients via Admin Panel
-# ════════════════════════════════════════════
+# Final statistics
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo -e "\n${BOLD}════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  ✅ Installation & Tuning complete!${NC}"
-echo -e "${BOLD}════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  🎉 Qaff Stream Advance — Installation Complete!${NC}"
+echo -e "  No Docker used. All services are running natively."
+echo -e "${BOLD}════════════════════════════════════════════${NC}\n"
+echo -e "  🎛️  Dashboard:      ${BOLD}http://${SERVER_IP}:3000${NC}"
+echo -e "  📶  RTMP Ingest Port: ${BOLD}1935${NC}"
 echo -e ""
-echo -e "  🎛️  Admin Panel:    ${BOLD}http://${SERVER_IP}:4000${NC}"
-echo -e "  🔑  Admin Password: ${BOLD}Admin123@${NC}"
+echo -e "  🔑  Default Admin Credentials:"
+echo -e "      • Username: ${BOLD}admin${NC}"
+echo -e "      • Password: ${BOLD}admin2026${NC}"
 echo -e ""
-echo -e "  💡 Create your first client from the Admin Panel!"
+echo -e "  🔑  Default Client Credentials:"
+echo -e "      • Username: ${BOLD}user${NC}"
+echo -e "      • Password: ${BOLD}user2026${NC}"
+echo -e "      • Ingest Key: ${BOLD}qaff-key-123${NC}"
 echo -e ""
-MAIN_IFACE=$(ip route | grep default | awk '{print $5}' | head -n1 2>/dev/null || echo "eth0")
-echo -e "${CYAN}──────── System Limits Applied ────────${NC}"
-echo -e "  • BBR Congestion: $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 'N/A')"
-echo -e "  • somaxconn:      $(sysctl -n net.core.somaxconn 2>/dev/null || echo 'N/A')"
-echo -e "  • file-max:       $(sysctl -n fs.file-max 2>/dev/null || echo 'N/A')"
-echo -e "  • Open Files:     $(ulimit -n)"
-echo -e "  • TX Queue Len:   $(ip link show $MAIN_IFACE 2>/dev/null | grep qlen | awk '{print $NF}' || echo 'N/A')"
-echo -e "${CYAN}───────────────────────────────────────${NC}"
-echo -e "  🔍 To rigorously verify system limits, you can run:"
-echo -e "     ${BOLD}sysctl net.ipv4.tcp_congestion_control${NC}"
-echo -e "     ${BOLD}ethtool -g $MAIN_IFACE${NC} (Check Ring Buffers)"
-echo -e "     ${BOLD}ethtool -l $MAIN_IFACE${NC} (Check CPU Queues)"
-echo -e "\n${BOLD}✅ All done!${NC}\n"
+echo -e "  💡 To stream from OBS to your server:"
+echo -e "     • Server: ${BOLD}rtmp://${SERVER_IP}/live${NC}"
+echo -e "     • Stream Key: ${BOLD}qaff-key-123${NC}"
+echo -e ""
+echo -e "  🔍 Monitor your native processes:"
+echo -e "     • pm2 status"
+echo -e "     • pm2 logs"
+echo -e "     • systemctl status mediamtx"
+echo -e "  ✅ All done! Good luck! 🎉\n"
