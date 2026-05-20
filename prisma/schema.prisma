@@ -29,6 +29,11 @@ model StreamSlot {
   nextRunTime     String   @default("")
   status          String   @default("Stopped")
   isRunning       Boolean  @default(false)
+  muteAudio       Boolean  @default(false)
+  audioVolume     Float    @default(1.0)
+  audioFilePath   String   @default("")
+  overlayText     String   @default("")
+  overlayTextEnabled Boolean @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

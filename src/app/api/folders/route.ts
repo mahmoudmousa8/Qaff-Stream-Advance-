@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
     const folders: { name: string; path: string; videoCount: number; sizeFormatted: string }[] = []
     const videos: { name: string; path: string; size: number; sizeFormatted: string; modified: string }[] = []
 
-    const allowedExtensions = ['.mp4']
+    const allowedExtensions = ['.mp4', '.mp3', '.wav', '.m4a', '.aac']
 
     for (const item of items) {
       if (item.startsWith('.')) continue;

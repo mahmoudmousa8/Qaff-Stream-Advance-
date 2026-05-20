@@ -890,7 +890,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
         <input
           ref={fileInputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,audio/*"
           multiple
           className="hidden"
           onChange={handleFileSelect}
@@ -898,7 +898,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
         <input
           ref={folderInputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,audio/*"
           // @ts-expect-error - webkitdirectory is non-standard but widely supported
           webkitdirectory=""
           directory=""

@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -53,6 +53,11 @@ interface StreamSlot {
   isRunning: boolean
   inputType?: 'file' | 'live'
   liveInputUrl?: string
+  muteAudio?: boolean
+  audioVolume?: number
+  audioFilePath?: string
+  overlayText?: string
+  overlayTextEnabled?: boolean
 }
 
 interface LogEntry {
@@ -267,6 +272,18 @@ export default function Home() {
   const [selectedTz, setSelectedTz] = useState('')
   const [savingTz, setSavingTz] = useState(false)
   const logViewportRef = useRef<HTMLDivElement>(null)
+
+  // Advanced settings state
+  const [settingsSlot, setSettingsSlot] = useState<number | null>(null)
+  const [settingsData, setSettingsData] = useState<{
+    muteAudio: boolean
+    audioVolume: number
+    audioFilePath: string
+    overlayText: string
+    overlayTextEnabled: boolean
+  } | null>(null)
+  const [activeTab, setActiveTab] = useState<'audio' | 'overlay'>('audio')
+  const [audioSelectorSlot, setAudioSelectorSlot] = useState<number | null>(null)
 
   // Initialize locale and theme
   useEffect(() => {
@@ -1409,6 +1426,20 @@ export default function Home() {
                                 <RotateCcw className="w-3.5 h-3.5 animate-spin-reverse" />
                               </Button>
                               <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
+                                onClick={() => {
+                                  setSettingsSlot(slot.slotIndex)
+                                  setSettingsData({
+                                    muteAudio: slot.muteAudio ?? false,
+                                    audioVolume: slot.audioVolume ?? 1.0,
+                                    audioFilePath: slot.audioFilePath ?? '',
+                                    overlayText: slot.overlayText ?? '',
+                                    overlayTextEnabled: slot.overlayTextEnabled ?? false,
+                                  })
+                                }}
+                                title={t('advancedSettings')}>
+                                <Settings className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
                                 onClick={() => openChannelLogs(slot.slotIndex)}
                                 title={t('colLogs')}>
                                 <FileText className="w-3.5 h-3.5" />
@@ -1640,6 +1671,300 @@ export default function Home() {
           </DialogFooter>
         </DialogContent>
       </Dialog >
+
+      {/* ── Advanced Stream Settings Dialog ── */}
+      <Dialog open={settingsSlot !== null} onOpenChange={(open) => !open && setSettingsSlot(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col bg-card border border-border shadow-2xl overflow-hidden rounded-xl" dir={dir}>
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/80 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+              <Settings className="w-5.5 h-5.5 text-primary" />
+              {t('advancedSettings')} #{settingsSlot !== null ? settingsSlot + 1 : ''}
+              {settingsSlot !== null && slots.find(s => s.slotIndex === settingsSlot)?.channelName && (
+                <span className="text-sm font-normal text-muted-foreground ml-2 bg-muted px-2 py-0.5 rounded-full">
+                  {slots.find(s => s.slotIndex === settingsSlot)?.channelName}
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground/80 mt-1">
+              {locale === 'ar' 
+                ? 'قم بتخصيص إعدادات الصوت المعقدة والشريط الإعلاني المخصص للبث.' 
+                : 'Customize advanced audio controls and dynamic overlay text banners for this stream.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Dialog Body */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+            {/* Tabs Selector */}
+            <div className="flex bg-muted/60 p-1 rounded-lg border border-border/40 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('audio')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                  activeTab === 'audio'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                }`}
+              >
+                <span>🎵</span>
+                {t('audioControls')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('overlay')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                  activeTab === 'overlay'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                }`}
+              >
+                <span>📺</span>
+                {t('videoOverlay')}
+              </button>
+            </div>
+
+            {settingsData && (
+              <div className="space-y-6 min-h-[300px]">
+                {activeTab === 'audio' ? (
+                  /* Audio Tab */
+                  <div className="space-y-6">
+                    {/* Toggle: Mute Source Audio */}
+                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
+                      <div className="space-y-0.5">
+                        <label htmlFor="muteAudio-toggle" className="text-sm font-bold text-foreground cursor-pointer">
+                          {t('muteOriginalAudio')}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {locale === 'ar' 
+                            ? 'كتم صوت المصدر تماماً قبل معالجة وإرسال البث.' 
+                            : 'Silence the original source stream audio entirely before broadcast.'}
+                        </p>
+                      </div>
+                      <Checkbox
+                        id="muteAudio-toggle"
+                        checked={settingsData.muteAudio}
+                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, muteAudio: !!checked } : p)}
+                        className="w-5 h-5 accent-primary"
+                      />
+                    </div>
+
+                    {/* Slider: Audio Volume */}
+                    <div className="space-y-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <div className="flex justify-between items-center">
+                        <label className="text-sm font-bold text-foreground">
+                          {t('audioVolumeLabel')}
+                        </label>
+                        <span className="text-xs font-mono font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
+                          {(settingsData.audioVolume * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        {locale === 'ar' 
+                          ? 'تحكم في مستوى صوت البث الناتج (0% كتم، 100% طبيعي، حتى 200%).' 
+                          : 'Adjust the broadcast audio gain factor (0% mute, 100% normal, up to 200%).'}
+                      </p>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-muted-foreground">0%</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="2"
+                          step="0.05"
+                          value={settingsData.audioVolume}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value)
+                            setSettingsData(p => p ? { ...p, audioVolume: val } : p)
+                          }}
+                          className="flex-1 h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <span className="text-xs text-muted-foreground">200%</span>
+                      </div>
+                    </div>
+
+                    {/* File picker: Background Music Loop File */}
+                    <div className="space-y-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <label className="text-sm font-bold text-foreground block">
+                        {t('bgMusicFile')}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === 'ar' 
+                          ? 'اختر ملفاً صوتياً (موسيقى/خلفية) ليتم خلطه أو استبداله بالبث الرئيسي.' 
+                          : 'Select an audio track to overlay or completely replace the stream audio.'}
+                      </p>
+
+                      {settingsData.audioFilePath ? (
+                        <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-lg text-xs font-mono">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="shrink-0 text-base">🎵</span>
+                            <span className="truncate text-foreground/95" title={settingsData.audioFilePath}>
+                              {settingsData.audioFilePath.split(/[/\\]/).pop()}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors ml-1"
+                            onClick={() => setSettingsData(p => p ? { ...p, audioFilePath: '' } : p)}
+                            title={locale === 'ar' ? 'إزالة الملف الصوتي' : 'Remove Audio File'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full flex items-center justify-center gap-2 text-xs border-dashed border-2 hover:bg-muted/50 border-border/80 h-10 transition-all rounded-lg"
+                          onClick={() => setAudioSelectorSlot(settingsSlot)}
+                        >
+                          <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                          {t('selectAudioFile')}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Video Overlay Tab */
+                  <div className="space-y-5">
+                    {/* Toggle: Enable Banner */}
+                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
+                      <div className="space-y-0.5">
+                        <label htmlFor="enableBannerText-toggle" className="text-sm font-bold text-foreground cursor-pointer">
+                          {t('enableBannerText')}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {locale === 'ar' 
+                            ? 'تفعيل عرض شريط إعلاني أصفر أسفل الفيديو في البث.' 
+                            : 'Enable rendering a semi-transparent yellow banner at the bottom of the stream.'}
+                        </p>
+                      </div>
+                      <Checkbox
+                        id="enableBannerText-toggle"
+                        checked={settingsData.overlayTextEnabled}
+                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, overlayTextEnabled: !!checked } : p)}
+                        className="w-5 h-5 accent-primary"
+                      />
+                    </div>
+
+                    {/* Text Input */}
+                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <label className="text-sm font-bold text-foreground block">
+                        {t('bannerTextLabel')}
+                      </label>
+                      <Input
+                        value={settingsData.overlayText}
+                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayText: e.target.value } : p)}
+                        placeholder={t('bannerTextPlaceholder')}
+                        dir="auto"
+                        className="text-center font-semibold bg-background"
+                      />
+                    </div>
+
+                    {/* Premium Live Simulated Preview */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                        {locale === 'ar' ? 'معاينة البث المباشر الفورية' : 'Live Broadcast Simulation Preview'}
+                      </label>
+                      <div className="relative aspect-video w-full max-w-md mx-auto bg-black rounded-xl overflow-hidden shadow-lg border border-border flex flex-col justify-end">
+                        {/* Simulation Video Content */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-muted-foreground/30 select-none text-[10px] font-semibold tracking-widest uppercase">
+                          <div className="text-center space-y-1">
+                            <Activity className="w-8 h-8 mx-auto animate-pulse text-muted-foreground/20" />
+                            <span>Live Video Stream</span>
+                          </div>
+                        </div>
+
+                        {/* Yellow Banner Overlay */}
+                        {settingsData.overlayTextEnabled && (
+                          <div className="relative w-full h-[22%] bg-[#eab308]/85 border-t border-[#eab308]/60 flex items-center justify-center px-4">
+                            <span 
+                              className="text-white font-bold text-center drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.8)] text-xs md:text-sm select-none break-all line-clamp-1" 
+                              style={{ fontFamily: 'sans-serif' }}
+                              dir="auto"
+                            >
+                              {settingsData.overlayText || (locale === 'ar' ? 'اكتب نص الشريط الإعلاني...' : 'Your custom overlay banner text here...')}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Watermark/Indicators */}
+                        <div className="absolute top-2 left-2 bg-red-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse flex items-center gap-1 shadow-sm">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                          <span>Live</span>
+                        </div>
+                        <div className="absolute top-2 right-2 bg-black/60 text-white font-mono text-[9px] px-1.5 py-0.5 rounded shadow-sm">
+                          1080p
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Dialog Footer */}
+          <DialogFooter className="px-6 py-4 bg-muted/40 border-t border-border/80 shrink-0 flex gap-2 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSettingsSlot(null)}
+              className="text-xs"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              onClick={async () => {
+                if (settingsSlot === null || !settingsData) return
+                try {
+                  await updateSlot(settingsSlot, {
+                    muteAudio: settingsData.muteAudio,
+                    audioVolume: settingsData.audioVolume,
+                    audioFilePath: settingsData.audioFilePath,
+                    overlayText: settingsData.overlayText,
+                    overlayTextEnabled: settingsData.overlayTextEnabled,
+                  })
+                  addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)
+                } catch {
+                  addLog(`Slot ${settingsSlot + 1}: Error saving advanced settings`)
+                }
+                setSettingsSlot(null)
+              }}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-xs px-5 shadow-md"
+            >
+              {t('saveSettings')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Audio Selector Helper Dialog ── */}
+      <Dialog open={audioSelectorSlot !== null} onOpenChange={(open) => !open && setAudioSelectorSlot(null)}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col bg-card border shadow-2xl rounded-xl">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              {t('selectAudioFile')} #{audioSelectorSlot !== null ? audioSelectorSlot + 1 : ''}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar' ? 'تصفح واختر ملفاً صوتياً (MP3, WAV, M4A, AAC) من المجلدات.' : 'Browse and select an audio loop file (MP3, WAV, M4A, AAC) from your workspace.'}
+            </DialogDescription>
+          </DialogHeader>
+          {audioSelectorSlot !== null && (
+            <div className="flex-1 overflow-hidden min-h-0 px-4">
+              <VideoManager
+                mode="select"
+                onVideoSelect={(path) => {
+                  setSettingsData(p => p ? { ...p, audioFilePath: path } : p)
+                  setAudioSelectorSlot(null)
+                }}
+                onClose={() => setAudioSelectorSlot(null)}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Change Password Dialog ── */}
       <Dialog open={pwDialogOpen} onOpenChange={(open) => !open && setPwDialogOpen(false)}>

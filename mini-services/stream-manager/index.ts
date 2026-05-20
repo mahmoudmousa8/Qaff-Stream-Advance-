@@ -45,9 +45,17 @@ function findTool(name: string): string | null {
 const FFMPEG_PATH = findTool('ffmpeg') || 'ffmpeg'
 const FFPROBE_PATH = findTool('ffprobe') || 'ffprobe'
 
+interface StreamOptions {
+  muteAudio?: boolean
+  audioVolume?: number
+  audioFilePath?: string
+  overlayText?: string
+  overlayTextEnabled?: boolean
+}
+
 // ── Stagger queue ────────────────────────────────────────────
 let staggerQueue: Array<{
-  slotIndex: number; rtmpUrl: string; streamKey: string; filePath: string
+  slotIndex: number; rtmpUrl: string; streamKey: string; filePath: string; options?: StreamOptions
   resolve: (result: { success: boolean; message: string }) => void
 }> = []
 let isProcessingQueue = false
@@ -66,6 +74,7 @@ interface StreamInfo {
   filePath: string       // needed for auto-restart
   isStopping: boolean    // true if stopped by user
   restartCount: number   // to prevent infinite fast-restart loops
+  options?: StreamOptions // save options for watchdog
 }
 const activeStreams: Map<number, StreamInfo> = new Map()
 
@@ -84,21 +93,29 @@ function log(message: string, streamKey?: string) {
 
 // ── FFprobe: check source compatibility ──────────────────────
 interface ProbeResult {
-  videoCodec: string; audioCodec: string; fps: number; compatible: boolean
+  videoCodec: string; audioCodec: string; fps: number; compatible: boolean; width: number; height: number; hasAudio: boolean
 }
 
 function probeFile(filePath: string): ProbeResult {
-  const defaultResult: ProbeResult = { videoCodec: 'unknown', audioCodec: 'unknown', fps: 30, compatible: false }
+  const defaultResult: ProbeResult = { videoCodec: 'unknown', audioCodec: 'unknown', fps: 30, compatible: false, width: 1280, height: 720, hasAudio: false }
   try {
     const vCodec = execSync(
       `"${FFPROBE_PATH}" -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "${filePath}"`,
       { encoding: 'utf-8', timeout: 10000 }
     ).trim().split('\n')[0] || 'unknown'
 
-    const aCodec = execSync(
-      `"${FFPROBE_PATH}" -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "${filePath}"`,
-      { encoding: 'utf-8', timeout: 10000 }
-    ).trim().split('\n')[0] || 'unknown'
+    let cleanACodec = 'unknown'
+    let hasAudio = false
+    try {
+      const aCodec = execSync(
+        `"${FFPROBE_PATH}" -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "${filePath}"`,
+        { encoding: 'utf-8', timeout: 10000 }
+      ).trim().split('\n')[0]
+      if (aCodec && aCodec !== 'unknown') {
+        cleanACodec = aCodec.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+        hasAudio = true
+      }
+    } catch { }
 
     let fps = 30
     try {
@@ -112,10 +129,25 @@ function probeFile(filePath: string): ProbeResult {
       }
     } catch { }
 
+    let width = 1280
+    let height = 720
+    try {
+      const resRaw = execSync(
+        `"${FFPROBE_PATH}" -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "${filePath}"`,
+        { encoding: 'utf-8', timeout: 10000 }
+      ).trim()
+      if (resRaw && resRaw.includes('x')) {
+        const [w, h] = resRaw.split('x').map(Number)
+        if (!isNaN(w) && w > 0 && !isNaN(h) && h > 0) {
+          width = w
+          height = h
+        }
+      }
+    } catch { }
+
     const cleanVCodec = vCodec.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
-    const cleanACodec = aCodec.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
     const compatible = cleanVCodec.includes('h264') && cleanACodec.includes('aac')
-    return { videoCodec: cleanVCodec, audioCodec: cleanACodec, fps, compatible }
+    return { videoCodec: cleanVCodec, audioCodec: cleanACodec, fps, compatible, width, height, hasAudio }
   } catch (err) {
     log(`FFprobe error: ${err instanceof Error ? err.message : err}`)
     return defaultResult
@@ -123,50 +155,187 @@ function probeFile(filePath: string): ProbeResult {
 }
 
 // ── Build FFmpeg args ────────────────────────────────────────
-function buildFfmpegArgs(filePath: string, rtmpUrl: string): { args: string[]; profile: string } {
+function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOptions): { args: string[]; profile: string } {
   // Check if it is a live stream network URL
   const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
 
-  if (isUrl) {
-    log(`  Profile: Live Relay (source is URL: ${filePath})`);
-    return {
-      profile: 'copy',
-      args: [
-        '-fflags', '+genpts',
-        '-i', filePath,
-        '-c', 'copy',
-        '-max_muxing_queue_size', '1024',
-        '-f', 'flv',
-        '-flvflags', 'no_duration_filesize',
-        rtmpUrl
-      ]
-    };
+  const muteAudio = options?.muteAudio || false
+  const audioVolume = typeof options?.audioVolume === 'number' ? options.audioVolume : 1.0
+  const audioFilePath = options?.audioFilePath || ''
+  const overlayText = options?.overlayText || ''
+  const overlayTextEnabled = options?.overlayTextEnabled || false
+
+  const needsTranscode = muteAudio || audioVolume !== 1.0 || audioFilePath !== '' || (overlayTextEnabled && overlayText !== '')
+
+  if (!needsTranscode) {
+    if (isUrl) {
+      log(`  Profile: Live Relay (source is URL: ${filePath})`);
+      return {
+        profile: 'copy',
+        args: [
+          '-fflags', '+genpts',
+          '-i', filePath,
+          '-c', 'copy',
+          '-max_muxing_queue_size', '1024',
+          '-f', 'flv',
+          '-flvflags', 'no_duration_filesize',
+          rtmpUrl
+        ]
+      };
+    }
+
+    const probe = probeFile(filePath);
+    
+    // 1) Direct copy profile for standard MP4 files (ZERO CPU)
+    if (probe.compatible) {
+      log(`  Profile: Direct Copy (source is H264+AAC, fps=${probe.fps})`);
+      return {
+        profile: 'copy',
+        args: [
+          '-re',
+          '-stream_loop', '-1',
+          '-fflags', '+genpts',
+          '-i', filePath,
+          '-c', 'copy',
+          '-avoid_negative_ts', 'make_zero',
+          '-max_muxing_queue_size', '1024',
+          '-f', 'flv',
+          '-flvflags', 'no_duration_filesize',
+          rtmpUrl
+        ]
+      };
+    }
+
+    // 2) Reject everything else to adhere strictly to server design
+    throw new Error(`Incompatible video format (${probe.videoCodec}+${probe.audioCodec}). Transcoding is disabled. Please upload a standard H.264/AAC MP4.`)
   }
 
-  const probe = probeFile(filePath);
+  // Dynamic profile switching: CPU transcoding enabled
+  log(`  Profile: Advanced Transcoding Fallback (filters active)`);
+  const probe = isUrl ? { width: 1280, height: 720, hasAudio: true } : probeFile(filePath)
+
+  const args: string[] = []
   
-  // 1) Direct copy profile for standard MP4 files (ZERO CPU)
-  if (probe.compatible) {
-    log(`  Profile: Direct Copy (source is H264+AAC, fps=${probe.fps})`);
-    return {
-      profile: 'copy',
-      args: [
-        '-re',
-        '-stream_loop', '-1',
-        '-fflags', '+genpts',
-        '-i', filePath,
-        '-c', 'copy',
-        '-avoid_negative_ts', 'make_zero',
-        '-max_muxing_queue_size', '1024',
-        '-f', 'flv',
-        '-flvflags', 'no_duration_filesize',
-        rtmpUrl
-      ]
-    };
+  // 1. Video and audio inputs
+  if (isUrl) {
+    args.push('-i', filePath)
+  } else {
+    args.push('-re', '-stream_loop', '-1', '-i', filePath)
   }
 
-  // 2) Reject everything else to adhere strictly to server design
-  throw new Error(`Incompatible video format (${probe.videoCodec}+${probe.audioCodec}). Transcoding is disabled. Please upload a standard H.264/AAC MP4.`)
+  let nextInputIndex = 1
+
+  // Banner input (if enabled)
+  let bannerInputIndex = -1
+  if (overlayTextEnabled && overlayText !== '') {
+    bannerInputIndex = nextInputIndex++
+    const bannerPath = resolve(PROJECT_ROOT, 'public', 'overlay-banner.png')
+    args.push('-i', bannerPath)
+  }
+
+  // Custom audio background input (if enabled)
+  let audioInputIndex = -1
+  let finalAudioPath = ''
+  if (audioFilePath) {
+    if (existsSync(audioFilePath)) {
+      finalAudioPath = audioFilePath
+    } else {
+      const resolved = resolve(VIDEOS_DIR, audioFilePath)
+      if (existsSync(resolved)) {
+        finalAudioPath = resolved
+      }
+    }
+  }
+
+  if (finalAudioPath) {
+    audioInputIndex = nextInputIndex++
+    args.push('-stream_loop', '-1', '-i', finalAudioPath)
+  }
+
+  // Silent fallback audio virtual source (always add as last input for absolute safety)
+  const silentInputIndex = nextInputIndex++
+  args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100')
+
+  // 2. Filter Graph Complex
+  const filterComplexParts: string[] = []
+  
+  // Video overlay & text banner
+  const fontPath = resolve(PROJECT_ROOT, 'public', 'Cairo-Bold.ttf')
+  const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:')
+  
+  let videoMap = '0:v'
+  if (overlayTextEnabled && overlayText !== '') {
+    const fontSize = Math.round(probe.height * 0.045)
+    const escapedText = overlayText.replace(/'/g, "'\\''").replace(/:/g, '\\:')
+    const textY = `H-(${Math.round(probe.height * 0.075)})`
+    filterComplexParts.push(`[${bannerInputIndex}:v]scale=w=${probe.width}:h=-1[scaled_banner]`)
+    filterComplexParts.push(`[0:v][scaled_banner]overlay=x=0:y=H-h[overlay_video]`)
+    filterComplexParts.push(`[overlay_video]drawtext=fontfile='${escapedFontPath}':text='${escapedText}':fontcolor=black:fontsize=${fontSize}:x=(w-tw)/2:y=${textY}[out_video]`)
+    videoMap = 'out_video'
+  }
+
+  // Audio mute/volume/replace mixing
+  let audioMap = `${silentInputIndex}:a` // default to silence
+  
+  if (muteAudio) {
+    if (finalAudioPath) {
+      filterComplexParts.push(`[${audioInputIndex}:a]volume=1.0[out_audio]`)
+      audioMap = 'out_audio'
+    } else {
+      audioMap = `${silentInputIndex}:a`
+    }
+  } else {
+    if (finalAudioPath && probe.hasAudio) {
+      filterComplexParts.push(`[0:a]volume=${audioVolume}[original_scaled]`)
+      filterComplexParts.push(`[original_scaled][${audioInputIndex}:a]amix=inputs=2:duration=first:dropout_transition=2[out_audio]`)
+      audioMap = 'out_audio'
+    } else if (finalAudioPath && !probe.hasAudio) {
+      filterComplexParts.push(`[${audioInputIndex}:a]volume=1.0[out_audio]`)
+      audioMap = 'out_audio'
+    } else if (!finalAudioPath && probe.hasAudio) {
+      filterComplexParts.push(`[0:a]volume=${audioVolume}[out_audio]`)
+      audioMap = 'out_audio'
+    } else {
+      audioMap = `${silentInputIndex}:a`
+    }
+  }
+
+  if (filterComplexParts.length > 0) {
+    args.push('-filter_complex', filterComplexParts.join(';'))
+  }
+
+  // Output mappings
+  if (videoMap === 'out_video') {
+    args.push('-map', '[out_video]')
+  } else {
+    args.push('-map', '0:v')
+  }
+
+  if (audioMap === 'out_audio') {
+    args.push('-map', '[out_audio]')
+  } else {
+    args.push('-map', audioMap)
+  }
+
+  // Premium RTMP Out Transcoding Settings
+  args.push(
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-maxrate', '3000k',
+    '-bufsize', '6000k',
+    '-pix_fmt', 'yuv420p',
+    '-g', '50',
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-ar', '44100',
+    '-avoid_negative_ts', 'make_zero',
+    '-max_muxing_queue_size', '1024',
+    '-f', 'flv',
+    '-flvflags', 'no_duration_filesize',
+    rtmpUrl
+  )
+
+  return { profile: 'transcode', args }
 }
 
 // ── Build final RTMP URL from outputType + server + key ─────
@@ -215,7 +384,7 @@ async function processStaggerQueue() {
       item.resolve({ success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` })
       continue
     }
-    const result = startStreamImmediate(item.slotIndex, item.rtmpUrl, item.streamKey, item.filePath)
+    const result = startStreamImmediate(item.slotIndex, item.rtmpUrl, item.streamKey, item.filePath, item.options)
     item.resolve(result)
   }
 
@@ -235,7 +404,7 @@ function findOrphanPid(streamKey: string): number | null {
 }
 
 // ── Start a stream immediately ───────────────────────────────
-function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string): { success: boolean; message: string } {
+function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string, options?: StreamOptions): { success: boolean; message: string } {
   if (activeStreams.has(slotIndex)) {
     return { success: false, message: `Slot ${slotIndex + 1} is already streaming` }
   }
@@ -271,7 +440,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
   log(`  RTMP: ${maskedUrl}`)
 
   try {
-    const { args, profile } = buildFfmpegArgs(filePath, rtmpUrl)
+    const { args, profile } = buildFfmpegArgs(filePath, rtmpUrl, options)
 
     const redactedArgs = args.map(a => a === rtmpUrl ? maskedUrl : a)
     log(`  FFmpeg cmd: ${FFMPEG_PATH} ${redactedArgs.join(' ')}`)
@@ -292,7 +461,8 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
       rtmpUrl,
       filePath,
       isStopping: false,
-      restartCount: 0
+      restartCount: 0,
+      options
     }
     activeStreams.set(slotIndex, streamInfo)
 
@@ -344,7 +514,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
         activeStreams.delete(slotIndex) // Clear current before restart
         
         setTimeout(() => {
-          const result = startStreamImmediate(slotIndex, info.rtmpUrl, info.streamKey, info.filePath)
+          const result = startStreamImmediate(slotIndex, info.rtmpUrl, info.streamKey, info.filePath, info.options)
           if (result.success) {
              const newInfo = activeStreams.get(slotIndex)
              if (newInfo) newInfo.restartCount = currentRestartCount + 1
@@ -376,9 +546,9 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
 }
 
 // ── Queue a stream for staggered start ───────────────────────
-function startStream(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string): { success: boolean; message: string } {
+function startStream(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string, options?: StreamOptions): { success: boolean; message: string } {
   // Fire and forget — resolve immediately with "queued" to avoid blocking Next.js scheduler
-  staggerQueue.push({ slotIndex, rtmpUrl, streamKey, filePath, resolve: () => {} })
+  staggerQueue.push({ slotIndex, rtmpUrl, streamKey, filePath, options, resolve: () => {} })
   log(`Slot ${slotIndex + 1} queued async for start (queue position: ${staggerQueue.length})`)
   processStaggerQueue()
   return { success: true, message: `Slot ${slotIndex + 1} queued for start` }
@@ -507,12 +677,21 @@ const server = createServer(async (req, res) => {
     // POST /start - Staggered queue
     if (pathname === '/start' && req.method === 'POST') {
       const body = await readBody(req)
-      const { slotIndex, outputType, rtmpServer, streamKey, filePath } = JSON.parse(body)
+      const parsed = JSON.parse(body)
+      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextEnabled } = parsed
 
       // Build final RTMP URL from outputType — slotIndex selects a/b endpoint (round-robin)
       const rtmpUrl = buildRtmpUrl(outputType || 'custom', rtmpServer || '', streamKey || '', slotIndex ?? 0)
 
-      const result = startStream(slotIndex, rtmpUrl, streamKey || '', filePath)
+      const options: StreamOptions = {
+        muteAudio,
+        audioVolume,
+        audioFilePath,
+        overlayText,
+        overlayTextEnabled
+      }
+
+      const result = startStream(slotIndex, rtmpUrl, streamKey || '', filePath, options)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(result))
       return
@@ -521,9 +700,19 @@ const server = createServer(async (req, res) => {
     // POST /start-immediate
     if (pathname === '/start-immediate' && req.method === 'POST') {
       const body = await readBody(req)
-      const { slotIndex, outputType, rtmpServer, streamKey, filePath } = JSON.parse(body)
+      const parsed = JSON.parse(body)
+      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextEnabled } = parsed
       const rtmpUrl = buildRtmpUrl(outputType || 'custom', rtmpServer || '', streamKey || '', slotIndex ?? 0)
-      const result = startStreamImmediate(slotIndex, rtmpUrl, streamKey || '', filePath)
+
+      const options: StreamOptions = {
+        muteAudio,
+        audioVolume,
+        audioFilePath,
+        overlayText,
+        overlayTextEnabled
+      }
+
+      const result = startStreamImmediate(slotIndex, rtmpUrl, streamKey || '', filePath, options)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(result))
       return
@@ -644,12 +833,23 @@ async function startServer() {
 
     // ── Auto-Resume Active Streams ──────────────────────────────
     try {
-      // Find the database path. Usually provided by Docker via $DATABASE_URL (e.g., file:/app/data/app.db)
-      let dbPath = '/app/data/app.db'
+      let dbPath = resolve(PROJECT_ROOT, 'prisma/data/app.db')
       if (process.env.DATABASE_URL) {
-        dbPath = process.env.DATABASE_URL.replace('file:', '').replace('sqlite:', '')
-      } else if (existsSync(resolve(PROJECT_ROOT, './data/app.db'))) {
-        dbPath = resolve(PROJECT_ROOT, './data/app.db')
+        const rawPath = process.env.DATABASE_URL.replace('file:', '').replace('sqlite:', '')
+        if (rawPath.startsWith('/') || rawPath.includes(':\\') || rawPath.includes(':/')) {
+          dbPath = rawPath
+        } else {
+          const prismaDbPath = resolve(PROJECT_ROOT, 'prisma', rawPath)
+          if (existsSync(prismaDbPath)) {
+            dbPath = prismaDbPath
+          } else {
+            dbPath = resolve(PROJECT_ROOT, rawPath)
+          }
+        }
+      } else {
+        if (!existsSync(dbPath)) {
+          dbPath = resolve(PROJECT_ROOT, 'data/app.db')
+        }
       }
 
       if (existsSync(dbPath)) {

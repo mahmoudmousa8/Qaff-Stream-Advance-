@@ -122,7 +122,12 @@ export async function POST(
           outputType,
           rtmpServer: slot.rtmpServer,
           streamKey: slot.streamKey,
-          filePath: finalInputPath
+          filePath: finalInputPath,
+          muteAudio: slot.muteAudio,
+          audioVolume: slot.audioVolume,
+          audioFilePath: slot.audioFilePath,
+          overlayText: slot.overlayText,
+          overlayTextEnabled: slot.overlayTextEnabled
         })
       })
 

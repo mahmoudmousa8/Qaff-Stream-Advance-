@@ -220,6 +220,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
   await db.systemLog.create({ data: { message: `${LOCK_KEY}${now.toISOString()}` } })
 
+  // Fetch client user to get security key for live streaming
+  const clientUser = await db.user.findUnique({
+    where: { username: 'user' }
+  })
+  const securityKey = clientUser?.securityKey || 'qaff-key-123'
+
   console.log(`[Scheduler] Tick at ${now.toISOString()}`)
   const logs: string[] = []
   let startedCount = 0
@@ -278,6 +284,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   const slotsToStart: typeof slots = []
 
   for (const slot of slots) {
+    let finalInputPath = slot.filePath
+    if (slot.inputType === 'live') {
+      finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+    }
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex)) {
@@ -353,7 +363,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             outputType: slot.outputType,
             rtmpServer: slot.rtmpServer,
             streamKey: slot.streamKey,
-            filePath: slot.filePath
+            filePath: finalInputPath,
+            muteAudio: slot.muteAudio,
+            audioVolume: slot.audioVolume,
+            audioFilePath: slot.audioFilePath,
+            overlayText: slot.overlayText,
+            overlayTextEnabled: slot.overlayTextEnabled
           }),
           signal: ctrl.signal
         })
@@ -476,6 +491,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   for (let i = 0; i < slotsToStart.length; i++) {
     const slot = slotsToStart[i]
 
+    let finalInputPath = slot.filePath
+    if (slot.inputType === 'live') {
+      finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+    }
+
     // Convert DUR format to real datetime — anchored to schedStart (not now!)
     // This ensures stop time = original_scheduled_start + duration, regardless of late start
     let actualSchedStop = slot.schedStop
@@ -526,7 +546,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           outputType: slot.outputType,
           rtmpServer: slot.rtmpServer,
           streamKey: slot.streamKey,
-          filePath: slot.filePath
+          filePath: finalInputPath,
+          muteAudio: slot.muteAudio,
+          audioVolume: slot.audioVolume,
+          audioFilePath: slot.audioFilePath,
+          overlayText: slot.overlayText,
+          overlayTextEnabled: slot.overlayTextEnabled
         }),
         signal: ctrl.signal
       })
