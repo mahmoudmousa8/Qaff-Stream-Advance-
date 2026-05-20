@@ -21,7 +21,8 @@ export async function middleware(request: NextRequest) {
     // Verify the session hash with the Node.js API endpoint
     // We pass the cookie header so the API can read it
     try {
-        const checkUrl = new URL('/api/auth/check', request.url)
+        const port = process.env.PORT || '3000'
+        const checkUrl = new URL('/api/auth/check', `http://127.0.0.1:${port}`)
         const checkRes = await fetch(checkUrl, {
             headers: { cookie: request.headers.get('cookie') || '' },
             cache: 'no-store'
