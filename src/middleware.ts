@@ -18,24 +18,15 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Verify the session hash with the Node.js API endpoint
-    // We pass the cookie header so the API can read it
-    try {
-        const port = process.env.PORT || '3000'
-        const checkUrl = new URL('/api/auth/check', `http://127.0.0.1:${port}`)
-        const checkRes = await fetch(checkUrl, {
-            headers: { cookie: request.headers.get('cookie') || '' },
-            cache: 'no-store'
-        })
-
-        if (checkRes.ok) {
-            return NextResponse.next()
-        }
-    } catch (err) {
-        console.error('Middleware cookie check failed:', err)
+    // Basic structural verification of the cookie: must be "username|sha256Hash"
+    // Deep verification will be done securely at the API and page level
+    // using the getAuthUser helper which verifies the hash against the database.
+    const parts = auth.value.split('|')
+    if (parts.length === 2 && parts[0] && parts[1].length === 64) {
+        return NextResponse.next()
     }
 
-    // Not authenticated, expired, or invalid hash — redirect to login
+    // Invalid cookie structure — redirect to login
     const loginUrl = new URL('/login', request.url)
     return NextResponse.redirect(loginUrl)
 }
