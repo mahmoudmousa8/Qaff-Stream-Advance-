@@ -143,13 +143,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
                 try { originalName = decodeURIComponent(encodedName) } catch { }
             }
 
-            const allowedExtensions = ['.mp4']
+            const allowedVideoExts = ['.mp4']
+            const allowedAudioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac']
+            const allowedExtensions = [...allowedVideoExts, ...allowedAudioExts]
             const ext = path.extname(originalName).toLowerCase()
             if (!allowedExtensions.includes(ext)) {
                 file.resume()
                 sendError(400, `Invalid file type (${ext}). Allowed: ${allowedExtensions.join(', ')}`)
                 return
             }
+            const isAudioFile = allowedAudioExts.includes(ext)
 
             if (folder) {
                 const candidateDir = path.join(VIDEOS_DIR, folder)
@@ -217,6 +220,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
             // Only send success AFTER the write has fully flushed to disk
             writeStream.on('finish', async () => {
+                // Audio files: skip all video validation and transcoding
+                if (isAudioFile) {
+                    console.log(`[upload] Audio file ${originalName} uploaded successfully, skipping video validation.`)
+                    sendSuccess()
+                    return
+                }
                 try {
                     const processor = await import('@/lib/video-processor')
                     const check = await processor.validateVideoFile(filepath)
@@ -246,7 +255,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
                     sendSuccess()
                 } catch (e) {
                     console.error('[upload] validation error:', e)
-                    sendSuccess() // fail open if probe fails entirely, or we can fail closed
+                    sendSuccess()
                 }
             })
 

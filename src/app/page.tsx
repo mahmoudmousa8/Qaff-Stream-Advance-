@@ -57,6 +57,8 @@ interface StreamSlot {
   audioVolume?: number
   audioFilePath?: string
   overlayText?: string
+  overlayTextRight?: string
+  overlayTextLeft?: string
   overlayTextEnabled?: boolean
 }
 
@@ -280,6 +282,8 @@ export default function Home() {
     audioVolume: number
     audioFilePath: string
     overlayText: string
+    overlayTextRight: string
+    overlayTextLeft: string
     overlayTextEnabled: boolean
   } | null>(null)
   const [activeTab, setActiveTab] = useState<'audio' | 'overlay'>('audio')
@@ -1433,6 +1437,8 @@ export default function Home() {
                                     audioVolume: slot.audioVolume ?? 1.0,
                                     audioFilePath: slot.audioFilePath ?? '',
                                     overlayText: slot.overlayText ?? '',
+                                    overlayTextRight: slot.overlayTextRight ?? '',
+                                    overlayTextLeft: slot.overlayTextLeft ?? '',
                                     overlayTextEnabled: slot.overlayTextEnabled ?? false,
                                   })
                                 }}
@@ -1845,17 +1851,54 @@ export default function Home() {
                       />
                     </div>
 
-                    {/* Text Input */}
+                    {/* Center Text Input */}
                     <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
                       <label className="text-sm font-bold text-foreground block">
-                        {t('bannerTextLabel')}
+                        {locale === 'ar' ? '🟡 النص المركزي (الشريط الأصفر)' : '🟡 Center Text (Yellow Band)'}
                       </label>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'مثال: القارئ وليد موسى — يظهر في منتصف الشريط الأصفر بخط كبير.' : 'e.g. Sheikh Waleed Musa — centered on yellow band.'}
+                      </p>
                       <Input
                         value={settingsData.overlayText}
                         onChange={(e) => setSettingsData(p => p ? { ...p, overlayText: e.target.value } : p)}
-                        placeholder={t('bannerTextPlaceholder')}
+                        placeholder={locale === 'ar' ? 'القارئ وليد موسى' : 'Sheikh / Reader Name'}
                         dir="auto"
                         className="text-center font-semibold bg-background"
+                      />
+                    </div>
+
+                    {/* Right Text Input */}
+                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <label className="text-sm font-bold text-foreground block">
+                        {locale === 'ar' ? '⬜ النص الأيمن (الشريط الأبيض الأيمن)' : '⬜ Right Text (White Right Band)'}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'مثال: سورة الفرقان — يظهر في الجانب الأبيض الأيمن.' : 'e.g. Surah Al-Furqan — shown on the white right band.'}
+                      </p>
+                      <Input
+                        value={settingsData.overlayTextRight}
+                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayTextRight: e.target.value } : p)}
+                        placeholder={locale === 'ar' ? 'سورة الفرقان' : 'Surah Name'}
+                        dir="auto"
+                        className="text-right font-semibold bg-background"
+                      />
+                    </div>
+
+                    {/* Left Text Input */}
+                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <label className="text-sm font-bold text-foreground block">
+                        {locale === 'ar' ? '⬜ النص الأيسر (الشريط الأبيض الأيسر)' : '⬜ Left Text (White Left Band)'}
+                      </label>
+                      <p className="text-xs text-muted-foreground">
+                        {locale === 'ar' ? 'مثال: برواية حفص عن عاصم — يظهر في الجانب الأبيض الأيسر.' : 'e.g. Hafs \'an \'Asim — shown on the white left band.'}
+                      </p>
+                      <Input
+                        value={settingsData.overlayTextLeft}
+                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayTextLeft: e.target.value } : p)}
+                        placeholder={locale === 'ar' ? 'برواية حفص عن عاصم' : 'Narration / Riwaya'}
+                        dir="auto"
+                        className="text-left font-semibold bg-background"
                       />
                     </div>
 
@@ -1873,16 +1916,36 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Yellow Banner Overlay */}
+                        {/* 3-Column Banner Preview */}
                         {settingsData.overlayTextEnabled && (
-                          <div className="relative w-full h-[22%] bg-[#eab308]/85 border-t border-[#eab308]/60 flex items-center justify-center px-4">
-                            <span 
-                              className="text-white font-bold text-center drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.8)] text-xs md:text-sm select-none break-all line-clamp-1" 
-                              style={{ fontFamily: 'sans-serif' }}
-                              dir="auto"
-                            >
-                              {settingsData.overlayText || (locale === 'ar' ? 'اكتب نص الشريط الإعلاني...' : 'Your custom overlay banner text here...')}
-                            </span>
+                          <div className="absolute bottom-0 left-0 right-0 flex items-stretch" style={{ height: '22%' }}>
+                            {/* Right white band */}
+                            <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
+                              <span
+                                className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
+                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                              >
+                                {settingsData.overlayTextRight || (locale === 'ar' ? 'سورة الفرقان' : 'Surah Name')}
+                              </span>
+                            </div>
+                            {/* Center yellow band */}
+                            <div className="flex-1 flex items-center justify-center px-3 bg-[#f5a623] border-t border-[#e09000]">
+                              <span
+                                className="text-white font-extrabold text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] text-[10px] md:text-[13px] select-none break-all line-clamp-1"
+                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                              >
+                                {settingsData.overlayText || (locale === 'ar' ? 'القارئ وليد موسى' : 'Sheikh / Reader Name')}
+                              </span>
+                            </div>
+                            {/* Left white band */}
+                            <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
+                              <span
+                                className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
+                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                              >
+                                {settingsData.overlayTextLeft || (locale === 'ar' ? 'برواية حفص عن عاصم' : 'Narration')}
+                              </span>
+                            </div>
                           </div>
                         )}
 
@@ -1923,6 +1986,8 @@ export default function Home() {
                     audioVolume: settingsData.audioVolume,
                     audioFilePath: settingsData.audioFilePath,
                     overlayText: settingsData.overlayText,
+                    overlayTextRight: settingsData.overlayTextRight,
+                    overlayTextLeft: settingsData.overlayTextLeft,
                     overlayTextEnabled: settingsData.overlayTextEnabled,
                   })
                   addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)

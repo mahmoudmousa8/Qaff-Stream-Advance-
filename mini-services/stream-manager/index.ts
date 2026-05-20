@@ -50,6 +50,8 @@ interface StreamOptions {
   audioVolume?: number
   audioFilePath?: string
   overlayText?: string
+  overlayTextRight?: string
+  overlayTextLeft?: string
   overlayTextEnabled?: boolean
 }
 
@@ -163,9 +165,12 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
   const audioVolume = typeof options?.audioVolume === 'number' ? options.audioVolume : 1.0
   const audioFilePath = options?.audioFilePath || ''
   const overlayText = options?.overlayText || ''
+  const overlayTextRight = options?.overlayTextRight || ''
+  const overlayTextLeft = options?.overlayTextLeft || ''
   const overlayTextEnabled = options?.overlayTextEnabled || false
 
-  const needsTranscode = muteAudio || audioVolume !== 1.0 || audioFilePath !== '' || (overlayTextEnabled && overlayText !== '')
+  const hasAnyOverlay = overlayTextEnabled && (overlayText !== '' || overlayTextRight !== '' || overlayTextLeft !== '')
+  const needsTranscode = muteAudio || audioVolume !== 1.0 || audioFilePath !== '' || hasAnyOverlay
 
   if (!needsTranscode) {
     if (isUrl) {
@@ -225,13 +230,7 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
 
   let nextInputIndex = 1
 
-  // Banner input (if enabled)
-  let bannerInputIndex = -1
-  if (overlayTextEnabled && overlayText !== '') {
-    bannerInputIndex = nextInputIndex++
-    const bannerPath = resolve(PROJECT_ROOT, 'public', 'overlay-banner.png')
-    args.push('-i', bannerPath)
-  }
+  // NOTE: Banner is now rendered with pure drawbox+drawtext — no PNG input needed.
 
   // Custom audio background input (if enabled)
   let audioInputIndex = -1
@@ -264,15 +263,79 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
   const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:')
   
   let videoMap = '0:v'
-  if (overlayTextEnabled && overlayText !== '') {
-    const fontSize = Math.round(probe.height * 0.045)
-    const escapedText = overlayText.replace(/'/g, "'\\''").replace(/:/g, '\\:')
-    const textY = `H-(${Math.round(probe.height * 0.075)})`
-    filterComplexParts.push(`[${bannerInputIndex}:v]scale=w=${probe.width}:h=-1[scaled_banner]`)
-    filterComplexParts.push(`[0:v][scaled_banner]overlay=x=0:y=H-h[overlay_video]`)
-    filterComplexParts.push(`[overlay_video]drawtext=fontfile='${escapedFontPath}':text='${escapedText}':fontcolor=black:fontsize=${fontSize}:x=(w-tw)/2:y=${textY}[out_video]`)
+  if (hasAnyOverlay) {
+    const vidW = probe.width
+    const vidH = probe.height
+
+    // Banner strip: 10% of video height at the very bottom
+    const bannerH = Math.round(vidH * 0.10)
+    // Side bands: 25% each; center golden: 50%
+    const sideW = Math.round(vidW * 0.25)
+    // Font sizes
+    const centerFontSize = Math.round(bannerH * 0.52)
+    const sideFontSize   = Math.round(bannerH * 0.40)
+
+    // Vertical center of banner
+    const bannerY = vidH - bannerH
+    const textY = `${bannerY}+(${bannerH}-th)/2`
+
+    // Escape helper: handle backslash, single quote, colon, comma
+    const esc = (s: string) =>
+      s.replace(/\\/g, '/').replace(/'/g, "\\'").replace(/:/g, '\\:').replace(/,/g, '\\,')
+    const efp = escapedFontPath  // already escaped font path
+
+    // ── 3-zone banner using pure drawbox (no external PNG needed) ──
+    // Zone 1: Center golden band
+    filterComplexParts.push(
+      `[0:v]drawbox=x=${sideW}:y=${bannerY}:w=${vidW - 2 * sideW}:h=${bannerH}:color=0xF5A623@0.95:t=fill[box_c]`
+    )
+    // Zone 2: Right white band
+    filterComplexParts.push(
+      `[box_c]drawbox=x=0:y=${bannerY}:w=${sideW}:h=${bannerH}:color=0xFFFFFF@0.95:t=fill[box_r]`
+    )
+    // Zone 3: Left white band
+    filterComplexParts.push(
+      `[box_r]drawbox=x=${vidW - sideW}:y=${bannerY}:w=${sideW}:h=${bannerH}:color=0xFFFFFF@0.95:t=fill[banner_done]`
+    )
+
+    let lastLabel = 'banner_done'
+
+    // ── Text: Right zone (Surah name) ──
+    if (overlayTextRight) {
+      const escapedR = esc(overlayTextRight)
+      const cx = Math.round(sideW / 2)
+      filterComplexParts.push(
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedR}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${cx}-tw/2:y=${textY}[rt_v]`
+      )
+      lastLabel = 'rt_v'
+    }
+
+    // ── Text: Center zone (Sheikh / Reader name) ──
+    if (overlayText) {
+      const escapedC = esc(overlayText)
+      const centerZoneW = vidW - 2 * sideW
+      filterComplexParts.push(
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedC}':fontcolor=white:fontsize=${centerFontSize}:x=${sideW}+(${centerZoneW}-tw)/2:y=${textY}:shadowcolor=black:shadowx=1:shadowy=1[ct_v]`
+      )
+      lastLabel = 'ct_v'
+    }
+
+    // ── Text: Left zone (Riwaya / Narration) ──
+    if (overlayTextLeft) {
+      const escapedL = esc(overlayTextLeft)
+      const leftZoneX = vidW - sideW
+      filterComplexParts.push(
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedL}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${leftZoneX}+(${sideW}-tw)/2:y=${textY}[lt_v]`
+      )
+      lastLabel = 'lt_v'
+    }
+
+    // Rename the final label to [out_video]
+    filterComplexParts[filterComplexParts.length - 1] =
+      filterComplexParts[filterComplexParts.length - 1].replace(`[${lastLabel}]`, '[out_video]')
     videoMap = 'out_video'
   }
+
 
   // Audio mute/volume/replace mixing
   let audioMap = `${silentInputIndex}:a` // default to silence
@@ -678,7 +741,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/start' && req.method === 'POST') {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
-      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextEnabled } = parsed
+      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextRight, overlayTextLeft, overlayTextEnabled } = parsed
 
       // Build final RTMP URL from outputType — slotIndex selects a/b endpoint (round-robin)
       const rtmpUrl = buildRtmpUrl(outputType || 'custom', rtmpServer || '', streamKey || '', slotIndex ?? 0)
@@ -688,6 +751,8 @@ const server = createServer(async (req, res) => {
         audioVolume,
         audioFilePath,
         overlayText,
+        overlayTextRight,
+        overlayTextLeft,
         overlayTextEnabled
       }
 
@@ -701,7 +766,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/start-immediate' && req.method === 'POST') {
       const body = await readBody(req)
       const parsed = JSON.parse(body)
-      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextEnabled } = parsed
+      const { slotIndex, outputType, rtmpServer, streamKey, filePath, muteAudio, audioVolume, audioFilePath, overlayText, overlayTextRight, overlayTextLeft, overlayTextEnabled } = parsed
       const rtmpUrl = buildRtmpUrl(outputType || 'custom', rtmpServer || '', streamKey || '', slotIndex ?? 0)
 
       const options: StreamOptions = {
@@ -709,6 +774,8 @@ const server = createServer(async (req, res) => {
         audioVolume,
         audioFilePath,
         overlayText,
+        overlayTextRight,
+        overlayTextLeft,
         overlayTextEnabled
       }
 

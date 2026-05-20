@@ -368,6 +368,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             audioVolume: slot.audioVolume,
             audioFilePath: slot.audioFilePath,
             overlayText: slot.overlayText,
+            overlayTextRight: slot.overlayTextRight,
+            overlayTextLeft: slot.overlayTextLeft,
             overlayTextEnabled: slot.overlayTextEnabled
           }),
           signal: ctrl.signal
@@ -551,6 +553,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           audioVolume: slot.audioVolume,
           audioFilePath: slot.audioFilePath,
           overlayText: slot.overlayText,
+          overlayTextRight: slot.overlayTextRight,
+          overlayTextLeft: slot.overlayTextLeft,
           overlayTextEnabled: slot.overlayTextEnabled
         }),
         signal: ctrl.signal

@@ -127,6 +127,8 @@ export async function POST(
           audioVolume: slot.audioVolume,
           audioFilePath: slot.audioFilePath,
           overlayText: slot.overlayText,
+          overlayTextRight: slot.overlayTextRight,
+          overlayTextLeft: slot.overlayTextLeft,
           overlayTextEnabled: slot.overlayTextEnabled
         })
       })
