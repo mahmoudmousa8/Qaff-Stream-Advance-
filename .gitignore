@@ -1,0 +1,61 @@
+# Qaff Studio/Stream Advance gitignore
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Next.js build output and caches
+/.next/
+/out/
+/tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Production build outputs
+/build
+/dist
+
+# SQLite Databases
+*.db
+*.db-journal
+*.sqlite
+/prisma/data/
+
+# Qaff Data, Uploads, and Videos
+/data/
+/upload/
+/download/
+/videos/
+/logs/
+*.log
+dev.log
+build.log
+server.log
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Testing and Coverage
+/coverage
+
+# IDEs & System files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem
+
+# AI agents
+.agent/
+.claude/
+.z-ai-config
+prompt/
