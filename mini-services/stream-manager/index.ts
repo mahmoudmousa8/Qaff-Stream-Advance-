@@ -124,6 +124,25 @@ function probeFile(filePath: string): ProbeResult {
 
 // ── Build FFmpeg args ────────────────────────────────────────
 function buildFfmpegArgs(filePath: string, rtmpUrl: string): { args: string[]; profile: string } {
+  // Check if it is a live stream network URL
+  const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
+
+  if (isUrl) {
+    log(`  Profile: Live Relay (source is URL: ${filePath})`);
+    return {
+      profile: 'copy',
+      args: [
+        '-fflags', '+genpts',
+        '-i', filePath,
+        '-c', 'copy',
+        '-max_muxing_queue_size', '1024',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ]
+    };
+  }
+
   const probe = probeFile(filePath);
   
   // 1) Direct copy profile for standard MP4 files (ZERO CPU)
@@ -235,7 +254,8 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
     return { success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` }
   }
 
-  if (!existsSync(filePath)) {
+  const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
+  if (!isUrl && !existsSync(filePath)) {
     return { success: false, message: `File not found: ${filePath}` }
   }
 
@@ -637,9 +657,20 @@ async function startServer() {
         const Database = (await import('better-sqlite3')).default
         const db = new Database(dbPath, { readonly: true })
         
+        // Fetch client user to get security key for live streaming
+        let securityKey = 'qaff-key-123'
+        try {
+          const clientUser = db.prepare("SELECT securityKey FROM User WHERE username = 'user' LIMIT 1").get() as { securityKey: string } | undefined
+          if (clientUser?.securityKey) {
+            securityKey = clientUser.securityKey
+          }
+        } catch (e) {
+          log(`Warning: Failed to fetch client securityKey for live auto-resume: ${e}`)
+        }
+
         // Fetch slots where isRunning is true (1)
         const activeSlots = db.prepare(`
-          SELECT slotIndex, outputType, rtmpServer, streamKey, filePath 
+          SELECT slotIndex, outputType, rtmpServer, streamKey, filePath, inputType 
           FROM StreamSlot 
           WHERE isRunning = 1 OR status = 'Live'
         `).all() as Array<{
@@ -648,6 +679,7 @@ async function startServer() {
           rtmpServer: string
           streamKey: string
           filePath: string
+          inputType: string
         }>
 
         db.close()
@@ -655,6 +687,10 @@ async function startServer() {
         if (activeSlots.length > 0) {
           log(`Found ${activeSlots.length} active stream(s) to auto-resume...`)
           for (const slot of activeSlots) {
+            let finalInputPath = slot.filePath
+            if (slot.inputType === 'live') {
+              finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+            }
             const finalRtmp = buildRtmpUrl(slot.outputType, slot.rtmpServer, slot.streamKey, slot.slotIndex)
 
             // Orphan detection: kill any stale FFmpeg with same streamKey before restarting
@@ -672,7 +708,7 @@ async function startServer() {
               slotIndex: slot.slotIndex,
               rtmpUrl: finalRtmp,
               streamKey: slot.streamKey,
-              filePath: slot.filePath,
+              filePath: finalInputPath,
               resolve: (res) => {
                 log(`Auto-resume slot ${slot.slotIndex + 1}: ${res.success ? 'Success' : `Failed (${res.message})`}`)
               }

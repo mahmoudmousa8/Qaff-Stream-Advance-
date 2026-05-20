@@ -23,8 +23,19 @@ export async function POST(
       return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
     }
 
-    if (!slot.filePath) {
-      return NextResponse.json({ error: 'fileNotFound' }, { status: 400 })
+    // Fetch client user to get security key for live streaming
+    const clientUser = await db.user.findUnique({
+      where: { username: 'user' }
+    })
+    const securityKey = clientUser?.securityKey || 'qaff-key-123'
+
+    let finalInputPath = slot.filePath
+    if (slot.inputType === 'live') {
+      finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+    } else {
+      if (!slot.filePath) {
+        return NextResponse.json({ error: 'fileNotFound' }, { status: 400 })
+      }
     }
 
     const outputType = slot.outputType || 'youtube'
@@ -111,7 +122,7 @@ export async function POST(
           outputType,
           rtmpServer: slot.rtmpServer,
           streamKey: slot.streamKey,
-          filePath: slot.filePath
+          filePath: finalInputPath
         })
       })
 

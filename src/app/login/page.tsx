@@ -5,6 +5,7 @@ import { Sun, Moon, Globe } from 'lucide-react'
 import { t, isRTL, setLocale, getLocale, Locale } from '@/lib/i18n'
 
 export default function LoginPage() {
+    const [username, setUsername] = useState('user')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -48,7 +49,7 @@ export default function LoginPage() {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ password }),
+                body: JSON.stringify({ username, password }),
             })
 
             const data = await res.json()
@@ -89,7 +90,7 @@ export default function LoginPage() {
             <div className="w-full max-w-sm mx-4">
                 {/* Card */}
                 <div className="bg-card border rounded-2xl shadow-xl p-8">
-                    <div className="flex flex-col items-center gap-3 mb-8">
+                    <div className="flex flex-col items-center gap-3 mb-6">
                         {/*
                           Logos: CSS dark: variants react to the 'dark' class already set
                           by layout.tsx before first paint — no JS needed for logo switching.
@@ -118,6 +119,32 @@ export default function LoginPage() {
 
                     {/* Form */}
                     <form onSubmit={handleLogin} className="space-y-4">
+                        {/* Role Segment Switcher */}
+                        <div className="flex bg-muted p-1 rounded-lg border border-border">
+                            <button
+                                type="button"
+                                onClick={() => setUsername('user')}
+                                className={`flex-1 py-1.5 text-center text-sm font-medium rounded-md transition-all ${
+                                    username === 'user'
+                                        ? 'bg-card text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                {t('roleClient')}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setUsername('admin')}
+                                className={`flex-1 py-1.5 text-center text-sm font-medium rounded-md transition-all ${
+                                    username === 'admin'
+                                        ? 'bg-card text-foreground shadow-sm'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                            >
+                                {t('roleAdmin')}
+                            </button>
+                        </div>
+
                         <div>
                             <input
                                 type="password"

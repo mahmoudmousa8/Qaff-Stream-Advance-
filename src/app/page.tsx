@@ -51,6 +51,8 @@ interface StreamSlot {
   nextRunTime: string
   status: string
   isRunning: boolean
+  inputType?: 'file' | 'live'
+  liveInputUrl?: string
 }
 
 interface LogEntry {
@@ -217,6 +219,7 @@ function getDuration(schedStart: string, schedStop: string): { h: number; m: num
 
 export default function Home() {
   const router = useRouter()
+  const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
   const [slots, setSlots] = useState<StreamSlot[]>([])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [autoSave, setAutoSave] = useState(true)
@@ -235,6 +238,18 @@ export default function Home() {
   const [channelLogs, setChannelLogs] = useState<ChannelLogsState | null>(null)
   const channelLogsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [serverTime, setServerTime] = useState<string>('')
+
+  // Admin client settings state
+  const [adminClientData, setAdminClientData] = useState<{
+    password?: string
+    securityKey?: string
+    slotsLimit?: number
+    renewalDate?: string
+  }>({})
+  const [adminLoading, setAdminLoading] = useState(false)
+  const [adminMessage, setAdminMessage] = useState('')
+  const [adminError, setAdminError] = useState('')
+  const [showClientPassword, setShowClientPassword] = useState(false)
 
   // Password change state
   const [pwDialogOpen, setPwDialogOpen] = useState(false)
@@ -280,13 +295,78 @@ export default function Home() {
     const checkAuth = async () => {
       try {
         const res = await fetch('/api/auth/check')
-        if (!res.ok) window.location.href = '/login'
+        if (!res.ok) {
+          window.location.href = '/login'
+          return
+        }
+        const data = await res.json()
+        if (data.success) {
+          setUser({ role: data.role, slotsLimit: data.slotsLimit, securityKey: data.securityKey })
+        } else {
+          window.location.href = '/login'
+        }
       } catch { }
     }
     checkAuth()
     const interval = setInterval(checkAuth, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
+
+  // Fetch admin client settings when user is admin
+  const fetchAdminClient = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings/client')
+      const data = await res.json()
+      if (data.success && data.client) {
+        setAdminClientData({
+          password: data.client.password,
+          securityKey: data.client.securityKey,
+          slotsLimit: data.client.slotsLimit,
+          renewalDate: data.client.renewalDate ? data.client.renewalDate.split('T')[0] : ''
+        })
+      }
+    } catch {
+      setAdminError('Failed to fetch client settings')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchAdminClient()
+    }
+  }, [user, fetchAdminClient])
+
+  const saveAdminClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAdminLoading(true)
+    setAdminMessage('')
+    setAdminError('')
+
+    try {
+      const res = await fetch('/api/settings/client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: adminClientData.password,
+          securityKey: adminClientData.securityKey,
+          slotsLimit: adminClientData.slotsLimit,
+          renewalDate: adminClientData.renewalDate ? new Date(adminClientData.renewalDate).toISOString() : null
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setAdminMessage(locale === 'ar' ? 'تم حفظ التعديلات بنجاح' : 'Settings saved successfully')
+        fetchAdminClient()
+      } else {
+        setAdminError(data.error || 'Failed to save settings')
+      }
+    } catch {
+      setAdminError('Connection error')
+    } finally {
+      setAdminLoading(false)
+    }
+  }
 
   // Live server clock — poll every second
   useEffect(() => {
@@ -464,7 +544,7 @@ export default function Home() {
     const outputType = slot.outputType || 'youtube'
 
     // Client-side validation
-    if (!slot.filePath) {
+    if (slot.inputType !== 'live' && !slot.filePath) {
       addLog(`Slot ${index + 1}: ${t('fileNotFound')}`)
       return
     }
@@ -512,6 +592,9 @@ export default function Home() {
     if (!slot?.schedStart) { addLog(`Slot ${index + 1}: ${t('outputIncomplete')}`); return }
 
     const outputType = slot.outputType || 'youtube'
+    if (slot.inputType !== 'live' && !slot.filePath) {
+      addLog(`Slot ${index + 1}: ${t('fileNotFound')}`); return
+    }
     if ((outputType === 'youtube' || outputType === 'facebook') && !slot.streamKey?.trim()) {
       addLog(`Slot ${index + 1}: ${t('streamKeyRequired')}`); return
     }
@@ -799,318 +882,594 @@ export default function Home() {
       </header>
 
       {/* â€•â€•â€• Main Content â€•â€•â€• */}
-      <main className="flex-1 flex flex-col overflow-hidden px-4 py-2 gap-2">
-        <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardHeader className="py-2 px-4 shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <CardTitle className="text-base">{t('slots')}</CardTitle>
-                <div className="relative font-normal">
-                  <Search className="w-4 h-4 absolute inset-y-0 start-2 my-auto text-muted-foreground" />
-                  <Input 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={locale === 'ar' ? 'بحث في الملاحظات...' : 'Search notes...'}
-                    className="h-7 w-[200px] ps-8 text-xs focus-visible:ring-1"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" className="h-7" disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage(p => p - 1)}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-xs text-muted-foreground min-w-[80px] text-center" dir="ltr">
-                  {currentPage} / {totalPages}
-                </span>
-                <Button size="sm" variant="outline" className="h-7" disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(p => p + 1)}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+      {/* ――― Main Content ――― */}
+      {user?.role === 'admin' ? (
+        <main className="flex-1 overflow-auto p-6 bg-muted/30">
+          <div className="max-w-6xl mx-auto space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-border/85">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">
+                  {locale === 'ar' ? 'لوحة إدارة عميل النظام' : 'System Client Administration'}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {locale === 'ar' 
+                    ? 'إدارة صلاحيات، إعدادات، وكلمات مرور حساب العميل الموحد.' 
+                    : 'Manage permissions, settings, and credentials of the system client account.'}
+                </p>
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-hidden p-0">
-            <div className="h-full overflow-auto">
-              <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
-                <thead className="sticky top-0 bg-card z-10 shadow-sm">
-                  <tr className="bg-muted/50 border-b">
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 28 }}>#</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 170 }}>{t('colDetails')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 155 }}>{t('colFilePath')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 175 }}>{t('colStreamKey')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
-                    <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 440 }}>
-                      <div className="flex items-end gap-2 h-full">
-                        <div className="w-[185px] text-center shrink-0">{t('stopStream')}</div>
-                        <div className="w-[155px] flex items-center justify-center shrink-0 pb-[1px]">
-                          <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
-                        </div>
-                        <div className="w-[66px] flex items-center justify-center shrink-0 pb-[1px]">
-                          <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblNext12')}</span>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Card 1: Client Settings Form */}
+              <Card className="border border-border/80 shadow-md">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    ⚙️ {locale === 'ar' ? 'إعدادات الحساب والصلاحيات' : 'Account & Permissions Settings'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={saveAdminClient} className="space-y-4">
+                    {adminError && (
+                      <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-sm rounded-lg">
+                        {adminError}
+                      </div>
+                    )}
+                    {adminMessage && (
+                      <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-500 text-sm rounded-lg">
+                        {adminMessage}
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-foreground">
+                        {locale === 'ar' ? 'اسم المستخدم للعميل' : 'Client Username'}
+                      </label>
+                      <Input
+                        disabled
+                        value="user"
+                        className="bg-muted text-muted-foreground font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-foreground">
+                        {locale === 'ar' ? 'كلمة مرور العميل الحالية' : 'Client Password'}
+                      </label>
+                      <div className="relative">
+                        <Input
+                          type={showClientPassword ? 'text' : 'password'}
+                          value={adminClientData.password || ''}
+                          onChange={(e) => setAdminClientData(p => ({ ...p, password: e.target.value }))}
+                          placeholder={locale === 'ar' ? 'أدخل كلمة مرور جديدة للعميل' : 'Enter client password'}
+                          className="font-mono text-center pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowClientPassword(!showClientPassword)}
+                          className="absolute right-3 top-2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showClientPassword ? '👁️' : '🔒'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                        <span>{locale === 'ar' ? 'مفتاح أمان البث (Security Key)' : 'Ingest Security Key'}</span>
+                        <span className="text-[10px] text-blue-500 font-mono">rtmp://IP/live/key</span>
+                      </label>
+                      <Input
+                        value={adminClientData.securityKey || ''}
+                        onChange={(e) => setAdminClientData(p => ({ ...p, securityKey: e.target.value }))}
+                        placeholder="e.g. qaff-key-123"
+                        className="font-mono text-center"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-foreground flex items-center justify-between">
+                        <span>{locale === 'ar' ? 'الحد الأقصى للقنوات المسموحة (Slots Limit)' : 'Max Slots Limit'}</span>
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-mono font-bold">
+                          {adminClientData.slotsLimit || 10} / 100
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="range"
+                          min="1"
+                          max="100"
+                          value={adminClientData.slotsLimit || 10}
+                          onChange={(e) => setAdminClientData(p => ({ ...p, slotsLimit: parseInt(e.target.value) }))}
+                          className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={adminClientData.slotsLimit || 10}
+                          onChange={(e) => {
+                            let val = parseInt(e.target.value)
+                            if (isNaN(val)) val = 1
+                            if (val > 100) val = 100
+                            setAdminClientData(p => ({ ...p, slotsLimit: val }))
+                          }}
+                          className="w-16 h-8 text-center text-xs font-mono font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-semibold text-foreground">
+                        {locale === 'ar' ? 'تاريخ انتهاء الاشتراك' : 'Subscription Renewal Date'}
+                      </label>
+                      <Input
+                        type="date"
+                        value={adminClientData.renewalDate || ''}
+                        onChange={(e) => setAdminClientData(p => ({ ...p, renewalDate: e.target.value }))}
+                        className="font-mono text-center"
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={adminLoading}
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                    >
+                      {adminLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          {locale === 'ar' ? 'جاري الحفظ...' : 'Saving...'}
+                        </>
+                      ) : (
+                        locale === 'ar' ? 'حفظ التعديلات' : 'Save Configurations'
+                      )}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Card 2: Monitoring Dashboard */}
+              <div className="space-y-6">
+                <Card className="border border-border/80 shadow-md">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      📊 {locale === 'ar' ? 'مراقبة البثوث الحالية' : 'Live Streams Monitor'}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-green-500 font-mono">{stats.streaming}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {locale === 'ar' ? 'قنوات تبث حالياً' : 'Active Streams'}
                         </div>
                       </div>
-                    </th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 150 }}>{t('colActions')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colStatus')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 90 }}>{t('colPlatform')}</th>
-                    <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colOutputSettings')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {slots.map((slot) => {
-                    const outputType = slot.outputType || 'youtube'
-                    const isYtFb = outputType === 'youtube' || outputType === 'facebook'
-                    const rtmpBase = RTMP_BASES[outputType] || ''
-                    const finalRtmpUrl = getFinalRtmpUrl(slot)
-                    const isLocked = slot.isRunning || slot.status !== 'Stopped'
+                      <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-500 font-mono">{stats.scheduled}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {locale === 'ar' ? 'قنوات مجدولة' : 'Scheduled Streams'}
+                        </div>
+                      </div>
+                    </div>
 
-                    return (
-                      <tr key={slot.id} className="hover:bg-orange-500/15 transition-colors border-b border-border/50">
-                        {/* # */}
-                        <td className="text-center font-mono text-xs font-medium px-2 py-1 text-muted-foreground">
-                          {slot.slotIndex + 1}
-                        </td>
+                    <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50">
+                      <div className="px-3 py-2 bg-muted/50 border-b border-border/50 text-xs font-semibold">
+                        {locale === 'ar' ? 'قنوات البث النشطة' : 'Active Channels'}
+                      </div>
+                      <div className="max-h-[220px] overflow-auto divide-y divide-border/30">
+                        {slots.filter(s => s.isRunning).length === 0 ? (
+                          <div className="p-4 text-center text-xs text-muted-foreground">
+                            {locale === 'ar' ? 'لا توجد قنوات تبث حالياً' : 'No active streams at the moment'}
+                          </div>
+                        ) : (
+                          slots.filter(s => s.isRunning).map(slot => (
+                            <div key={slot.id} className="p-2.5 flex items-center justify-between text-xs hover:bg-muted/30">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-foreground">{slot.channelName || `Slot ${slot.slotIndex + 1}`}</span>
+                                <span className="text-[10px] text-muted-foreground font-mono">Index: {slot.slotIndex + 1}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-green-500 text-white text-[10px]">{slot.status}</Badge>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => stopStream(slot.slotIndex)}
+                                >
+                                  {locale === 'ar' ? 'إيقاف' : 'Stop'}
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
-                        {/* Channel Name */}
-                        <td className="px-2 py-1">
-                          <DebouncedInput
-                            value={slot.channelName}
-                            onChange={(val) => handleSlotChange(slot.slotIndex, 'channelName', val)}
-                            className="h-6 text-xs"
-                            placeholder={t('optional')}
-                            dir="auto"
+                {storageInfo && (
+                  <Card className="border border-border/80 shadow-md">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        💾 {locale === 'ar' ? 'حالة قرص التخزين' : 'Disk Storage Status'}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs font-mono">
+                          <span>{t('used')}: {storageInfo.used}</span>
+                          <span>{t('free')}: {storageInfo.free}</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${storageInfo.percent > 90 ? 'bg-red-500' : 'bg-green-500'}`}
+                            style={{ width: `${Math.min(storageInfo.percent, 100)}%` }}
                           />
-                        </td>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground text-center">
+                          Total capacity: {storageInfo.total} ({storageInfo.percent}% utilized)
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 flex flex-col overflow-hidden px-4 py-2 gap-2">
+          <Card className="flex-1 flex flex-col overflow-hidden">
+            <CardHeader className="py-2 px-4 shrink-0">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <CardTitle className="text-base">{t('slots')}</CardTitle>
+                  <div className="relative font-normal">
+                    <Search className="w-4 h-4 absolute inset-y-0 start-2 my-auto text-muted-foreground" />
+                    <Input 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder={locale === 'ar' ? 'بحث في الملاحظات...' : 'Search notes...'}
+                      className="h-7 w-[200px] ps-8 text-xs focus-visible:ring-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="h-7" disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage(p => p - 1)}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground min-w-[80px] text-center" dir="ltr">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <Button size="sm" variant="outline" className="h-7" disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-hidden p-0">
+              <div className="h-full overflow-auto">
+                <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
+                  <thead className="sticky top-0 bg-card z-10 shadow-sm">
+                    <tr className="bg-muted/50 border-b">
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 28 }}>#</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 170 }}>{t('colDetails')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 200 }}>{t('colFilePath')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 160 }}>{t('colStreamKey')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
+                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 440 }}>
+                        <div className="flex items-end gap-2 h-full">
+                          <div className="w-[185px] text-center shrink-0">{t('stopStream')}</div>
+                          <div className="w-[155px] flex items-center justify-center shrink-0 pb-[1px]">
+                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
+                          </div>
+                          <div className="w-[66px] flex items-center justify-center shrink-0 pb-[1px]">
+                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblNext12')}</span>
+                          </div>
+                        </div>
+                      </th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colActions')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colStatus')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 90 }}>{t('colPlatform')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colOutputSettings')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slots.map((slot) => {
+                      const outputType = slot.outputType || 'youtube'
+                      const isYtFb = outputType === 'youtube' || outputType === 'facebook'
+                      const rtmpBase = RTMP_BASES[outputType] || ''
+                      const finalRtmpUrl = getFinalRtmpUrl(slot)
+                      const isLocked = slot.isRunning || slot.status !== 'Stopped'
 
-                        {/* File Path */}
-                        <td className="px-2 py-1">
-                          <div className="flex gap-1 items-center flex-nowrap">
-                            <Input
-                              readOnly
-                              value={slot.filePath ? slot.filePath.split(/[/\\]/).pop() : ''}
-                              className={`h-6 text-[11px] flex-1 font-mono bg-muted/10 hover:bg-muted-foreground/15 hover:text-foreground transition-colors text-muted-foreground outline-none ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-default'}`}
-                              placeholder={t('phFilePath')}
-                              title={slot.filePath}
+                      return (
+                        <tr key={slot.id} className="hover:bg-orange-500/15 transition-colors border-b border-border/50">
+                          {/* # */}
+                          <td className="text-center font-mono text-xs font-medium px-2 py-1 text-muted-foreground">
+                            {slot.slotIndex + 1}
+                          </td>
+
+                          {/* Channel Name */}
+                          <td className="px-2 py-1">
+                            <DebouncedInput
+                              value={slot.channelName}
+                              onChange={(val) => handleSlotChange(slot.slotIndex, 'channelName', val)}
+                              className="h-6 text-xs"
+                              placeholder={t('optional')}
+                              dir="auto"
+                            />
+                          </td>
+
+                          {/* File Path or Ingest Inflow Switcher */}
+                          <td className="px-2 py-1">
+                            <div className="flex gap-1 items-center flex-nowrap w-full">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className={`h-6 w-6 p-0 shrink-0 border-border/50 ${slot.inputType === 'live' ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20' : 'hover:bg-muted text-muted-foreground'}`}
+                                disabled={isLocked}
+                                onClick={() => {
+                                  const nextType = slot.inputType === 'live' ? 'file' : 'live'
+                                  handleSlotChange(slot.slotIndex, 'inputType', nextType)
+                                }}
+                                title={slot.inputType === 'live' ? (locale === 'ar' ? 'التحويل إلى فيديو مسجل' : 'Switch to Recorded Video') : (locale === 'ar' ? 'التحويل إلى بث مباشر (Ingest)' : 'Switch to Live Ingest')}
+                              >
+                                {slot.inputType === 'live' ? <Wifi className="w-3.5 h-3.5 animate-pulse" /> : <Film className="w-3.5 h-3.5" />}
+                              </Button>
+
+                              {slot.inputType === 'live' ? (
+                                <div className="flex gap-1 items-center flex-nowrap flex-1 min-w-0">
+                                  <Input
+                                    readOnly
+                                    value={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                    className="h-6 text-[10px] flex-1 font-mono bg-blue-500/5 text-blue-500 border-blue-500/20 outline-none cursor-default py-0 px-2"
+                                    dir="ltr"
+                                    title={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                  />
+                                  <CopyButton
+                                    text={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                    id={`copy-ingest-${slot.slotIndex}`}
+                                    title={locale === 'ar' ? 'نسخ رابط البث المباشر' : 'Copy Live Stream URL'}
+                                    className="h-6 w-6 p-0 shrink-0 hover:bg-blue-500/20"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex gap-1 items-center flex-nowrap flex-1 min-w-0">
+                                  <Input
+                                    readOnly
+                                    value={slot.filePath ? slot.filePath.split(/[/\\]/).pop() : ''}
+                                    className={`h-6 text-[11px] flex-1 font-mono bg-muted/10 hover:bg-muted-foreground/15 hover:text-foreground transition-colors text-muted-foreground outline-none ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-default'}`}
+                                    placeholder={t('phFilePath')}
+                                    title={slot.filePath}
+                                    dir="ltr"
+                                  />
+                                  <Button size="sm" variant="outline" className="h-6 w-6 p-0 shrink-0" disabled={isLocked}
+                                    onClick={() => setVideoSelectorSlot(slot.slotIndex)} title={t('select')}>
+                                    <FolderOpen className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Stream Key */}
+                          <td className="px-2 py-1">
+                            <DebouncedInput
+                              value={slot.streamKey}
+                              disabled={isLocked}
+                              onChange={(val) => handleSlotChange(slot.slotIndex, 'streamKey', val)}
+                              className="h-6 text-[11px] font-mono w-full"
+                              placeholder={t('phStreamKey')}
                               dir="ltr"
                             />
-                            <Button size="sm" variant="outline" className="h-6 w-6 p-0 shrink-0" disabled={isLocked}
-                              onClick={() => setVideoSelectorSlot(slot.slotIndex)} title={t('select')}>
-                              <FolderOpen className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Stream Key */}
-                        <td className="px-2 py-1">
-                          <DebouncedInput
-                            value={slot.streamKey}
-                            disabled={isLocked}
-                            onChange={(val) => handleSlotChange(slot.slotIndex, 'streamKey', val)}
-                            className="h-6 text-[11px] font-mono w-full"
-                            placeholder={t('phStreamKey')}
-                            dir="ltr"
-                          />
-                        </td>
-
-                        {/* Start Schedule */}
-                        <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
-                          <div className="flex flex-row items-center justify-center gap-2 flex-nowrap">
-                            {/* Start Group */}
-                            <div className="flex gap-1.5 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
-                              <div className="flex items-center justify-center w-[18px] h-[18px] bg-green-500/15 text-green-600 rounded-[4px] shrink-0 border border-green-500/20">
-                                <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 ml-[1px]">
-                                  <path d="M5.5 3.5l14 8.5-14 8.5v-17z" />
-                                </svg>
-                              </div>
-                              <input
-                                type="text"
-                                disabled={isLocked}
-                                value={slot.schedStart || ''}
-                                placeholder="00-00 00:00"
-                                onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStart', e.target.value)}
-                                className={`w-[85px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                dir="ltr"
-                              />
-                              <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Stop Schedule */}
-                        <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
-                          <div className="flex flex-row items-center gap-2 flex-nowrap">
-                            {/* Stop Group – Duration: 0-11h, 0-59m */}
-                            {(() => {
-                              const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
-                              const hasDur = durH >= 0 && durM >= 0
-
-                              const sc = "h-6 text-[10px] font-mono border rounded bg-background focus:outline-none cursor-pointer px-1"
-                              return (
-                                <div className="w-[185px] flex justify-center gap-1 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
-                                  <div className="flex items-center justify-center w-[18px] h-[18px] bg-red-500/15 text-red-500 rounded-[4px] shrink-0 border border-red-500/20 mr-0.5">
-                                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
-                                  </div>
-
-                                  <select
-                                    disabled={isLocked}
-                                    value={hasDur ? String(durH) : ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                      const h = parseInt(val)
-                                      const m = hasDur ? durM : 0
-                                      handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                    }}
-                                    className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                  >
-                                    <option value="">--</option>
-                                    {Array.from({length:12},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                  </select>
-
-                                  <span className="text-muted-foreground font-bold">:</span>
-
-                                  <select
-                                    disabled={isLocked}
-                                    value={hasDur ? String(durM) : ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                      const m = parseInt(val)
-                                      const h = hasDur ? durH : 0
-                                      handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                    }}
-                                    className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                  >
-                                    <option value="">--</option>
-                                    {Array.from({length:60},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                  </select>
-
-                                  {/* Reset Button */}
-                                  <button
-                                    disabled={isLocked}
-                                    onClick={() => {
-                                      handleSlotChange(slot.slotIndex, 'schedStart', '')
-                                      handleSlotChange(slot.slotIndex, 'schedStop', '')
-                                    }}
-                                    className="h-6 w-6 flex items-center justify-center rounded bg-muted/50 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border transition-colors ml-1 disabled:opacity-50"
-                                    title="إعادة تعيين التواريخ"
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
+                          {/* Start Schedule */}
+                          <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
+                            <div className="flex flex-row items-center justify-center gap-2 flex-nowrap">
+                              {/* Start Group */}
+                              <div className="flex gap-1.5 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
+                                <div className="flex items-center justify-center w-[18px] h-[18px] bg-green-500/15 text-green-600 rounded-[4px] shrink-0 border border-green-500/20">
+                                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 ml-[1px]">
+                                    <path d="M5.5 3.5l14 8.5-14 8.5v-17z" />
+                                  </svg>
                                 </div>
-                              )
-                            })()}
-
-                            {/* Daily / Weekly */}
-                            <div className={`w-[155px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
-                              <div className="flex items-center gap-1">
-                                <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
-                                  handleSlotChange(slot.slotIndex, 'daily', !!c)
-                                  if (c) handleSlotChange(slot.slotIndex, 'weekly', false)
-                                  if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
-                                <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                  handleSlotChange(slot.slotIndex, 'weekly', !!c)
-                                  if (c) handleSlotChange(slot.slotIndex, 'daily', false)
-                                  if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
-                                <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                <input
+                                  type="text"
+                                  disabled={isLocked}
+                                  value={slot.schedStart || ''}
+                                  placeholder="00-00 00:00"
+                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStart', e.target.value)}
+                                  className={`w-[85px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  dir="ltr"
+                                />
+                                <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
                               </div>
                             </div>
+                          </td>
 
-                            {/* Quick AM/PM Targets */}
-                            <div className={`w-[66px] flex bg-muted/50 rounded overflow-hidden border shrink-0 border-primary/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                              <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors border-r" title={t('lblNext12')}>{t('btnAM')}</button>
-                              <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors" title={t('lblNext12')}>{t('btnPM')}</button>
+                          {/* Stop Schedule */}
+                          <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
+                            <div className="flex flex-row items-center gap-2 flex-nowrap">
+                              {/* Stop Group – Duration: 0-11h, 0-59m */}
+                              {(() => {
+                                const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
+                                const hasDur = durH >= 0 && durM >= 0
+
+                                const sc = "h-6 text-[10px] font-mono border rounded bg-background focus:outline-none cursor-pointer px-1"
+                                return (
+                                  <div className="w-[185px] flex justify-center gap-1 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
+                                    <div className="flex items-center justify-center w-[18px] h-[18px] bg-red-500/15 text-red-500 rounded-[4px] shrink-0 border border-red-500/20 mr-0.5">
+                                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
+                                    </div>
+
+                                    <select
+                                      disabled={isLocked}
+                                      value={hasDur ? String(durH) : ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
+                                        const h = parseInt(val)
+                                        const m = hasDur ? durM : 0
+                                        handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
+                                      }}
+                                      className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
+                                    >
+                                      <option value="">--</option>
+                                      {Array.from({length:12},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                                    </select>
+
+                                    <span className="text-muted-foreground font-bold">:</span>
+
+                                    <select
+                                      disabled={isLocked}
+                                      value={hasDur ? String(durM) : ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value
+                                        if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
+                                        const m = parseInt(val)
+                                        const h = hasDur ? durH : 0
+                                        handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
+                                      }}
+                                      className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
+                                    >
+                                      <option value="">--</option>
+                                      {Array.from({length:60},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                                    </select>
+
+                                    {/* Reset Button */}
+                                    <button
+                                      disabled={isLocked}
+                                      onClick={() => {
+                                        handleSlotChange(slot.slotIndex, 'schedStart', '')
+                                        handleSlotChange(slot.slotIndex, 'schedStop', '')
+                                      }}
+                                      className="h-6 w-6 flex items-center justify-center rounded bg-muted/50 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border transition-colors ml-1 disabled:opacity-50"
+                                      title="إعادة تعيين التواريخ"
+                                    >
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                )
+                              })()}
+
+                              {/* Daily / Weekly */}
+                              <div className={`w-[155px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'daily', !!c)
+                                    if (c) handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'weekly', !!c)
+                                    if (c) handleSlotChange(slot.slotIndex, 'daily', false)
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                </div>
+                              </div>
+
+                              {/* Quick AM/PM Targets */}
+                              <div className={`w-[66px] flex bg-muted/50 rounded overflow-hidden border shrink-0 border-primary/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors border-r" title={t('lblNext12')}>{t('btnAM')}</button>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors" title={t('lblNext12')}>{t('btnPM')}</button>
+                              </div>
+                              {slot.nextRunTime && (
+                                <div className="text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
+                              )}
                             </div>
-                            {slot.nextRunTime && (
-                              <div className="text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
-                            )}
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Actions */}
-                        <td className="px-2 py-1">
-                          <div className="flex gap-2 justify-center flex-nowrap">
-                            <Button size="sm" variant="default" className="h-7 w-7 p-0 rounded-md shadow-sm bg-green-600 hover:bg-green-500 hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-green-500/40 relative z-0 hover:z-10 transition-all duration-200"
-                              disabled={slot.isRunning}
-                              onClick={() => handlePlayButton(slot.slotIndex)}
-                              title={slot.schedStart ? t('scheduleStream') : t('startStream')}>
-                              <Play className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button size="sm" variant="destructive" className="h-7 w-7 p-0 rounded-md shadow-sm hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-500/40 relative z-0 hover:z-10 transition-all duration-200"
-                              disabled={!slot.isRunning && !slot.isScheduled}
-                              onClick={() => stopStream(slot.slotIndex)}
-                              title={t('stopStream')}>
-                              <Square className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
-                              onClick={() => resetSlot(slot.slotIndex)}
-                              title={t('resetSlot')}>
-                              <RotateCcw className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </td>
+                          {/* Actions */}
+                          <td className="px-2 py-1">
+                            <div className="flex gap-2 justify-center flex-nowrap">
+                              <Button size="sm" variant="default" className="h-7 w-7 p-0 rounded-md shadow-sm bg-green-600 hover:bg-green-500 hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-green-500/40 relative z-0 hover:z-10 transition-all duration-200"
+                                disabled={slot.isRunning}
+                                onClick={() => handlePlayButton(slot.slotIndex)}
+                                title={slot.schedStart ? t('scheduleStream') : t('startStream')}>
+                                <Play className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="destructive" className="h-7 w-7 p-0 rounded-md shadow-sm hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-500/40 relative z-0 hover:z-10 transition-all duration-200"
+                                disabled={!slot.isRunning && !slot.isScheduled}
+                                onClick={() => stopStream(slot.slotIndex)}
+                                title={t('stopStream')}>
+                                <Square className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
+                                onClick={() => resetSlot(slot.slotIndex)}
+                                title={t('resetSlot')}>
+                                <RotateCcw className="w-3.5 h-3.5 animate-spin-reverse" />
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
+                                onClick={() => openChannelLogs(slot.slotIndex)}
+                                title={t('colLogs')}>
+                                <FileText className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
 
-                        {/* Status */}
-                        <td className="text-center px-2 py-1">
-                          <Badge className={`${getStatusColor(slot.status)} text-white text-[10px] font-medium`}>
-                            {slot.status}
-                          </Badge>
-                        </td>
+                          {/* Status */}
+                          <td className="text-center px-2 py-1">
+                            <Badge className={`${getStatusColor(slot.status)} text-white text-[10px] font-medium`}>
+                              {slot.status}
+                            </Badge>
+                          </td>
 
-                        {/* Platform (Dropdown) */}
-                        <td className="px-2 py-1">
-                          <select
-                            value={outputType}
-                            onChange={(e) => handleOutputTypeChange(slot.slotIndex, e.target.value)}
-                            className="h-6 text-xs rounded-md border border-input bg-background px-2 w-full focus:outline-none focus:ring-2 focus:ring-ring text-center"
-                            dir="ltr"
-                          >
-                            <option value="youtube">{t('optYouTube')}</option>
-                            <option value="facebook">{t('optFacebook')}</option>
-                            <option value="custom">{t('optCustom')}</option>
-                          </select>
-                        </td>
+                          {/* Platform (Dropdown) */}
+                          <td className="px-2 py-1">
+                            <select
+                              value={outputType}
+                              onChange={(e) => handleOutputTypeChange(slot.slotIndex, e.target.value)}
+                              className="h-6 text-xs rounded-md border border-input bg-background px-2 w-full focus:outline-none focus:ring-2 focus:ring-ring text-center"
+                              dir="ltr"
+                            >
+                              <option value="youtube">{t('optYouTube')}</option>
+                              <option value="facebook">{t('optFacebook')}</option>
+                              <option value="custom">{t('optCustom')}</option>
+                            </select>
+                          </td>
 
-                        {/* Output Settings */}
-                        <td className="px-2 py-1">
-                          <div className="flex flex-row gap-1 items-center w-full flex-nowrap">
-                            {isYtFb ? (
-                              <Input
-                                value={rtmpBase}
-                                readOnly
-                                className="h-6 text-[10px] font-mono bg-muted/50 text-muted-foreground w-full overflow-hidden text-ellipsis whitespace-nowrap cursor-default"
-                                dir="ltr"
-                                title={rtmpBase || ''}
-                              />
-                            ) : (
-                              <DebouncedInput
-                                value={slot.rtmpServer}
-                                onChange={(val) => handleSlotChange(slot.slotIndex, 'rtmpServer', val)}
-                                className="h-6 text-[10px] font-mono w-full shrink-0"
-                                placeholder={t('phCustomServer')}
-                                dir="ltr"
-                                title={t('rtmpBaseLabel')}
-                              />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </main >
+                          {/* Output Settings */}
+                          <td className="px-2 py-1">
+                            <div className="flex flex-row gap-1 items-center w-full flex-nowrap">
+                              {isYtFb ? (
+                                <Input
+                                  value={rtmpBase}
+                                  readOnly
+                                  className="h-6 text-[10px] font-mono bg-muted/50 text-muted-foreground w-full overflow-hidden text-ellipsis whitespace-nowrap cursor-default"
+                                  dir="ltr"
+                                  title={rtmpBase || ''}
+                                />
+                              ) : (
+                                <DebouncedInput
+                                  value={slot.rtmpServer}
+                                  onChange={(val) => handleSlotChange(slot.slotIndex, 'rtmpServer', val)}
+                                  className="h-6 text-[10px] font-mono w-full shrink-0"
+                                  placeholder={t('phCustomServer')}
+                                  dir="ltr"
+                                  title={t('rtmpBaseLabel')}
+                                />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </main>
+      )}
 
       <footer className="w-full border-t bg-card py-4 shrink-0 mt-auto shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
         <div className="container mx-auto w-full overflow-hidden">

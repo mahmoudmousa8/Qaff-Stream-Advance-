@@ -186,6 +186,9 @@ const translations = {
 
         // Login
         loginTitle: 'Enter password to continue',
+        usernamePlaceholder: 'Username',
+        roleAdmin: 'Administrator',
+        roleClient: 'Client',
         passwordPlaceholder: 'Password',
         loginButton: 'Login',
         loggingIn: 'Verifying...',
@@ -403,6 +406,9 @@ const translations = {
 
         // Login
         loginTitle: 'أدخل كلمة المرور للمتابعة',
+        usernamePlaceholder: 'اسم المستخدم',
+        roleAdmin: 'مدير النظام',
+        roleClient: 'عميل',
         passwordPlaceholder: 'كلمة المرور',
         loginButton: 'دخول',
         loggingIn: 'جارٍ التحقق...',

@@ -37,6 +37,12 @@ export async function GET() {
       where: { weekly: true }
     })
 
+    // Fetch client renewal date dynamically from database
+    const clientUser = await db.user.findUnique({
+      where: { username: 'user' }
+    })
+    const renewalDate = clientUser ? clientUser.renewalDate : null
+
     return NextResponse.json({
       total,
       streaming,
@@ -46,7 +52,7 @@ export async function GET() {
       configured,
       dailyCount,
       weeklyCount,
-      renewalDate: process.env.QAFF_RENEWAL_DATE || null
+      renewalDate
     })
   } catch (error) {
     console.error('Error fetching stats:', error)

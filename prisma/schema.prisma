@@ -11,24 +11,26 @@ datasource db {
 }
 
 model StreamSlot {
-  id           String   @id @default(cuid())
-  slotIndex    Int      @unique
-  channelName  String   @default("")
-  outputType   String   @default("youtube")
-  streamKey    String   @default("")
-  rtmpServer   String   @default("rtmp://a.rtmp.youtube.com/live2")
-  filePath     String   @default("")
-  schedStart   String   @default("")
-  schedStop    String   @default("")
-  daily        Boolean  @default(false)
-  weekly       Boolean  @default(false)
+  id              String   @id @default(cuid())
+  slotIndex       Int      @unique
+  channelName     String   @default("")
+  outputType      String   @default("youtube")
+  streamKey       String   @default("")
+  rtmpServer      String   @default("rtmp://a.rtmp.youtube.com/live2")
+  filePath        String   @default("")
+  inputType       String   @default("file") // "file" or "live"
+  liveInputUrl    String   @default("")
+  schedStart      String   @default("")
+  schedStop       String   @default("")
+  daily           Boolean  @default(false)
+  weekly          Boolean  @default(false)
   isScheduled     Boolean  @default(false)
   manuallyStopped Boolean  @default(true)
   nextRunTime     String   @default("")
   status          String   @default("Stopped")
   isRunning       Boolean  @default(false)
   createdAt       DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt       DateTime @updatedAt
 }
 
 model SystemLog {
@@ -38,12 +40,19 @@ model SystemLog {
 }
 
 model AppSettings {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   autoSave    Boolean @default(true)
   slotsCount  Int     @default(50)
 }
 
-model AdminUser {
-  id           Int    @id @default(1)
-  passwordHash String
+model User {
+  id          Int      @id @default(autoincrement())
+  username    String   @unique // 'admin' or 'user'
+  password    String   // Stored in plain text for the user so Admin can view it, as requested
+  role        String   // 'admin' or 'user'
+  slotsLimit  Int      @default(50)
+  renewalDate String   @default("") // E.g., "2026-12-31"
+  securityKey String   @default("") // E.g., client's security token for RTMP streaming
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
