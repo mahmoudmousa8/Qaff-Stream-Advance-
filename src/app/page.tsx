@@ -372,6 +372,7 @@ export default function Home() {
   const [ytChannels, setYtChannels] = useState<{ id: string; name: string; channelTitle: string; channelId: string; createdAt: string; updatedAt: string }[]>([])
   const [ytLoading, setYtLoading] = useState(false)
   const [ytLinkName, setYtLinkName] = useState('')
+  const [ytSlotLinkName, setYtSlotLinkName] = useState('')
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
 
   // Cloudflare Tunnel state
@@ -488,6 +489,14 @@ export default function Home() {
       fetchTunnelUrl()
     }
   }, [ytManagerOpen, fetchYtChannels, fetchTunnelUrl])
+
+  // Fetch fresh YouTube channels list every time the Slot Settings dialog opens
+  useEffect(() => {
+    if (settingsSlot !== null) {
+      fetchYtChannels()
+      setYtSlotLinkName('')
+    }
+  }, [settingsSlot, fetchYtChannels])
 
   // Handle YouTube Auth redirect status
   useEffect(() => {
@@ -2542,6 +2551,42 @@ export default function Home() {
                           </option>
                         ))}
                       </select>
+
+                      {/* Quick link row: refresh + add new channel directly from slot settings */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => fetchYtChannels()}
+                          disabled={ytLoading}
+                          className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50 shrink-0"
+                          title={locale === 'ar' ? 'تحديث قائمة القنوات' : 'Refresh channel list'}
+                        >
+                          {ytLoading ? <span className="animate-spin inline-block">⟳</span> : <span>↻</span>}
+                          {locale === 'ar' ? 'تحديث' : 'Refresh'}
+                        </button>
+                        <Input
+                          value={ytSlotLinkName}
+                          onChange={(e) => setYtSlotLinkName(e.target.value)}
+                          placeholder={locale === 'ar' ? 'اسم قناة جديدة للربط...' : 'New channel nickname...'}
+                          className="flex-1 h-7 text-xs bg-background"
+                          dir="auto"
+                        />
+                        <button
+                          type="button"
+                          disabled={!ytSlotLinkName.trim()}
+                          onClick={() => {
+                            const authUrl = `/api/auth/youtube/redirect?name=${encodeURIComponent(ytSlotLinkName.trim())}`
+                            window.open(authUrl, '_blank')
+                            alert(locale === 'ar'
+                              ? 'سيتم فتح نافذة ترخيص Google. أتمم تسجيل الدخول ثم انقر "تحديث" لرؤية القناة.'
+                              : 'Google authorization window will open. Complete login then click Refresh to see the channel.')
+                          }}
+                          className="flex items-center gap-1 text-[10px] text-white bg-red-600 hover:bg-red-500 disabled:opacity-40 rounded px-2 py-1 transition-all font-semibold shrink-0"
+                        >
+                          <Youtube className="w-3 h-3" />
+                          {locale === 'ar' ? 'ربط' : 'Link'}
+                        </button>
+                      </div>
                     </div>
 
                     {settingsData.youtubeChannelId && (

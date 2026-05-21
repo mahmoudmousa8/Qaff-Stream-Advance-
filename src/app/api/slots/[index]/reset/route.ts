@@ -23,6 +23,17 @@ export async function POST(
       // Non-fatal — proceed with DB reset even if stream-manager is unreachable
     }
 
+    // If this slot has an active YouTube broadcast, transition it to complete first
+    const slot = await db.streamSlot.findUnique({ where: { slotIndex } })
+    if (slot?.youtubeChannelId && slot?.youtubeBroadcastId && slot?.outputType === 'youtube') {
+      try {
+        const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
+        await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+      } catch (ytErr: any) {
+        console.error(`[Reset Route] YouTube stop failed:`, ytErr.message)
+      }
+    }
+
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },
       data: {
@@ -43,6 +54,7 @@ export async function POST(
         swapVideoPath: '',
         swapVideoEnabled: false,
         isSwapped: false,
+        youtubeBroadcastId: ''
       }
     })
 

@@ -116,6 +116,7 @@ export async function POST(
     // If a YouTube channel is bound, create a Live Broadcast and fetch the active stream key
     let finalStreamKey = slot.streamKey
     let finalRtmpServer = slot.rtmpServer
+    let youtubeBroadcastId = ""
     if (slot.youtubeChannelId && outputType === 'youtube') {
       try {
         console.log(`[Start Route] Slot ${slotIndex}: Setting up YouTube Live broadcast...`)
@@ -128,6 +129,7 @@ export async function POST(
         )
         finalStreamKey = yt.streamKey || finalStreamKey
         finalRtmpServer = yt.rtmpServer || finalRtmpServer
+        youtubeBroadcastId = yt.broadcastId || ""
         console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
       } catch (ytErr: any) {
         console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed, falling back to saved stream key:`, ytErr.message)
@@ -163,7 +165,10 @@ export async function POST(
         data: {
           isRunning: true,
           isScheduled: false,
-          status: 'Streaming'
+          status: 'Streaming',
+          streamKey: finalStreamKey,
+          rtmpServer: finalRtmpServer,
+          youtubeBroadcastId: youtubeBroadcastId
         }
       })
 

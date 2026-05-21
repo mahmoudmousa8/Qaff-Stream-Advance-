@@ -10,7 +10,7 @@
 
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
-import { setupYoutubeLiveStream } from '@/lib/youtube-helper'
+import { setupYoutubeLiveStream, stopYoutubeLiveStream } from '@/lib/youtube-helper'
 
 // Tracks consecutive missed ticks per slot
 const missCounters = new Map<string, number>()
@@ -457,6 +457,16 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         continue
       }
 
+      // Terminate YouTube Live broadcast cleanly
+      if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+        try {
+          await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+          logs.push(`Slot ${slot.slotIndex + 1}: YouTube broadcast ended cleanly`)
+        } catch (ytErr: any) {
+          logs.push(`Slot ${slot.slotIndex + 1}: YouTube stop failed: ${ytErr.message}`)
+        }
+      }
+
       // Recalculate next start/stop for daily/weekly slots
       let nextStartTime = slot.schedStart || ''
       let nextStopTime = slot.schedStop || ''
@@ -486,7 +496,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           schedStart: nextStartTime,
           schedStop: nextStopTime,
           nextRunTime: nextStartTime,
-          isSwapped: false
+          isSwapped: false,
+          youtubeBroadcastId: ''
         }
       })
       if (claimed.count === 0) continue
@@ -594,6 +605,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       // If a YouTube channel is bound to this slot, run the YouTube Live broadcast setup
       let finalStreamKey = slot.streamKey
       let finalRtmpServer = slot.rtmpServer
+      let youtubeBroadcastId = slot.youtubeBroadcastId || ''
       if (slot.youtubeChannelId && slot.outputType === 'youtube') {
         try {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Setting up YouTube Live broadcast...`)
@@ -605,6 +617,16 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           )
           finalStreamKey = yt.streamKey || finalStreamKey
           finalRtmpServer = yt.rtmpServer || finalRtmpServer
+          youtubeBroadcastId = yt.broadcastId || ''
+          // Persist the fresh stream key, rtmp server, and broadcastId so the swap uses the same session
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              streamKey: finalStreamKey,
+              rtmpServer: finalRtmpServer,
+              youtubeBroadcastId: youtubeBroadcastId
+            }
+          })
           logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
         } catch (ytErr: any) {
           logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed (using existing key): ${ytErr.message}`)

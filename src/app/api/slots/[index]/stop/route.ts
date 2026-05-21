@@ -34,6 +34,15 @@ export async function POST(
       console.error('Failed to connect to stream manager:', error)
     }
 
+    if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+      try {
+        const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
+        await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+      } catch (ytErr: any) {
+        console.error(`[Stop Route] YouTube stop failed:`, ytErr.message)
+      }
+    }
+
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },
       data: {
@@ -43,6 +52,7 @@ export async function POST(
         status: 'Stopped',
         nextRunTime: '',
         isSwapped: false,
+        youtubeBroadcastId: ""
       }
     })
 

@@ -43,6 +43,7 @@ model StreamSlot {
   youtubeTitle      String   @default("")
   youtubeDescription String   @default("")
   youtubeThumbnailPath String @default("")
+  youtubeBroadcastId String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

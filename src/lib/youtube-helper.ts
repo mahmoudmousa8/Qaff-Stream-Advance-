@@ -103,7 +103,7 @@ export async function setupYoutubeLiveStream(
   title: string,
   description: string,
   thumbnailPath?: string
-): Promise<{ streamKey: string; rtmpServer: string }> {
+): Promise<{ streamKey: string; rtmpServer: string; broadcastId: string }> {
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
 
@@ -192,7 +192,7 @@ export async function setupYoutubeLiveStream(
       },
       contentDetails: {
         enableAutoStart: true,
-        enableAutoStop: true
+        enableAutoStop: false
       }
     })
   })
@@ -251,5 +251,29 @@ export async function setupYoutubeLiveStream(
     }
   }
 
-  return { streamKey, rtmpServer }
+  return { streamKey, rtmpServer, broadcastId }
+}
+
+export async function stopYoutubeLiveStream(channelId: string, broadcastId: string): Promise<void> {
+  if (!broadcastId) return
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    console.log(`[YouTube Helper] Transitioning broadcast ${broadcastId} to status: complete`)
+    const transitionUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=complete&id=${broadcastId}&part=id,status`
+    const response = await fetch(transitionUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    if (!response.ok) {
+      const errMsg = await response.text()
+      console.error(`[YouTube Helper] Failed to transition broadcast to complete: ${errMsg}`)
+    } else {
+      console.log(`[YouTube Helper] Broadcast ${broadcastId} successfully completed`)
+    }
+  } catch (err: any) {
+    console.error(`[YouTube Helper] Error in stopYoutubeLiveStream:`, err?.message || err)
+  }
 }

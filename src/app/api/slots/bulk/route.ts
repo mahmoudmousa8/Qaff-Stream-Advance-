@@ -118,6 +118,28 @@ export async function POST(request: NextRequest) {
           // Continue even if stream manager is down
         }
 
+        // Terminate any active YouTube live broadcasts cleanly
+        const activeYoutubeSlots = await db.streamSlot.findMany({
+          where: {
+            isRunning: true,
+            outputType: 'youtube',
+            youtubeChannelId: { not: null },
+            youtubeBroadcastId: { not: '' }
+          }
+        })
+        if (activeYoutubeSlots.length > 0) {
+          try {
+            const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
+            await Promise.allSettled(
+              activeYoutubeSlots.map(s =>
+                stopYoutubeLiveStream(s.youtubeChannelId!, s.youtubeBroadcastId)
+              )
+            )
+          } catch {
+            // Non-fatal — continue with DB update
+          }
+        }
+
         const result = await db.streamSlot.updateMany({
           where: { isRunning: true },
           data: {
@@ -126,6 +148,7 @@ export async function POST(request: NextRequest) {
             manuallyStopped: true,
             status: 'Stopped',
             nextRunTime: '',
+            youtubeBroadcastId: ''
           }
         })
 
