@@ -645,7 +645,16 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           })
           logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
         } catch (ytErr: any) {
-          logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed (using existing key): ${ytErr.message}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed: ${ytErr.message}`)
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              isRunning: false,
+              isScheduled: false,
+              status: 'Failed'
+            }
+          })
+          continue
         }
       }
 

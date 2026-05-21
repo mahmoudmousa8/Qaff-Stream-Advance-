@@ -135,7 +135,17 @@ export async function POST(
         youtubeBroadcastId = yt.broadcastId || ""
         console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
       } catch (ytErr: any) {
-        console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed, falling back to saved stream key:`, ytErr.message)
+        console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed:`, ytErr.message)
+        // Reset the slot status to Failed and save
+        await db.streamSlot.update({
+          where: { slotIndex },
+          data: { status: 'Failed', isRunning: false }
+        })
+        // Write the error into the System Logs database
+        await db.systemLog.create({
+          data: { message: `Slot ${slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
+        })
+        return NextResponse.json({ error: `YouTube API Error: ${ytErr.message}` }, { status: 400 })
       }
     }
 

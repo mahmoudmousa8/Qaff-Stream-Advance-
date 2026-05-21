@@ -376,6 +376,15 @@ export default function Home() {
   const [ytSlotLinkName, setYtSlotLinkName] = useState('')
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
 
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/logs')
+      if (res.status === 401) { window.location.href = '/login'; return }
+      const data = await res.json()
+      setLogs(data.logs || [])
+    } catch { }
+  }, [])
+
   // Cloudflare Tunnel state
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null)
   const [publicIp, setPublicIp] = useState<string | null>(null)
@@ -386,6 +395,7 @@ export default function Home() {
     try {
       const res = await fetch('/api/tunnel')
       const data = await res.json()
+      let currentIp = '37.27.109.98'
       if (data.success && data.tunnelUrl) {
         setTunnelUrl(data.tunnelUrl)
       } else {
@@ -393,8 +403,27 @@ export default function Home() {
       }
       if (data.publicIp) {
         setPublicIp(data.publicIp)
+        currentIp = data.publicIp
       } else {
         setPublicIp(null)
+      }
+
+      // Log Cloudflare Tunnel warning to system logs database if accessing via trycloudflare.com
+      if (typeof window !== 'undefined' && window.location.hostname.includes('.trycloudflare.com')) {
+        const loggedWarningKey = 'cloudflare_warning_logged_session'
+        if (!sessionStorage.getItem(loggedWarningKey)) {
+          const msg = locale === 'ar'
+            ? `تنبيه: أنت متصل عبر نفق Cloudflare. بث RTMP من OBS لا يمر عبر نفق HTTP الخاص بـ Cloudflare. يرجى استخدام عنوان الـ IP المباشر للسيرفر (${currentIp}) في إعدادات البث ببرنامج OBS.`
+            : `Warning: Connected via Cloudflare Tunnel. RTMP streaming from OBS cannot pass through Cloudflare's HTTP tunnel. Please use the direct server IP (${currentIp}) in OBS stream settings.`
+          
+          await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+          })
+          sessionStorage.setItem(loggedWarningKey, 'true')
+          fetchLogs()
+        }
       }
     } catch (err) {
       console.error('Failed to fetch tunnel URL', err)
@@ -403,7 +432,7 @@ export default function Home() {
     } finally {
       setLoadingTunnel(false)
     }
-  }, [])
+  }, [fetchLogs, locale])
 
   const getIngestUrl = useCallback(() => {
     if (typeof window === 'undefined') return 'rtmp://127.0.0.1/live'
@@ -692,15 +721,6 @@ export default function Home() {
     } catch { addLog('Error fetching slots') }
     finally { setLoading(false) }
   }, [currentPage, debouncedSearchQuery])
-
-  const fetchLogs = useCallback(async () => {
-    try {
-      const res = await fetch('/api/logs')
-      if (res.status === 401) { window.location.href = '/login'; return }
-      const data = await res.json()
-      setLogs(data.logs || [])
-    } catch { }
-  }, [])
 
   const fetchStats = useCallback(async () => {
     try {

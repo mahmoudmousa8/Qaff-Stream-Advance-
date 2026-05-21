@@ -100,8 +100,13 @@ export async function setupYoutubeLiveStream(
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
 
-  // 2. Scheduled Start time (default to now to ensure immediate activation when streaming starts)
-  const scheduledStartTime = scheduledStartTimeStr || new Date().toISOString()
+  // 2. Scheduled Start time (must be in the future to avoid Google 400 Bad Request error)
+  let scheduledStartTime = scheduledStartTimeStr || new Date().toISOString()
+  const parsedTime = new Date(scheduledStartTime).getTime()
+  // If parsing failed, or it is in the past, or less than 60 seconds in the future, push to 2 minutes in the future
+  if (isNaN(parsedTime) || parsedTime < Date.now() + 60 * 1000) {
+    scheduledStartTime = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+  }
   console.log(`[YouTube Helper] Scheduling live broadcast start time: ${scheduledStartTime}`)
 
   // 3. Find or Create Stream Key
@@ -144,7 +149,15 @@ export async function setupYoutubeLiveStream(
       console.log(`[YouTube Helper] Found matching YouTube Live Stream key: ${streamKey.substring(0, 4)}**** (ID: ${streamId})`)
     }
   } else {
-    console.error('[YouTube Helper] Error fetching Live Streams:', await streamsResponse.text())
+    const errorText = await streamsResponse.text()
+    let errorMsg = errorText
+    try {
+      const parsed = JSON.parse(errorText)
+      if (parsed.error && parsed.error.message) {
+        errorMsg = parsed.error.message
+      }
+    } catch {}
+    console.error('[YouTube Helper] Error fetching Live Streams:', errorMsg)
   }
 
   // Create one if we couldn't list or find any
@@ -167,7 +180,15 @@ export async function setupYoutubeLiveStream(
     })
 
     if (!createStreamResponse.ok) {
-      throw new Error(`Failed to create YouTube Live Stream Key: ${await createStreamResponse.text()}`)
+      const errorText = await createStreamResponse.text()
+      let errorMsg = errorText
+      try {
+        const parsed = JSON.parse(errorText)
+        if (parsed.error && parsed.error.message) {
+          errorMsg = parsed.error.message
+        }
+      } catch {}
+      throw new Error(`Failed to create YouTube Live Stream Key: ${errorMsg}`)
     }
 
     const createdStream = await createStreamResponse.json()
@@ -207,7 +228,15 @@ export async function setupYoutubeLiveStream(
   })
 
   if (!broadcastResponse.ok) {
-    throw new Error(`Failed to create YouTube Live Broadcast: ${await broadcastResponse.text()}`)
+    const errorText = await broadcastResponse.text()
+    let errorMsg = errorText
+    try {
+      const parsed = JSON.parse(errorText)
+      if (parsed.error && parsed.error.message) {
+        errorMsg = parsed.error.message
+      }
+    } catch {}
+    throw new Error(`Failed to create YouTube Live Broadcast: ${errorMsg}`)
   }
 
   const broadcastData = await broadcastResponse.json()
@@ -219,11 +248,22 @@ export async function setupYoutubeLiveStream(
   const bindUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcastId}&part=id,snippet,contentDetails,status&streamId=${streamId}`
   const bindResponse = await fetch(bindUrl, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: { 
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Length': '0'
+    }
   })
 
   if (!bindResponse.ok) {
-    throw new Error(`Failed to bind YouTube Broadcast to Stream: ${await bindResponse.text()}`)
+    const errorText = await bindResponse.text()
+    let errorMsg = errorText
+    try {
+      const parsed = JSON.parse(errorText)
+      if (parsed.error && parsed.error.message) {
+        errorMsg = parsed.error.message
+      }
+    } catch {}
+    throw new Error(`Failed to bind YouTube Broadcast to Stream: ${errorMsg}`)
   }
   console.log('[YouTube Helper] Successfully bound Live Broadcast to Stream Key')
 
