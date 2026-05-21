@@ -1923,7 +1923,7 @@ export default function Home() {
                             <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
                               <span
                                 className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
-                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
                               >
                                 {settingsData.overlayTextRight || (locale === 'ar' ? 'سورة الفرقان' : 'Surah Name')}
                               </span>
@@ -1932,7 +1932,7 @@ export default function Home() {
                             <div className="flex-1 flex items-center justify-center px-3 bg-[#f5a623] border-t border-[#e09000]">
                               <span
                                 className="text-white font-extrabold text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] text-[10px] md:text-[13px] select-none break-all line-clamp-1"
-                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
                               >
                                 {settingsData.overlayText || (locale === 'ar' ? 'القارئ وليد موسى' : 'Sheikh / Reader Name')}
                               </span>
@@ -1941,7 +1941,7 @@ export default function Home() {
                             <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
                               <span
                                 className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
-                                style={{ fontFamily: 'Cairo, Scheherazade New, sans-serif', direction: 'rtl' }}
+                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
                               >
                                 {settingsData.overlayTextLeft || (locale === 'ar' ? 'برواية حفص عن عاصم' : 'Narration')}
                               </span>

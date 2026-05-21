@@ -230,7 +230,13 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
 
   let nextInputIndex = 1
 
-  // NOTE: Banner is now rendered with pure drawbox+drawtext — no PNG input needed.
+  // Banner input (if enabled)
+  let bannerInputIndex = -1
+  if (hasAnyOverlay) {
+    bannerInputIndex = nextInputIndex++
+    const bannerPath = resolve(PROJECT_ROOT, 'public', 'overlay-banner.png')
+    args.push('-i', bannerPath)
+  }
 
   // Custom audio background input (if enabled)
   let audioInputIndex = -1
@@ -259,7 +265,7 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
   const filterComplexParts: string[] = []
   
   // Video overlay & text banner
-  const fontPath = resolve(PROJECT_ROOT, 'public', 'Cairo-Bold.ttf')
+  const fontPath = resolve(PROJECT_ROOT, 'public', 'Al-Jazeera-Arabic-Bold.ttf')
   const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:')
   
   let videoMap = '0:v'
@@ -267,45 +273,41 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     const vidW = probe.width
     const vidH = probe.height
 
-    // Banner strip: 10% of video height at the very bottom
-    const bannerH = Math.round(vidH * 0.10)
-    // Side bands: 25% each; center golden: 50%
-    const sideW = Math.round(vidW * 0.25)
-    // Font sizes
-    const centerFontSize = Math.round(bannerH * 0.52)
-    const sideFontSize   = Math.round(bannerH * 0.40)
+    // Font sizes dynamically scaled relative to height (1024x576 base)
+    // 22px center, 16px side relative to 576px height
+    const centerFontSize = Math.max(12, Math.round(22 / 576 * vidH))
+    const sideFontSize   = Math.max(10, Math.round(16 / 576 * vidH))
 
-    // Vertical center of banner
-    const bannerY = vidH - bannerH
-    const textY = `${bannerY}+(${bannerH}-th)/2`
+    // Vertical centerline Y = 530 relative to 576 height.
+    // Center it exactly vertically by subtracting half the text height (th/2)
+    const textY = `(${Math.round(530 / 576 * vidH)}-th/2)`
+
+    // Horizontal centers relative to 1024 width
+    const leftCenterX = Math.round(296.5 / 1024 * vidW)
+    const centerCenterX = Math.round(510 / 1024 * vidW)
+    const rightCenterX = Math.round(715.5 / 1024 * vidW)
 
     // Escape helper: handle backslash, single quote, colon, comma
     const esc = (s: string) =>
       s.replace(/\\/g, '/').replace(/'/g, "\\'").replace(/:/g, '\\:').replace(/,/g, '\\,')
-    const efp = escapedFontPath  // already escaped font path
+    const efp = escapedFontPath
 
-    // ── 3-zone banner using pure drawbox (no external PNG needed) ──
-    // Zone 1: Center golden band
+    // Step 1: Scale banner PNG to match video width and height
     filterComplexParts.push(
-      `[0:v]drawbox=x=${sideW}:y=${bannerY}:w=${vidW - 2 * sideW}:h=${bannerH}:color=0xF5A623@0.95:t=fill[box_c]`
+      `[${bannerInputIndex}:v]scale=w=${vidW}:h=${vidH}[scaled_banner]`
     )
-    // Zone 2: Right white band
+    // Step 2: Overlay banner on video
     filterComplexParts.push(
-      `[box_c]drawbox=x=0:y=${bannerY}:w=${sideW}:h=${bannerH}:color=0xFFFFFF@0.95:t=fill[box_r]`
-    )
-    // Zone 3: Left white band
-    filterComplexParts.push(
-      `[box_r]drawbox=x=${vidW - sideW}:y=${bannerY}:w=${sideW}:h=${bannerH}:color=0xFFFFFF@0.95:t=fill[banner_done]`
+      `[0:v][scaled_banner]overlay=x=0:y=0[banner_video]`
     )
 
-    let lastLabel = 'banner_done'
+    let lastLabel = 'banner_video'
 
     // ── Text: Right zone (Surah name) ──
     if (overlayTextRight) {
       const escapedR = esc(overlayTextRight)
-      const cx = Math.round(sideW / 2)
       filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedR}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${cx}-tw/2:y=${textY}[rt_v]`
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedR}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${rightCenterX}-tw/2:y=${textY}[rt_v]`
       )
       lastLabel = 'rt_v'
     }
@@ -313,9 +315,8 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     // ── Text: Center zone (Sheikh / Reader name) ──
     if (overlayText) {
       const escapedC = esc(overlayText)
-      const centerZoneW = vidW - 2 * sideW
       filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedC}':fontcolor=white:fontsize=${centerFontSize}:x=${sideW}+(${centerZoneW}-tw)/2:y=${textY}:shadowcolor=black:shadowx=1:shadowy=1[ct_v]`
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedC}':fontcolor=white:fontsize=${centerFontSize}:x=${centerCenterX}-tw/2:y=${textY}:shadowcolor=black@0.6:shadowx=2:shadowy=2[ct_v]`
       )
       lastLabel = 'ct_v'
     }
@@ -323,9 +324,8 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     // ── Text: Left zone (Riwaya / Narration) ──
     if (overlayTextLeft) {
       const escapedL = esc(overlayTextLeft)
-      const leftZoneX = vidW - sideW
       filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedL}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${leftZoneX}+(${sideW}-tw)/2:y=${textY}[lt_v]`
+        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedL}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${leftCenterX}-tw/2:y=${textY}[lt_v]`
       )
       lastLabel = 'lt_v'
     }
