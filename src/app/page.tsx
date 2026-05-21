@@ -2877,41 +2877,7 @@ export default function Home() {
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-[350px]">
-            {/* Google Console Config Info */}
-            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-3 animate-fade-in">
-              <h5 className="text-xs font-bold text-blue-500 flex items-center gap-1.5">
-                ℹ️ {locale === 'ar' ? 'إعدادات مطور Google (Google Cloud Console)' : 'Google Developer Console Setup'}
-              </h5>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {locale === 'ar' 
-                  ? 'لتتمكن من ربط قنواتك بنجاح، يجب أن يكون رابط استدعاء التطبيق (Callback URI) التالي مضافاً في إعدادات OAuth الخاصة بك في منصة Google Cloud:' 
-                  : 'To link channels successfully, the following Callback URI must be whitelisted in your Google Cloud Console OAuth 2.0 Client credentials:'}
-              </p>
-              <div className="flex items-center justify-between gap-3 bg-background border border-border/80 rounded-lg p-2.5 font-mono text-[11px]">
-                <span className="text-foreground/80 break-all select-all">
-                  {typeof window !== 'undefined' ? `${window.location.origin}/api/auth/youtube/callback` : 'http://YOUR_VPS_IP/api/auth/youtube/callback'}
-                </span>
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                  className="h-7 text-[10px] px-2 flex items-center gap-1 shrink-0 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/30"
-                  onClick={() => {
-                    const cbUrl = `${window.location.origin}/api/auth/youtube/callback`;
-                    navigator.clipboard.writeText(cbUrl);
-                    alert(locale === 'ar' ? 'تم نسخ رابط الاستدعاء!' : 'Callback URI copied!');
-                  }}
-                >
-                  <Copy className="w-3 h-3" />
-                  {locale === 'ar' ? 'نسخ' : 'Copy'}
-                </Button>
-              </div>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
-                💡 {locale === 'ar' 
-                  ? 'إذا كنت تستخدم التونل (Cloudflare Tunnel)، فيرجى الدخول إلى لوحة التحكم من خلال رابط التونل أولاً لكي يعمل الترخيص بشكل صحيح.' 
-                  : 'If using a Cloudflare Tunnel, make sure to access this dashboard via the tunnel URL first before initiating Google authorization.'}
-              </p>
-            </div>
+
 
             {/* Form: Link a new channel */}
             <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-4">
@@ -3026,52 +2992,72 @@ export default function Home() {
                             )}
                           </TableCell>
                           <TableCell className="px-4 py-3 text-center">
-                            {ytUnlinkConfirm === ch.id ? (
-                              <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {ytUnlinkConfirm !== ch.id && (
                                 <Button
                                   size="sm"
-                                  variant="destructive"
-                                  className="h-6 px-2 text-[10px]"
-                                  onClick={async () => {
-                                    try {
-                                      const res = await fetch(`/api/youtube/channels?id=${ch.id}`, { method: 'DELETE' })
-                                      const data = await res.json()
-                                      if (data.success) {
-                                        addLog(locale === 'ar' ? `تم إلغاء ربط القناة: ${ch.name}` : `Unlinked channel: ${ch.name}`)
-                                        fetchYtChannels()
-                                        fetchSlots()
-                                      } else {
-                                        alert(data.error || 'Failed to unlink channel')
-                                      }
-                                    } catch {
-                                      alert('Network error')
-                                    } finally {
-                                      setYtUnlinkConfirm(null)
-                                    }
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600 hover:bg-blue-500/10 rounded-md shrink-0 transition-colors"
+                                  onClick={() => {
+                                    const authUrl = `/api/auth/youtube/redirect?name=${encodeURIComponent(ch.name)}`
+                                    window.open(authUrl, '_blank')
+                                    alert(locale === 'ar' 
+                                      ? 'سيتم فتح نافذة ترخيص Google لتجديد صلاحية القناة. بعد إتمام الدخول بنجاح، انقر على زر تحديث القائمة.' 
+                                      : 'Google authorization window will open to renew channel credentials. Complete the login, then click refresh list.')
                                   }}
+                                  title={locale === 'ar' ? 'تجديد الترخيص / إعادة ربط القناة' : 'Renew License / Re-link Channel'}
                                 >
-                                  {locale === 'ar' ? 'تأكيد' : 'Confirm'}
+                                  <RefreshCw className="w-3.5 h-3.5" />
                                 </Button>
+                              )}
+
+                              {ytUnlinkConfirm === ch.id ? (
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-6 px-2 text-[10px]"
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api/youtube/channels?id=${ch.id}`, { method: 'DELETE' })
+                                        const data = await res.json()
+                                        if (data.success) {
+                                          addLog(locale === 'ar' ? `تم إلغاء ربط القناة: ${ch.name}` : `Unlinked channel: ${ch.name}`)
+                                          fetchYtChannels()
+                                          fetchSlots()
+                                        } else {
+                                          alert(data.error || 'Failed to unlink channel')
+                                        }
+                                      } catch {
+                                        alert('Network error')
+                                      } finally {
+                                        setYtUnlinkConfirm(null)
+                                      }
+                                    }}
+                                  >
+                                    {locale === 'ar' ? 'تأكيد' : 'Confirm'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[10px]"
+                                    onClick={() => setYtUnlinkConfirm(null)}
+                                  >
+                                    {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+                                  </Button>
+                                </div>
+                              ) : (
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2 text-[10px]"
-                                  onClick={() => setYtUnlinkConfirm(null)}
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors"
+                                  onClick={() => setYtUnlinkConfirm(ch.id)}
+                                  title={locale === 'ar' ? 'إلغاء ربط القناة' : 'Unlink Channel'}
                                 >
-                                  {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors"
-                                onClick={() => setYtUnlinkConfirm(ch.id)}
-                                title={locale === 'ar' ? 'إلغاء ربط القناة' : 'Unlink Channel'}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                         )

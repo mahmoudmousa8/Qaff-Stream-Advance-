@@ -67,6 +67,17 @@ export default function LogsPage() {
         return () => { clearInterval(logsInterval) }
     }, [])
 
+    // Handle ESC key to go back
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                router.push('/')
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [router])
+
     const switchLocale = () => {
         const newLocale = locale === 'en' ? 'ar' : 'en'
         setLocale(newLocale)
