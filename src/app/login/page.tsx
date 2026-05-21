@@ -5,7 +5,6 @@ import { Sun, Moon, Globe, Loader2 } from 'lucide-react'
 import { t, isRTL, setLocale, getLocale, Locale } from '@/lib/i18n'
 
 export default function LoginPage() {
-    const [username, setUsername] = useState('user')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
@@ -50,7 +49,7 @@ export default function LoginPage() {
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify({ password }),
             })
 
             const data = await res.json()
@@ -149,31 +148,6 @@ export default function LoginPage() {
 
                     {/* Form */}
                     <form onSubmit={handleLogin} className="space-y-4">
-                        {/* Role Segment Switcher */}
-                        <div className="flex bg-muted/70 p-1 rounded-xl border border-border/50 shadow-inner">
-                            <button
-                                type="button"
-                                onClick={() => setUsername('user')}
-                                className={`flex-1 py-1.5 text-center text-sm font-medium rounded-lg transition-all duration-200 ${
-                                    username === 'user'
-                                        ? 'bg-card text-foreground shadow-md scale-[1.02]'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                                }`}
-                            >
-                                {t('roleClient')}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setUsername('admin')}
-                                className={`flex-1 py-1.5 text-center text-sm font-medium rounded-lg transition-all duration-200 ${
-                                    username === 'admin'
-                                        ? 'bg-card text-foreground shadow-md scale-[1.02]'
-                                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                                }`}
-                            >
-                                {t('roleAdmin')}
-                            </button>
-                        </div>
 
                         {/* Password Field */}
                         <div className="relative group">

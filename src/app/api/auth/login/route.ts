@@ -12,22 +12,21 @@ export const revalidate = 0
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const username = (body.username || 'user').trim().toLowerCase()
         const password = (body.password || '').trim()
 
         if (!password) {
             return NextResponse.json({ error: 'كلمة المرور مطلوبة' }, { status: 400 })
         }
 
-        // Query User from database
-        const user = await db.user.findUnique({
-            where: { username }
+        // Find the user that matches this exact password
+        const user = await db.user.findFirst({
+            where: { password }
         })
 
-        if (!user || user.password !== password) {
-            // Anti-brute-force delay: Wait 2 seconds before returning error
+        if (!user) {
+            // Anti-brute-force delay
             await new Promise(r => setTimeout(r, 2000))
-            return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' }, { status: 401 })
+            return NextResponse.json({ error: 'كلمة المرور غير صحيحة' }, { status: 401 })
         }
 
         // Generate session token: sha256(username + ":" + password + ":" + role + ":" + SESSION_SECRET)
