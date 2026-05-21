@@ -12,6 +12,7 @@ interface DateTimePickerProps {
     value: string
     onChange: (value: string) => void
     className?: string
+    disabled?: boolean
 }
 
 function parseValue(val: string): { month: number; day: number; hour: number; minute: number } {
@@ -39,7 +40,7 @@ function daysInMonth(year: number, month: number) {
     return new Date(year, month, 0).getDate()
 }
 
-export function DateTimePicker({ value, onChange, className }: DateTimePickerProps) {
+export function DateTimePicker({ value, onChange, className, disabled }: DateTimePickerProps) {
     const [open, setOpen] = React.useState(false)
 
     const now = new Date()
@@ -179,6 +180,7 @@ export function DateTimePicker({ value, onChange, className }: DateTimePickerPro
                     variant="outline"
                     className={cn('h-7 w-7 p-0 shrink-0', className)}
                     title="Pick date and time"
+                    disabled={disabled}
                 >
                     <CalendarIcon className="w-3.5 h-3.5" />
                 </Button>

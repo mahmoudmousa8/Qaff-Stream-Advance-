@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, accessSync, constants, writeFileSync } from 'fs'
-import { ALL_DIRS } from './paths'
+import { ALL_DIRS, APP_DATA_DIR } from './paths'
 
 /**
  * Bootstrap: create all required directories and validate read/write access.
@@ -26,7 +26,7 @@ export function ensureDirs(): void {
     console.log(`[bootstrap] All directories verified.`)
 
     // Auto-create default password file if missing
-    const passwordFile = require('path').join(process.cwd(), 'data', 'password.txt')
+    const passwordFile = require('path').join(APP_DATA_DIR, 'password.txt')
     if (!existsSync(passwordFile)) {
         writeFileSync(passwordFile, 'qaff2024', 'utf-8')
         console.log(`[bootstrap] Created default password file: ${passwordFile}`)

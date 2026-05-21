@@ -10,7 +10,7 @@ const PROJECT_ROOT = process.cwd()
 
 function resolve(envVar: string, defaultRelative: string): string {
     const raw = process.env[envVar] || defaultRelative
-    return path.resolve(PROJECT_ROOT, raw)
+    return path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(PROJECT_ROOT, raw)
 }
 
 // ── Directory Paths ──────────────────────────────────────────────

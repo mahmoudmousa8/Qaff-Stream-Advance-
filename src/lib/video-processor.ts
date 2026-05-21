@@ -274,8 +274,8 @@ function processNextJob() {
     activeProcessingClients.add(clientKey)
 
     // FAIRNESS SHUFFLE: Move all remaining jobs from THIS client to the back of the queue
-    const otherClientsJobs = [];
-    const thisClientJobs = [];
+    const otherClientsJobs: string[] = [];
+    const thisClientJobs: string[] = [];
     while (jobQueue.length > 0) {
         const jId = jobQueue.shift()!;
         const j = jobStore.get(jId);

@@ -158,13 +158,37 @@ echo -e "  ✅ PM2: $(pm2 -v)"
 echo -e "  ✅ tsx: $(tsx -v 2>/dev/null || echo 'installed')"
 
 # ════════════════════════════════════════════
-# 5. Preparing Project Directories & Environment
+# 5. Preparing Project Directories & Environment (Persistent Setup)
 # ════════════════════════════════════════════
 echo -e "\n${GREEN}[5/8]${NC} Creating directories & environment..."
-for dir in data data/videos data/upload data/download data/logs; do
-  mkdir -p "$PROJECT_DIR/$dir"
-done
-chmod -R 755 "$PROJECT_DIR/data"
+
+PERSISTENT_ROOT="/var/lib/qaff-stream"
+REAL_USER=${SUDO_USER:-$USER}
+
+echo -e "  Creating persistent directories under ${PERSISTENT_ROOT}..."
+sudo mkdir -p "${PERSISTENT_ROOT}/database"
+sudo mkdir -p "${PERSISTENT_ROOT}/videos"
+sudo mkdir -p "${PERSISTENT_ROOT}/upload"
+sudo mkdir -p "${PERSISTENT_ROOT}/download"
+sudo mkdir -p "${PERSISTENT_ROOT}/logs"
+
+# Migrate existing local data if present to avoid data loss
+if [ -d "$PROJECT_DIR/data" ]; then
+  echo -e "  🔄 Migrating existing local data to persistent storage..."
+  if [ -f "$PROJECT_DIR/data/app.db" ] && [ ! -f "${PERSISTENT_ROOT}/database/app.db" ]; then
+    sudo cp "$PROJECT_DIR/data/app.db" "${PERSISTENT_ROOT}/database/app.db"
+    echo -e "    ✅ Migrated SQLite database."
+  fi
+  if [ -d "$PROJECT_DIR/data/videos" ]; then
+    # Copy files recursively without overwriting
+    sudo cp -rn "$PROJECT_DIR/data/videos/"* "${PERSISTENT_ROOT}/videos/" 2>/dev/null || true
+    echo -e "    ✅ Migrated video library."
+  fi
+fi
+
+# Set ownership and permissions
+sudo chown -R "$REAL_USER":"$REAL_USER" "${PERSISTENT_ROOT}"
+sudo chmod -R 775 "${PERSISTENT_ROOT}"
 
 # Setup .env file
 if [ -f "$ENV_FILE" ]; then
@@ -178,6 +202,62 @@ if grep -q "change-me-to-a-random-secure-string" "$ENV_FILE" 2>/dev/null; then
   NEW_SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p | tr -d '\n')
   sed -i "s/change-me-to-a-random-secure-string/$NEW_SECRET/" "$ENV_FILE"
   echo -e "  ✅ SESSION_SECRET auto-generated"
+fi
+
+# Helper function to inject/update key-value in .env safely
+set_env_var() {
+  local key=$1
+  local val=$2
+  sed -i "/^${key}=/d" "$ENV_FILE" 2>/dev/null || true
+  echo "${key}=${val}" >> "$ENV_FILE"
+}
+
+# Inject persistent directory configurations
+set_env_var "DATABASE_URL" "file:${PERSISTENT_ROOT}/database/app.db"
+set_env_var "APP_DATA_DIR" "${PERSISTENT_ROOT}/database"
+set_env_var "VIDEOS_DIR" "${PERSISTENT_ROOT}/videos"
+set_env_var "UPLOAD_DIR" "${PERSISTENT_ROOT}/upload"
+set_env_var "DOWNLOAD_DIR" "${PERSISTENT_ROOT}/download"
+set_env_var "LOGS_DIR" "${PERSISTENT_ROOT}/logs"
+set_env_var "CLOUDFLARE_LOG_PATH" "${PERSISTENT_ROOT}/logs/cloudflare-tunnel.log"
+echo -e "  ✅ Persistent paths environment variables injected"
+
+# Install cloudflared quick tunnel if not already installed
+if ! command -v cloudflared &>/dev/null; then
+  echo -e "  Installing cloudflared quick tunnel..."
+  ARCH=$(uname -m)
+  if [ "$ARCH" = "x86_64" ]; then
+    sudo wget -q -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+  elif [ "$ARCH" = "aarch64" ]; then
+    sudo wget -q -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
+  else
+    sudo wget -q -O /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+  fi
+  sudo chmod +x /usr/local/bin/cloudflared
+  echo -e "  ✅ cloudflared installed successfully"
+else
+  echo -e "  ✅ cloudflared already installed"
+fi
+
+# Check and prompt for YouTube Credentials if missing
+if grep -q "^YOUTUBE_CLIENT_ID=" "$ENV_FILE" 2>/dev/null; then
+  YT_ID_VAL=$(grep "^YOUTUBE_CLIENT_ID=" "$ENV_FILE" | cut -d= -f2-)
+else
+  YT_ID_VAL=""
+fi
+
+if [ -z "$YT_ID_VAL" ] || [ "$YT_ID_VAL" = "change-me" ]; then
+  echo -e "\n${YELLOW}🔑 Setup YouTube live stream automation (Google Client Credentials)${NC}"
+  echo -e "You can get these from Google Cloud Console (OAuth 2.0 Client IDs)"
+  read -p "Enter YOUTUBE_CLIENT_ID (leave empty to skip): " USER_YT_ID
+  if [ -n "$USER_YT_ID" ]; then
+    set_env_var "YOUTUBE_CLIENT_ID" "$USER_YT_ID"
+    read -p "Enter YOUTUBE_CLIENT_SECRET: " USER_YT_SECRET
+    set_env_var "YOUTUBE_CLIENT_SECRET" "$USER_YT_SECRET"
+    echo -e "  ✅ YouTube credentials updated."
+  else
+    echo -e "  ⚠️ Skipping YouTube API credentials configuration. You can add them manually to .env later."
+  fi
 fi
 
 # Ensure firewall permissions

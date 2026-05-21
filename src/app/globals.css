@@ -126,28 +126,11 @@
 
   html,
   body {
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
-  }
-
-  @media (min-width: 1024px) {
-    html {
-      font-size: 90%;
-    }
-    body {
-      width: 111.11vw;
-      height: 111.11vh;
-      transform: scale(0.9);
-      transform-origin: top left;
-    }
-    
-    .h-screen {
-      height: 111.11vh !important;
-    }
   }
 }
 

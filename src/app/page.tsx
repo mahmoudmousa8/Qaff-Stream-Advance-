@@ -28,6 +28,7 @@ import {
 import { VideoManager } from '@/components/video-manager'
 import { DateTimePicker } from '@/components/date-time-picker'
 import { t, getLocale, setLocale, isRTL, type Locale } from '@/lib/i18n'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // ── RTMP base URLs ────────────────────────────────────────────────────────────
 const RTMP_BASES: Record<string, string> = {
@@ -230,6 +231,66 @@ function getDuration(schedStart: string, schedStop: string): { h: number; m: num
   return { h: Math.floor(diffMins / 60), m: diffMins % 60 }
 }
 
+function StreamSlotsSkeleton() {
+  return (
+    <div className="space-y-4 p-4">
+      {/* Desktop Table Skeleton */}
+      <div className="hidden xl:block">
+        <div className="border border-border/60 rounded-lg overflow-hidden bg-card">
+          <div className="bg-muted/50 p-3 border-b border-border flex gap-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="h-5 flex-1" />
+            ))}
+          </div>
+          <div className="divide-y divide-border/40">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="p-4 flex gap-4 items-center">
+                <Skeleton className="h-4 w-6" />
+                <Skeleton className="h-8 flex-1" />
+                <Skeleton className="h-8 flex-[2]" />
+                <Skeleton className="h-8 flex-1" />
+                <Skeleton className="h-8 flex-[1.5]" />
+                <Skeleton className="h-8 w-24" />
+                <Skeleton className="h-8 w-12" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Mobile Cards Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:hidden">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} className="border border-border/60">
+            <CardHeader className="p-3 border-b border-border/50 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-8" />
+                <Skeleton className="h-5 w-20" />
+              </div>
+              <Skeleton className="h-5 w-16" />
+            </CardHeader>
+            <CardContent className="p-3.5 space-y-3">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 flex-1" />
+                <Skeleton className="h-8 flex-1" />
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <Skeleton className="h-8 w-24" />
+                <div className="flex gap-1">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
   const router = useRouter()
   const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
@@ -290,14 +351,25 @@ export default function Home() {
     youtubeTitle: string
     youtubeDescription: string
     youtubeThumbnailPath: string
+    streamKey: string
+    rtmpServer: string
   } | null>(null)
   const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
 
+  // YouTube stream keys state (for dropdown in settings dialog)
+  const [ytStreamKeys, setYtStreamKeys] = useState<{ id: string; title: string; streamKey: string; rtmpServer: string; status: string }[]>([])
+  const [ytStreamKeysLoading, setYtStreamKeysLoading] = useState(false)
+  const [ytStreamKeysError, setYtStreamKeysError] = useState('')
+
+  // Slot-level stream keys for the main table row dropdowns
+  const [slotStreamKeys, setSlotStreamKeys] = useState<Record<number, { id: string; title: string; streamKey: string; rtmpServer: string }[]>>({})
+  const [slotStreamKeysLoading, setSlotStreamKeysLoading] = useState<Record<number, boolean>>({})
+
   // YouTube channels manager state
   const [ytManagerOpen, setYtManagerOpen] = useState(false)
-  const [ytChannels, setYtChannels] = useState<{ id: string; name: string; channelTitle: string; channelId: string }[]>([])
+  const [ytChannels, setYtChannels] = useState<{ id: string; name: string; channelTitle: string; channelId: string; createdAt: string; updatedAt: string }[]>([])
   const [ytLoading, setYtLoading] = useState(false)
   const [ytLinkName, setYtLinkName] = useState('')
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
@@ -360,6 +432,55 @@ export default function Home() {
       setYtLoading(false)
     }
   }, [])
+
+  // Fetch YouTube stream keys for a given channel (used in settings dialog dropdown)
+  const fetchYtStreamKeys = useCallback(async (channelId: string) => {
+    if (!channelId) { setYtStreamKeys([]); return }
+    setYtStreamKeysLoading(true)
+    setYtStreamKeysError('')
+    try {
+      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}`)
+      const data = await res.json()
+      if (data.success) {
+        setYtStreamKeys(data.streamKeys || [])
+      } else {
+        setYtStreamKeysError(data.error || 'Failed to fetch stream keys')
+        setYtStreamKeys([])
+      }
+    } catch (err) {
+      console.error('Failed to fetch YouTube stream keys', err)
+      setYtStreamKeysError('Network error')
+      setYtStreamKeys([])
+    } finally {
+      setYtStreamKeysLoading(false)
+    }
+  }, [])
+
+  // Fetch YouTube stream keys for a specific slot index (used in main table row)
+  const fetchStreamKeysForSlot = useCallback(async (slotIndex: number, channelId: string) => {
+    if (!channelId) return
+    setSlotStreamKeysLoading(prev => ({ ...prev, [slotIndex]: true }))
+    try {
+      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}`)
+      const data = await res.json()
+      if (data.success) {
+        setSlotStreamKeys(prev => ({ ...prev, [slotIndex]: data.streamKeys || [] }))
+      }
+    } catch (err) {
+      console.error('Error fetching stream keys for slot', slotIndex, err)
+    } finally {
+      setSlotStreamKeysLoading(prev => ({ ...prev, [slotIndex]: false }))
+    }
+  }, [])
+
+  // Auto-fetch stream keys for slots that have a YouTube channel bound
+  useEffect(() => {
+    slots.forEach(slot => {
+      if (slot.youtubeChannelId && !slotStreamKeys[slot.slotIndex] && !slotStreamKeysLoading[slot.slotIndex]) {
+        fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId)
+      }
+    })
+  }, [slots, fetchStreamKeysForSlot, slotStreamKeys, slotStreamKeysLoading])
 
   useEffect(() => {
     if (ytManagerOpen) {
@@ -644,7 +765,9 @@ export default function Home() {
       addLog(`Slot ${index + 1}: ${t('fileNotFound')}`)
       return
     }
-    if ((outputType === 'youtube' || outputType === 'facebook') && !slot.streamKey?.trim()) {
+    // Skip stream key check when YouTube automation is active (key is auto-fetched by backend)
+    const hasYtAutomation = !!(slot.youtubeChannelId)
+    if ((outputType === 'youtube' || outputType === 'facebook') && !slot.streamKey?.trim() && !hasYtAutomation) {
       addLog(`Slot ${index + 1}: ${t('streamKeyRequired')}`)
       return
     }
@@ -691,7 +814,9 @@ export default function Home() {
     if (slot.inputType !== 'live' && !slot.filePath) {
       addLog(`Slot ${index + 1}: ${t('fileNotFound')}`); return
     }
-    if ((outputType === 'youtube' || outputType === 'facebook') && !slot.streamKey?.trim()) {
+    // Skip stream key check when YouTube automation is active (key is auto-fetched by backend)
+    const hasYtAutomation = !!(slot.youtubeChannelId)
+    if ((outputType === 'youtube' || outputType === 'facebook') && !slot.streamKey?.trim() && !hasYtAutomation) {
       addLog(`Slot ${index + 1}: ${t('streamKeyRequired')}`); return
     }
     if ((outputType === 'tiktok' || outputType === 'custom') &&
@@ -841,19 +966,34 @@ export default function Home() {
   }
   const daysRemaining = getDaysRemaining(stats.renewalDate)
 
-  if (loading) {
+  if (loading && !user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">{t('loading')}</p>
+      <div className="min-h-screen xl:h-screen flex flex-col xl:overflow-hidden bg-background animate-pulse" dir="ltr">
+        <header className="border-b bg-card shrink-0 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded bg-muted" />
+            <div className="w-32 h-6 rounded bg-muted" />
+          </div>
+          <div className="flex gap-2">
+            <div className="w-20 h-8 rounded bg-muted" />
+            <div className="w-20 h-8 rounded bg-muted" />
+          </div>
+        </header>
+        <div className="flex-1 p-6 space-y-4">
+          <div className="w-48 h-8 rounded bg-muted" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="h-24 rounded-xl bg-muted" />
+            <div className="h-24 rounded-xl bg-muted" />
+            <div className="h-24 rounded-xl bg-muted" />
+          </div>
+          <div className="h-96 rounded-xl bg-muted" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-background" dir="ltr">
+    <div className="min-h-screen xl:h-screen flex flex-col xl:overflow-hidden bg-background" dir="ltr">
       {/* â€•â€•â€• Header â€•â€•â€• */}
       <header className="border-b bg-card shrink-0 z-50">
         <div className="px-4 py-2">
@@ -889,125 +1029,135 @@ export default function Home() {
               </Badge>
             )}
 
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Button size="sm" variant="outline" onClick={() => setVideosManagerOpen(true)}>
-                <FolderOpen className="w-4 h-4 mr-1" />
-                {t('videos')}
-              </Button>
+            <div className="flex items-center gap-2.5 flex-wrap justify-end">
+              {/* Group 1: Files, Logs, and Channels */}
+              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setVideosManagerOpen(true)}>
+                  <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                  {t('videos')}
+                </Button>
 
-              <Button size="sm" variant="outline" onClick={() => router.push('/logs')}>
-                <Activity className="w-4 h-4 mr-1" />
-                {t('logs')}
-              </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => router.push('/logs')}>
+                  <Activity className="w-3.5 h-3.5 mr-1" />
+                  {t('logs')}
+                </Button>
 
-              <Button size="sm" variant="outline" onClick={() => setYtManagerOpen(true)}>
-                <Youtube className="w-4 h-4 mr-1 text-red-500" />
-                {locale === 'ar' ? 'قنوات اليوتيوب' : 'YouTube Channels'}
-              </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setYtManagerOpen(true)}>
+                  <Youtube className="w-3.5 h-3.5 mr-1 text-red-500" />
+                  {locale === 'ar' ? 'القنوات' : 'YouTube'}
+                </Button>
+              </div>
 
-              {tunnelUrl ? (
-                <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-ping mr-1 shrink-0" />
-                  <span className="font-mono truncate max-w-[200px]" title={tunnelUrl}>
-                    {tunnelUrl.replace("https://", "")}
-                  </span>
-                  <a
-                    href={tunnelUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:text-green-500 ml-1.5 shrink-0"
-                    title={locale === 'ar' ? 'فتح الرابط في علامة تبويب جديدة' : 'Open link in new tab'}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                  </a>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-5 w-5 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded"
-                    onClick={() => {
-                      navigator.clipboard.writeText(tunnelUrl);
-                      alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!');
-                    }}
-                    title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}
-                  >
-                    <Copy className="w-3 h-3" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0 animate-pulse">
-                  <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
-                  <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-5 w-5 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded ml-1"
-                    onClick={fetchTunnelUrl}
-                    title={locale === 'ar' ? 'تحديث الحالة' : 'Refresh Tunnel Status'}
-                    disabled={loadingTunnel}
-                  >
-                    <RefreshCw className={`w-3 h-3 ${loadingTunnel ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-              )}
+              {/* Group 2: Cloudflare Tunnel Status */}
+              <div className="flex items-center shrink-0">
+                {tunnelUrl ? (
+                  <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-ping mr-1 shrink-0" />
+                    <span className="font-mono truncate max-w-[120px] sm:max-w-[200px]" title={tunnelUrl}>
+                      {tunnelUrl.replace("https://", "")}
+                    </span>
+                    <a
+                      href={tunnelUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-green-500 ml-1.5 shrink-0 hover:scale-110 transition-transform"
+                      title={locale === 'ar' ? 'فتح الرابط في علامة تبويب جديدة' : 'Open link in new tab'}
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                    </a>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-5 w-5 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded hover:scale-105 active:scale-95 transition-all"
+                      onClick={() => {
+                        navigator.clipboard.writeText(tunnelUrl);
+                        alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!');
+                      }}
+                      title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}
+                    >
+                      <Copy className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0 animate-pulse">
+                    <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
+                    <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-5 w-5 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded ml-1 hover:scale-110 active:scale-90 transition-all"
+                      onClick={fetchTunnelUrl}
+                      title={locale === 'ar' ? 'تحديث الحالة' : 'Refresh Tunnel Status'}
+                      disabled={loadingTunnel}
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingTunnel ? 'animate-spin' : ''}`} />
+                    </Button>
+                  </div>
+                )}
+              </div>
 
-              <Button size="sm" variant="ghost" onClick={switchLocale} title={t('language')}>
-                <Globe className="w-4 h-4 mr-1" />
-                {locale === 'en' ? 'AR' : 'EN'}
-              </Button>
+              {/* Group 3: Bulk Actions */}
+              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                  onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
+                  <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                  onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
+                  <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('setTimeAll', t('confirmSetTimeAll'))}>
+                  <Clock className="w-3 h-3 mr-0.5" />{t('setTimeAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
+                  <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+                  <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+                </Button>
+              </div>
 
-              <Button size="sm" variant="ghost" onClick={toggleTheme} title={t('theme')}>
-                {isDarkMode ? <Sun className="w-4 h-4 text-orange-400" /> : <Moon className="w-4 h-4" />}
-              </Button>
+              {/* Group 4: Server Config, Timezone & AutoSave */}
+              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => setTzDialogOpen(true)} title={t('timezoneServer')}>
+                  <Globe className="w-3.5 h-3.5 mr-0.5" />{t('timezoneBtn')}
+                </Button>
+                <Button size="sm" variant={autoSave ? "secondary" : "ghost"} className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => setAutoSave(!autoSave)}>
+                  <Save className="w-3.5 h-3.5 mr-0.5" />{t('autoSave')}: {autoSave ? 'ON' : 'OFF'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 font-medium" onClick={async () => {
+                  setPwDialogOpen(true); setPwError(''); setPwSuccess(false); setPwResetAnswer(''); setPwNewPassword(''); setPwConfirmPassword('')
+                  try {
+                    const r = await fetch('/api/settings/reset-question')
+                    const d = await r.json()
+                    setPwResetQuestion(d.question || '')
+                  } catch { setPwResetQuestion('') }
+                }}>
+                  🔑 {locale === 'ar' ? 'كلمة المرور' : 'Password'}
+                </Button>
+              </div>
 
-              <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700 h-7 text-xs w-auto px-3"
-                onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
-                <Play className="w-3.5 h-3.5 mr-1" />{t('startAll')}
-              </Button>
-              <Button size="sm" variant="destructive" className="h-7 text-xs w-[100px]"
-                onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
-                <Square className="w-3.5 h-3.5 mr-1" />{t('stopAll')}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs w-[120px]"
-                onClick={() => confirmBulkAction('setTimeAll', t('confirmSetTimeAll'))}>
-                <Clock className="w-3.5 h-3.5 mr-1" />{t('setTimeAll')}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs w-[100px]"
-                onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
-                <Sun className="w-3.5 h-3.5 mr-1" />{t('dailyAll')}
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs w-[110px]"
-                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />{t('resetAll')}
-              </Button>
+              {/* Group 5: Appearance/Locale and Logout */}
+              <div className="flex items-center gap-1 shrink-0">
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={switchLocale} title={t('language')}>
+                  <Globe className="w-3.5 h-3.5" />
+                </Button>
 
-              <div className="w-px h-5 bg-border mx-1" />
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={toggleTheme} title={t('theme')}>
+                  {isDarkMode ? <Sun className="w-3.5 h-3.5 text-orange-400" /> : <Moon className="w-3.5 h-3.5" />}
+                </Button>
 
-              <Button size="sm" variant="outline" className="h-7 text-xs w-[120px]"
-                onClick={() => setTzDialogOpen(true)} title={t('timezoneServer')}>
-                <Globe className="w-3.5 h-3.5 mr-1" />{t('timezoneBtn')}
-              </Button>
-              <Button size="sm" variant={autoSave ? "default" : "outline"} className="h-7 text-xs w-[130px]"
-                onClick={() => setAutoSave(!autoSave)}>
-                <Save className="w-3.5 h-3.5 mr-1" />{t('autoSave')}: {autoSave ? 'ON' : 'OFF'}
-              </Button>
-
-              <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600 hover:bg-red-50 h-7"
-                title={t('logout')}
-                onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }}>
-                <LogOut className="w-4 h-4" />
-              </Button>
-
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => {
-                setPwDialogOpen(true); setPwError(''); setPwSuccess(false); setPwResetAnswer(''); setPwNewPassword(''); setPwConfirmPassword('')
-                // Fetch the security question from admin
-                try {
-                  const r = await fetch('/api/settings/reset-question')
-                  const d = await r.json()
-                  setPwResetQuestion(d.question || '')
-                } catch { setPwResetQuestion('') }
-              }}>
-                🔑 {locale === 'ar' ? 'تغيير كلمة المرور' : 'Change Password'}
-              </Button>
+                <Button size="sm" variant="ghost" className="text-red-500 hover:text-white hover:bg-red-600 h-7 w-7 p-0 rounded-lg hover:scale-110 active:scale-90 transition-all"
+                  title={t('logout')}
+                  onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }}>
+                  <LogOut className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -1264,8 +1414,8 @@ export default function Home() {
           </div>
         </main>
       ) : (
-        <main className="flex-1 flex flex-col overflow-hidden px-4 py-2 gap-2">
-          <Card className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2 overflow-y-auto xl:overflow-hidden">
+          <Card className="flex-1 flex flex-col min-h-0 overflow-visible xl:overflow-hidden border-border/60 shadow-md">
             <CardHeader className="py-2 px-4 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -1295,8 +1445,9 @@ export default function Home() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0">
-              <div className="h-full overflow-auto">
+            <CardContent className="flex-1 p-0 overflow-y-auto xl:overflow-hidden min-h-0">
+              {/* ── Desktop Table (xl+) ── */}
+              <div className="hidden xl:block h-full overflow-auto">
                 <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
@@ -1402,14 +1553,55 @@ export default function Home() {
 
                           {/* Stream Key */}
                           <td className="px-2 py-1">
-                            <DebouncedInput
-                              value={slot.streamKey}
-                              disabled={isLocked}
-                              onChange={(val) => handleSlotChange(slot.slotIndex, 'streamKey', val)}
-                              className="h-6 text-[11px] font-mono w-full"
-                              placeholder={t('phStreamKey')}
-                              dir="ltr"
-                            />
+                            {slot.youtubeChannelId ? (
+                              <div className="flex gap-1 items-center w-full">
+                                <select
+                                  disabled={isLocked}
+                                  value={slot.streamKey || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    handleSlotChange(slot.slotIndex, 'streamKey', val)
+                                    // Find and set matching rtmpServer
+                                    const keys = slotStreamKeys[slot.slotIndex] || []
+                                    const found = keys.find(k => k.streamKey === val)
+                                    if (found) {
+                                      handleSlotChange(slot.slotIndex, 'rtmpServer', found.rtmpServer)
+                                    }
+                                  }}
+                                  className="h-6 text-[11px] font-mono border rounded bg-background focus:outline-none cursor-pointer px-1 flex-1 w-full min-w-0"
+                                  dir="ltr"
+                                >
+                                  <option value="">
+                                    {slotStreamKeysLoading[slot.slotIndex]
+                                      ? (locale === 'ar' ? 'جارٍ التحميل...' : 'Loading...')
+                                      : (locale === 'ar' ? '-- جلب تلقائي --' : '-- Auto-Fetch --')}
+                                  </option>
+                                  {(slotStreamKeys[slot.slotIndex] || []).map(k => (
+                                    <option key={k.id} value={k.streamKey}>
+                                      {k.title}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  disabled={isLocked || slotStreamKeysLoading[slot.slotIndex]}
+                                  onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!)}
+                                  className="h-6 w-6 flex items-center justify-center rounded border bg-muted/30 hover:bg-muted transition-all text-xs shrink-0 disabled:opacity-50"
+                                  title={locale === 'ar' ? 'تحديث مفاتيح البث' : 'Refresh Stream Keys'}
+                                >
+                                  <span className={slotStreamKeysLoading[slot.slotIndex] ? "animate-spin inline-block" : ""}>↻</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <DebouncedInput
+                                value={slot.streamKey}
+                                disabled={isLocked}
+                                onChange={(val) => handleSlotChange(slot.slotIndex, 'streamKey', val)}
+                                className="h-6 text-[11px] font-mono w-full"
+                                placeholder={t('phStreamKey')}
+                                dir="ltr"
+                              />
+                            )}
                           </td>
 
                           {/* Start Schedule */}
@@ -1564,7 +1756,11 @@ export default function Home() {
                                     youtubeTitle: slot.youtubeTitle ?? '',
                                     youtubeDescription: slot.youtubeDescription ?? '',
                                     youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
+                                    streamKey: slot.streamKey ?? '',
+                                    rtmpServer: slot.rtmpServer ?? '',
                                   })
+                                  // Pre-fetch stream keys if channel is already linked
+                                  if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
                                 }}
                                 title={t('advancedSettings')}>
                                 <Settings className="w-3.5 h-3.5" />
@@ -1626,6 +1822,370 @@ export default function Home() {
                     })}
                   </tbody>
                 </table>
+
+                {/* Empty state – desktop */}
+                {!loading && slots.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+                    <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
+                      <Search className="w-8 h-8 text-muted-foreground/50" />
+                    </div>
+                    <p className="font-semibold text-foreground/80 text-sm">
+                      {locale === 'ar' ? 'لا توجد نتائج' : 'No slots found'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {debouncedSearchQuery
+                        ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
+                        : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
+                    </p>
+                    {debouncedSearchQuery && (
+                      <button onClick={() => setSearchQuery('')} className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
+                        {locale === 'ar' ? 'مسح البحث' : 'Clear search'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Mobile / Tablet Cards (< xl) ── */}
+              <div className="block xl:hidden overflow-y-auto">
+                {loading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="rounded-xl border border-border/60 bg-card p-4 space-y-3 animate-pulse">
+                        <div className="h-4 w-24 bg-muted rounded" />
+                        <div className="h-8 bg-muted rounded" />
+                        <div className="h-8 bg-muted rounded" />
+                        <div className="flex gap-2"><div className="h-8 flex-1 bg-muted rounded" /><div className="h-8 flex-1 bg-muted rounded" /></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : slots.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20 gap-3 text-center p-6">
+                    <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
+                      <Search className="w-8 h-8 text-muted-foreground/50" />
+                    </div>
+                    <p className="font-semibold text-foreground/80 text-sm">
+                      {locale === 'ar' ? 'لا توجد نتائج' : 'No slots found'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {debouncedSearchQuery
+                        ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
+                        : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
+                    </p>
+                    {debouncedSearchQuery && (
+                      <button onClick={() => setSearchQuery('')} className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
+                        {locale === 'ar' ? 'مسح البحث' : 'Clear search'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
+                    {slots.map((slot) => {
+                      const outputType = slot.outputType || 'youtube'
+                      const isYtFb = outputType === 'youtube' || outputType === 'facebook'
+                      const rtmpBase = RTMP_BASES[outputType] || ''
+                      const isLocked = slot.isRunning || slot.status !== 'Stopped'
+                      const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
+                      const hasDur = durH >= 0 && durM >= 0
+                      const sc = "h-7 text-xs font-mono border rounded bg-background focus:outline-none cursor-pointer px-1.5"
+
+                      return (
+                        <div
+                          key={slot.id}
+                          className={`rounded-xl border bg-card shadow-sm transition-all duration-200 overflow-hidden ${
+                            slot.isRunning
+                              ? 'border-green-500/40 shadow-green-500/10 shadow-md'
+                              : slot.status === 'Scheduled'
+                              ? 'border-orange-500/40'
+                              : 'border-border/60 hover:border-border'
+                          }`}
+                        >
+                          {/* Card Header */}
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/30">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                #{slot.slotIndex + 1}
+                              </span>
+                              <Badge className={`${getStatusColor(slot.status)} text-white text-[10px] px-1.5 py-0`}>
+                                {slot.status}
+                              </Badge>
+                            </div>
+                            {/* Platform selector */}
+                            <select
+                              value={outputType}
+                              onChange={(e) => handleOutputTypeChange(slot.slotIndex, e.target.value)}
+                              className="h-6 text-[10px] rounded border border-input bg-background px-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                              dir="ltr"
+                            >
+                              <option value="youtube">{t('optYouTube')}</option>
+                              <option value="facebook">{t('optFacebook')}</option>
+                              <option value="custom">{t('optCustom')}</option>
+                            </select>
+                          </div>
+
+                          <div className="p-3 space-y-2.5">
+                            {/* Channel Name */}
+                            <DebouncedInput
+                              value={slot.channelName}
+                              onChange={(val) => handleSlotChange(slot.slotIndex, 'channelName', val)}
+                              className="h-8 text-sm w-full"
+                              placeholder={t('optional')}
+                              dir="auto"
+                            />
+
+                            {/* File / Ingest Selector */}
+                            <div className="flex gap-1.5 items-center">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`h-8 w-8 p-0 shrink-0 ${
+                                  slot.inputType === 'live'
+                                    ? 'bg-blue-500/10 text-blue-500 border-blue-500/30'
+                                    : 'text-muted-foreground'
+                                }`}
+                                disabled={isLocked}
+                                onClick={() => handleSlotChange(slot.slotIndex, 'inputType', slot.inputType === 'live' ? 'file' : 'live')}
+                                title={slot.inputType === 'live' ? 'Switch to File' : 'Switch to Live Ingest'}
+                              >
+                                {slot.inputType === 'live' ? <Wifi className="w-4 h-4 animate-pulse" /> : <Film className="w-4 h-4" />}
+                              </Button>
+                              {slot.inputType === 'live' ? (
+                                <Input
+                                  readOnly
+                                  value={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                  className="h-8 text-[10px] flex-1 font-mono bg-blue-500/5 text-blue-500 border-blue-500/20 cursor-default"
+                                  dir="ltr"
+                                />
+                              ) : (
+                                <>
+                                  <Input
+                                    readOnly
+                                    value={slot.filePath ? slot.filePath.split(/[/\\]/).pop() : ''}
+                                    placeholder={t('phFilePath')}
+                                    className={`h-8 text-xs flex-1 font-mono text-muted-foreground bg-muted/20 ${isLocked ? 'opacity-50' : 'cursor-default'}`}
+                                    dir="ltr"
+                                    title={slot.filePath}
+                                  />
+                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" disabled={isLocked}
+                                    onClick={() => setVideoSelectorSlot(slot.slotIndex)}>
+                                    <FolderOpen className="w-3.5 h-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Stream Key */}
+                            <div>
+                              {slot.youtubeChannelId ? (
+                                <div className="flex gap-1.5 items-center">
+                                  <select
+                                    disabled={isLocked}
+                                    value={slot.streamKey || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      handleSlotChange(slot.slotIndex, 'streamKey', val)
+                                      const keys = slotStreamKeys[slot.slotIndex] || []
+                                      const found = keys.find(k => k.streamKey === val)
+                                      if (found) handleSlotChange(slot.slotIndex, 'rtmpServer', found.rtmpServer)
+                                    }}
+                                    className="h-8 text-xs font-mono border rounded bg-background focus:outline-none cursor-pointer px-2 flex-1 min-w-0"
+                                    dir="ltr"
+                                  >
+                                    <option value="">{slotStreamKeysLoading[slot.slotIndex] ? 'Loading...' : '-- Auto-Fetch --'}</option>
+                                    {(slotStreamKeys[slot.slotIndex] || []).map(k => (
+                                      <option key={k.id} value={k.streamKey}>{k.title}</option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    disabled={isLocked || slotStreamKeysLoading[slot.slotIndex]}
+                                    onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!)}
+                                    className="h-8 w-8 flex items-center justify-center rounded border bg-muted/30 hover:bg-muted transition-all text-sm shrink-0 disabled:opacity-50"
+                                    title="Refresh Stream Keys"
+                                  >
+                                    <span className={slotStreamKeysLoading[slot.slotIndex] ? 'animate-spin inline-block' : ''}>↻</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <DebouncedInput
+                                  value={slot.streamKey}
+                                  disabled={isLocked}
+                                  onChange={(val) => handleSlotChange(slot.slotIndex, 'streamKey', val)}
+                                  className="h-8 text-xs font-mono w-full"
+                                  placeholder={t('phStreamKey')}
+                                  dir="ltr"
+                                />
+                              )}
+                            </div>
+
+                            {/* RTMP Server (only for custom) */}
+                            {!isYtFb && (
+                              <DebouncedInput
+                                value={slot.rtmpServer}
+                                onChange={(val) => handleSlotChange(slot.slotIndex, 'rtmpServer', val)}
+                                className="h-8 text-xs font-mono w-full"
+                                placeholder={t('phCustomServer')}
+                                dir="ltr"
+                              />
+                            )}
+
+                            {/* Schedule Row */}
+                            <div className="flex flex-wrap gap-2 items-center pt-0.5">
+                              {/* Start time */}
+                              <div className="flex gap-1 items-center bg-muted/40 px-2 py-1 rounded border border-border/40">
+                                <div className="w-4 h-4 bg-green-500/15 text-green-600 rounded flex items-center justify-center shrink-0 border border-green-500/20">
+                                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 ml-[1px]"><path d="M5.5 3.5l14 8.5-14 8.5v-17z" /></svg>
+                                </div>
+                                <input
+                                  type="text"
+                                  disabled={isLocked}
+                                  value={slot.schedStart || ''}
+                                  placeholder="00-00 00:00"
+                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStart', e.target.value)}
+                                  className={`w-[80px] bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${
+                                    slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'
+                                  } ${isLocked ? 'opacity-50' : ''}`}
+                                  dir="ltr"
+                                />
+                                <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`} />
+                              </div>
+
+                              {/* Duration selectors */}
+                              <div className="flex gap-1 items-center bg-muted/40 px-2 py-1 rounded border border-border/40">
+                                <div className="w-4 h-4 bg-red-500/15 text-red-500 rounded flex items-center justify-center shrink-0 border border-red-500/20">
+                                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
+                                </div>
+                                <select
+                                  disabled={isLocked}
+                                  value={hasDur ? String(durH) : ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
+                                    const h = parseInt(val)
+                                    const m = hasDur ? durM : 0
+                                    handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
+                                  }}
+                                  className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
+                                >
+                                  <option value="">--</option>
+                                  {Array.from({length:12},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                                </select>
+                                <span className="text-muted-foreground font-bold text-sm">:</span>
+                                <select
+                                  disabled={isLocked}
+                                  value={hasDur ? String(durM) : ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
+                                    const m = parseInt(val)
+                                    const h = hasDur ? durH : 0
+                                    handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
+                                  }}
+                                  className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
+                                >
+                                  <option value="">--</option>
+                                  {Array.from({length:60},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                                </select>
+                              </div>
+
+                              {/* Daily / Weekly */}
+                              <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'daily', !!c)
+                                    if (c) handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'weekly', !!c)
+                                    if (c) handleSlotChange(slot.slotIndex, 'daily', false)
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                </div>
+                              </div>
+
+                              {/* AM/PM quick */}
+                              <div className={`flex bg-muted/50 rounded overflow-hidden border border-primary/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 text-xs font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r">{t('btnAM')}</button>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 text-xs font-semibold hover:bg-primary/20 hover:text-primary transition-colors">{t('btnPM')}</button>
+                              </div>
+
+                              {/* Reset dates */}
+                              <button
+                                disabled={isLocked}
+                                onClick={() => {
+                                  handleSlotChange(slot.slotIndex, 'schedStart', '')
+                                  handleSlotChange(slot.slotIndex, 'schedStop', '')
+                                }}
+                                className="h-7 w-7 flex items-center justify-center rounded border bg-muted/50 hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors disabled:opacity-50"
+                                title="Reset dates"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+
+                            {/* Next run time */}
+                            {slot.nextRunTime && (
+                              <div className="text-[10px] text-blue-500 font-mono">{slot.nextRunTime}</div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
+                              <div className="flex gap-1.5">
+                                <Button size="sm" className="h-8 w-8 p-0 rounded-lg bg-green-600 hover:bg-green-500 hover:scale-110 hover:shadow-md hover:shadow-green-500/40 transition-all"
+                                  disabled={slot.isRunning}
+                                  onClick={() => handlePlayButton(slot.slotIndex)}
+                                  title={slot.schedStart ? t('scheduleStream') : t('startStream')}>
+                                  <Play className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="sm" variant="destructive" className="h-8 w-8 p-0 rounded-lg hover:scale-110 hover:shadow-md hover:shadow-red-500/40 transition-all"
+                                  disabled={!slot.isRunning && !slot.isScheduled}
+                                  onClick={() => stopStream(slot.slotIndex)}
+                                  title={t('stopStream')}>
+                                  <Square className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg hover:bg-muted hover:scale-110 transition-all"
+                                  onClick={() => resetSlot(slot.slotIndex)}
+                                  title={t('resetSlot')}>
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg hover:bg-muted hover:scale-110 transition-all"
+                                  onClick={() => {
+                                    setSettingsSlot(slot.slotIndex)
+                                    setSettingsData({
+                                      swapVideoPath: slot.swapVideoPath ?? '',
+                                      swapVideoEnabled: slot.swapVideoEnabled ?? false,
+                                      youtubeChannelId: slot.youtubeChannelId ?? '',
+                                      youtubeTitle: slot.youtubeTitle ?? '',
+                                      youtubeDescription: slot.youtubeDescription ?? '',
+                                      youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
+                                      streamKey: slot.streamKey ?? '',
+                                      rtmpServer: slot.rtmpServer ?? '',
+                                    })
+                                    if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
+                                  }}
+                                  title={t('advancedSettings')}>
+                                  <Settings className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg hover:bg-muted hover:scale-110 transition-all"
+                                  onClick={() => openChannelLogs(slot.slotIndex)}
+                                  title={t('colLogs')}>
+                                  <FileText className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -1965,7 +2525,13 @@ export default function Home() {
                       </p>
                       <select
                         value={settingsData.youtubeChannelId || ''}
-                        onChange={(e) => setSettingsData(p => p ? { ...p, youtubeChannelId: e.target.value } : p)}
+                        onChange={(e) => {
+                          const channelId = e.target.value
+                          setSettingsData(p => p ? { ...p, youtubeChannelId: channelId, streamKey: '', rtmpServer: '' } : p)
+                          if (channelId) {
+                            fetchYtStreamKeys(channelId)
+                          }
+                        }}
                         className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                         dir="ltr"
                       >
@@ -1980,6 +2546,78 @@ export default function Home() {
 
                     {settingsData.youtubeChannelId && (
                       <>
+                        {/* Stream Key Selection Dropdown */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                              <span>🔑</span>
+                              {locale === 'ar' ? 'مفتاح البث' : 'Stream Key'}
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId)}
+                              disabled={ytStreamKeysLoading}
+                              className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
+                            >
+                              {ytStreamKeysLoading ? (
+                                <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
+                              ) : (
+                                <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {locale === 'ar'
+                              ? 'اختر مفتاح البث من القناة أو اتركه فارغاً ليتم الجلب التلقائي عند بدء البث.'
+                              : 'Select a stream key from your channel, or leave empty to auto-fetch when stream starts.'}
+                          </p>
+
+                          {ytStreamKeysError && (
+                            <div className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded p-2 mb-2">
+                              ⚠️ {ytStreamKeysError}
+                            </div>
+                          )}
+
+                          <select
+                            value={settingsData.streamKey || ''}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              if (!val) {
+                                setSettingsData(p => p ? { ...p, streamKey: '', rtmpServer: '' } : p)
+                                return
+                              }
+                              // Find the matching stream key object to also get rtmpServer
+                              const found = ytStreamKeys.find(k => k.streamKey === val)
+                              setSettingsData(p => p ? {
+                                ...p,
+                                streamKey: found?.streamKey || val,
+                                rtmpServer: found?.rtmpServer || 'rtmp://a.rtmp.youtube.com/live2'
+                              } : p)
+                            }}
+                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            dir="ltr"
+                          >
+                            <option value="">
+                              {ytStreamKeysLoading
+                                ? (locale === 'ar' ? 'جارٍ التحميل...' : 'Loading...')
+                                : (locale === 'ar' ? '-- جلب تلقائي (موصى به) --' : '-- Auto-Fetch (Recommended) --')}
+                            </option>
+                            {ytStreamKeys.map(k => (
+                              <option key={k.id} value={k.streamKey}>
+                                {k.title}{k.status === 'active' ? ' ✅' : ''}
+                              </option>
+                            ))}
+                          </select>
+
+                          {settingsData.streamKey && (
+                            <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded-lg text-[10px] font-mono text-green-600 dark:text-green-400 flex items-center gap-2 overflow-hidden">
+                              <span className="shrink-0">✓</span>
+                              <span className="truncate" title={settingsData.streamKey}>
+                                {settingsData.streamKey.substring(0, 8)}••••
+                              </span>
+                            </div>
+                          )}
+                        </div>
                         {/* Title character counter & validation */}
                         <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <div className="flex justify-between items-center">
@@ -2085,14 +2723,23 @@ export default function Home() {
               onClick={async () => {
                 if (settingsSlot === null || !settingsData) return
                 try {
-                  await updateSlot(settingsSlot, {
+                  // Build the update payload
+                  const settingsSavePayload: Partial<StreamSlot> = {
                     swapVideoPath: settingsData.swapVideoPath,
                     swapVideoEnabled: settingsData.swapVideoEnabled,
                     youtubeChannelId: settingsData.youtubeChannelId || null,
                     youtubeTitle: settingsData.youtubeTitle,
                     youtubeDescription: settingsData.youtubeDescription,
                     youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
-                  })
+                  }
+                  // Only save streamKey/rtmpServer if a specific key was explicitly chosen
+                  if (settingsData.youtubeChannelId && settingsData.streamKey) {
+                    settingsSavePayload.streamKey = settingsData.streamKey
+                    settingsSavePayload.rtmpServer = settingsData.rtmpServer || 'rtmp://a.rtmp.youtube.com/live2'
+                  } else if (!settingsData.youtubeChannelId) {
+                    // If no channel linked, don't touch streamKey/rtmpServer from this dialog
+                  }
+                  await updateSlot(settingsSlot, settingsSavePayload)
                   addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)
                 } catch {
                   addLog(`Slot ${settingsSlot + 1}: Error saving advanced settings`)
@@ -2295,20 +2942,47 @@ export default function Home() {
                       <TableRow>
                         <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'الاسم المستعار' : 'Nickname'}</TableHead>
                         <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'عنوان يوتيوب الرسمي' : 'Official YouTube Title'}</TableHead>
-                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 120 }}>{locale === 'ar' ? 'الحالة' : 'Status'}</TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 150 }}>{locale === 'ar' ? 'انتهاء الصلاحية' : 'Token Expiry'}</TableHead>
                         <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 80 }}></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ytChannels.map(ch => (
+                      {ytChannels.map(ch => {
+                        // Calculate 7-day expiry countdown from createdAt
+                        const createdMs = ch.createdAt ? new Date(ch.createdAt).getTime() : Date.now()
+                        const expiryMs = createdMs + 7 * 24 * 60 * 60 * 1000
+                        const remainMs = expiryMs - Date.now()
+                        const remainDays = Math.floor(remainMs / (24 * 60 * 60 * 1000))
+                        const remainHours = Math.floor((remainMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))
+                        const isExpired = remainMs <= 0
+                        const isUrgent = !isExpired && remainDays < 2
+                        return (
                         <TableRow key={ch.id} className="hover:bg-muted/20 transition-colors">
                           <TableCell className="px-4 py-3 font-semibold text-xs text-foreground/95">{ch.name}</TableCell>
                           <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">{ch.channelTitle}</TableCell>
                           <TableCell className="px-4 py-3 text-xs text-center">
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 font-bold text-[10px]">
-                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                              {locale === 'ar' ? 'جاهز' : 'Ready'}
-                            </span>
+                            {isExpired ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 font-bold text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                                {locale === 'ar' ? '⚠ منتهي الصلاحية' : '⚠ Expired'}
+                              </span>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                                  isUrgent
+                                    ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                                    : 'bg-green-500/10 text-green-600 dark:text-green-400'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                                    isUrgent ? 'bg-orange-500' : 'bg-green-500'
+                                  }`} />
+                                  {remainDays}d {remainHours}h
+                                </span>
+                                <span className="text-[9px] text-muted-foreground">
+                                  {locale === 'ar' ? 'متبقي من 7 أيام' : 'of 7-day limit'}
+                                </span>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="px-4 py-3 text-center">
                             {ytUnlinkConfirm === ch.id ? (
@@ -2359,7 +3033,8 @@ export default function Home() {
                             )}
                           </TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </div>

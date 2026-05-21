@@ -194,7 +194,6 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     ]
   };
 }
-}
 
 // ── Build final RTMP URL from outputType + server + key ─────
 // slotIndex is used to round-robin YouTube RTMP endpoints:
@@ -627,7 +626,7 @@ const server = createServer(async (req, res) => {
     // GET /reconcile — detailed stream info for smart recovery
     if (pathname === '/reconcile' && req.method === 'GET') {
       const uptimeMs = Date.now() - STARTUP_TIME
-      const streams = []
+      const streams: any[] = []
       for (const [slotIndex, info] of activeStreams) {
         const msSinceProgress = Date.now() - info.lastProgressAt.getTime()
         streams.push({
