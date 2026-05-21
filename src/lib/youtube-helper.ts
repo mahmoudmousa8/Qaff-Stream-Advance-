@@ -1,5 +1,6 @@
 import { db } from './db'
 import { readFileSync, existsSync } from 'fs'
+import { getCairoNowFields, getAbsoluteDateFromCairoFields } from './timezone-helper'
 
 const CLIENT_ID = process.env.YOUTUBE_CLIENT_ID || ''
 const CLIENT_SECRET = process.env.YOUTUBE_CLIENT_SECRET || ''
@@ -17,31 +18,21 @@ export interface YouTubeChannelData {
 // Generates next Cairo midnight target (00:00:00 Africa/Cairo time tomorrow) in UTC ISO format
 export function getCairoMidnightISO(): string {
   const now = new Date()
+  const cairoNow = getCairoNowFields(now)
   
-  // Cairo is UTC+3. Get current date/time in Cairo.
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Cairo',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: false
-  })
+  // Calculate tomorrow's Cairo date (add 24 hours to current time)
+  const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+  const tomorrowFields = getCairoNowFields(tomorrowDate)
   
-  const parts = formatter.formatToParts(now)
-  const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10)
-  
-  const year = getPart('year')
-  const month = getPart('month') - 1 // 0-indexed
-  const day = getPart('day')
-  
-  // Target tomorrow at 00:00:00 in Cairo time (Africa/Cairo)
-  // Tomorrow's midnight in Cairo is (day + 1) at 00:00 Cairo time.
-  // Cairo = UTC + 3 hours. So 00:00 Cairo time is 21:00 UTC on the previous day.
-  const targetMidnightCairo = new Date(Date.UTC(year, month, day + 1, 0, 0, 0))
-  const cairoMidnightInUtc = new Date(targetMidnightCairo.getTime() - 3 * 60 * 60 * 1000)
+  // Construct Cairo midnight tomorrow (00:00:00 Cairo time)
+  const cairoMidnightInUtc = getAbsoluteDateFromCairoFields(
+    tomorrowFields.year,
+    tomorrowFields.month,
+    tomorrowFields.day,
+    0, // hour
+    0, // minute
+    0  // second
+  )
   
   return cairoMidnightInUtc.toISOString()
 }
@@ -116,6 +107,7 @@ export async function setupYoutubeLiveStream(
   let streamId = ''
   let streamKey = ''
   let rtmpServer = 'rtmp://a.rtmp.youtube.com/live2' // fallback
+  let selectedStream: any = null
 
   const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true'
   const streamsResponse = await fetch(streamsListUrl, {
@@ -125,15 +117,19 @@ export async function setupYoutubeLiveStream(
   if (streamsResponse.ok) {
     const streamsData = await streamsResponse.json()
     
-    let selectedStream = null
     if (preferredStreamKey) {
+      // User explicitly chose a stream key — match it strictly by streamName
       selectedStream = streamsData.items?.find((item: any) => 
         item.cdn?.ingestionInfo?.streamName === preferredStreamKey
       )
-    }
-
-    // Fallback if preferred stream key is not found or not specified
-    if (!selectedStream) {
+      if (!selectedStream) {
+        throw new Error(
+          `مفتاح البث المحدد "${preferredStreamKey.substring(0, 6)}****" غير موجود أو غير نشط على قناة يوتيوب هذه. ` +
+          `تحقق من مفتاح البث المختار في الإعدادات المتقدمة.`
+        )
+      }
+    } else {
+      // No preferred key — auto-select: prefer key named "default", otherwise first available
       selectedStream = streamsData.items?.find((item: any) => 
         item.snippet?.title?.toLowerCase().includes('default') || 
         item.cdn?.ingestionInfo?.streamName

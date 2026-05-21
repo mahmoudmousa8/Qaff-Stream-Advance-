@@ -161,8 +161,8 @@ echo -e "\n${CYAN}[5/5] Reloading running services natively...${NC}"
 
 # Reload PM2 apps (Zero Downtime reloading)
 if pm2 show qaff-web &>/dev/null; then
-    pm2 reload ecosystem.config.cjs
-    echo -e "  ✅ PM2 web and stream-manager services reloaded."
+    pm2 reload ecosystem.config.cjs --update-env
+    echo -e "  ✅ PM2 web and stream-manager services reloaded (with updated env)."
 else
     pm2 start ecosystem.config.cjs
     echo -e "  ✅ PM2 web and stream-manager services started."

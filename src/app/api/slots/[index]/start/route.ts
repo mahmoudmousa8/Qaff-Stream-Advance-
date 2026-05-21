@@ -42,7 +42,9 @@ export async function POST(
 
     // Validate based on output type
     if (outputType === 'youtube' || outputType === 'facebook') {
-      if (!slot.streamKey || slot.streamKey.trim() === '') {
+      // If a youtubeChannelId is set, the stream key will be fetched automatically.
+      // Otherwise, the user must provide a stream key manually.
+      if (!slot.youtubeChannelId && (!slot.streamKey || slot.streamKey.trim() === '')) {
         return NextResponse.json({ error: 'streamKeyRequired' }, { status: 400 })
       }
     } else {

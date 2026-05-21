@@ -2777,13 +2777,13 @@ export default function Home() {
                     youtubeDescription: settingsData.youtubeDescription,
                     youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
                   }
-                  // Only save streamKey/rtmpServer if a specific key was explicitly chosen
-                  if (settingsData.youtubeChannelId && settingsData.streamKey) {
-                    settingsSavePayload.streamKey = settingsData.streamKey
+                  // Always save streamKey when a YouTube channel is linked
+                  // (empty string = auto-fetch mode, non-empty = specific key chosen)
+                  if (settingsData.youtubeChannelId) {
+                    settingsSavePayload.streamKey = settingsData.streamKey || ''
                     settingsSavePayload.rtmpServer = settingsData.rtmpServer || 'rtmp://a.rtmp.youtube.com/live2'
-                  } else if (!settingsData.youtubeChannelId) {
-                    // If no channel linked, don't touch streamKey/rtmpServer from this dialog
                   }
+                  // If no channel linked, don't touch streamKey/rtmpServer from this dialog
                   await updateSlot(settingsSlot, settingsSavePayload)
                   addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)
                 } catch {
@@ -2889,9 +2889,7 @@ export default function Home() {
               </p>
               <div className="flex items-center justify-between gap-3 bg-background border border-border/80 rounded-lg p-2.5 font-mono text-[11px]">
                 <span className="text-foreground/80 break-all select-all">
-                  {tunnelUrl 
-                    ? `${tunnelUrl}/api/auth/youtube/callback` 
-                    : typeof window !== 'undefined' ? `${window.location.origin}/api/auth/youtube/callback` : 'http://YOUR_VPS_IP/api/auth/youtube/callback'}
+                  {typeof window !== 'undefined' ? `${window.location.origin}/api/auth/youtube/callback` : 'http://YOUR_VPS_IP/api/auth/youtube/callback'}
                 </span>
                 <Button
                   size="sm"
@@ -2899,9 +2897,7 @@ export default function Home() {
                   variant="outline"
                   className="h-7 text-[10px] px-2 flex items-center gap-1 shrink-0 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/30"
                   onClick={() => {
-                    const cbUrl = tunnelUrl 
-                      ? `${tunnelUrl}/api/auth/youtube/callback` 
-                      : `${window.location.origin}/api/auth/youtube/callback`;
+                    const cbUrl = `${window.location.origin}/api/auth/youtube/callback`;
                     navigator.clipboard.writeText(cbUrl);
                     alert(locale === 'ar' ? 'تم نسخ رابط الاستدعاء!' : 'Callback URI copied!');
                   }}

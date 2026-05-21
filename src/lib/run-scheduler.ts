@@ -11,6 +11,7 @@
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
 import { setupYoutubeLiveStream, stopYoutubeLiveStream } from '@/lib/youtube-helper'
+import { getCairoNowFields, getCairoTargetDate, getAbsoluteDateFromCairoFields } from '@/lib/timezone-helper'
 
 // Tracks consecutive missed ticks per slot
 const missCounters = new Map<string, number>()
@@ -46,14 +47,7 @@ function parseScheduleTime(sched: string): { month: number; day: number; hour: n
 }
 
 // Normalize a date to the current-year context (handles cross-year schedules up to ±180 days)
-function normalizeToNow(d: Date, now: Date): Date {
-  if (now.getTime() - d.getTime() > 1000 * 60 * 60 * 24 * 180) {
-    d.setFullYear(now.getFullYear() + 1)
-  } else if (d.getTime() - now.getTime() > 1000 * 60 * 60 * 24 * 180) {
-    d.setFullYear(now.getFullYear() - 1)
-  }
-  return d
-}
+// (Deprecating server-local normalizeToNow in favor of getCairoTargetDate from timezone-helper)
 
 /**
  * resolveStopDate
@@ -76,10 +70,7 @@ function resolveStopDate(schedStop: string, anchorDate: Date, now: Date): Date |
 
   const parsedStop = parseScheduleTime(schedStop)
   if (!parsedStop) return null
-  return normalizeToNow(
-    new Date(now.getFullYear(), parsedStop.month - 1, parsedStop.day, parsedStop.hour, parsedStop.minute, 0),
-    now
-  )
+  return getCairoTargetDate(parsedStop, now)
 }
 
 /**
@@ -94,8 +85,15 @@ function durToActualStop(schedStop: string, startDate: Date): string {
   const [hStr, mStr] = schedStop.replace('DUR ', '').split(':')
   const durMins = parseInt(hStr || '0') * 60 + parseInt(mStr || '0')
   if (isNaN(durMins) || durMins <= 0) return schedStop
+  
   const stopAt = new Date(startDate.getTime() + durMins * 60 * 1000)
-  return `${String(stopAt.getMonth() + 1).padStart(2, '0')}-${String(stopAt.getDate()).padStart(2, '0')} ${String(stopAt.getHours()).padStart(2, '0')}:${String(stopAt.getMinutes()).padStart(2, '0')}`
+  const cairoFields = getCairoNowFields(stopAt)
+  const monthStr = String(cairoFields.month + 1).padStart(2, '0')
+  const dayStr = String(cairoFields.day).padStart(2, '0')
+  const hourStr = String(cairoFields.hour).padStart(2, '0')
+  const minuteStr = String(cairoFields.minute).padStart(2, '0')
+  
+  return `${monthStr}-${dayStr} ${hourStr}:${minuteStr}`
 }
 
 function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean): string {
@@ -107,20 +105,38 @@ function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean): 
     const { month, day, hour, minute } = parsed
 
     if (daily) {
-      const nextRun = new Date()
-      nextRun.setHours(hour, minute, 0, 0)
-      if (now >= nextRun) nextRun.setDate(nextRun.getDate() + 1)
-      return `${String(nextRun.getMonth() + 1).padStart(2, '0')}-${String(nextRun.getDate()).padStart(2, '0')} ${String(nextRun.getHours()).padStart(2, '0')}:${String(nextRun.getMinutes()).padStart(2, '0')}`
+      const cairoNow = getCairoNowFields(now)
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, hour, minute, 0)
+      
+      if (now >= nextRun) {
+        // Shift by 24 hours
+        const nextDayDate = new Date(nextRun.getTime() + 24 * 60 * 60 * 1000)
+        const nextDayFields = getCairoNowFields(nextDayDate)
+        nextRun = getAbsoluteDateFromCairoFields(nextDayFields.year, nextDayFields.month, nextDayFields.day, hour, minute, 0)
+      }
+      
+      const finalFields = getCairoNowFields(nextRun)
+      return `${String(finalFields.month + 1).padStart(2, '0')}-${String(finalFields.day).padStart(2, '0')} ${String(finalFields.hour).padStart(2, '0')}:${String(finalFields.minute).padStart(2, '0')}`
     }
     if (weekly) {
-      const refDate = new Date(now.getFullYear(), month - 1, day, hour, minute)
-      const targetWeekday = refDate.getDay()
-      let daysAhead = (targetWeekday - now.getDay() + 7) % 7
-      if (daysAhead === 0 && now >= refDate) daysAhead = 7
-      const nextRun = new Date(now)
-      nextRun.setDate(nextRun.getDate() + daysAhead)
-      nextRun.setHours(hour, minute, 0, 0)
-      return `${String(nextRun.getMonth() + 1).padStart(2, '0')}-${String(nextRun.getDate()).padStart(2, '0')} ${String(nextRun.getHours()).padStart(2, '0')}:${String(nextRun.getMinutes()).padStart(2, '0')}`
+      const cairoNow = getCairoNowFields(now)
+      const refDate = getAbsoluteDateFromCairoFields(cairoNow.year, month - 1, day, hour, minute, 0)
+      const refFields = getCairoNowFields(refDate)
+      const targetWeekday = refFields.weekday
+      
+      let daysAhead = (targetWeekday - cairoNow.weekday + 7) % 7
+      
+      const todayTarget = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, hour, minute, 0)
+      if (daysAhead === 0 && now >= todayTarget) {
+        daysAhead = 7
+      }
+      
+      const nextRunDate = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000)
+      const nextRunFields = getCairoNowFields(nextRunDate)
+      const nextRun = getAbsoluteDateFromCairoFields(nextRunFields.year, nextRunFields.month, nextRunFields.day, hour, minute, 0)
+      const finalFields = getCairoNowFields(nextRun)
+      
+      return `${String(finalFields.month + 1).padStart(2, '0')}-${String(finalFields.day).padStart(2, '0')} ${String(finalFields.hour).padStart(2, '0')}:${String(finalFields.minute).padStart(2, '0')}`
     }
     return schedStart
   } catch {
@@ -142,11 +158,7 @@ function isWithinActiveWindow(schedStart: string, schedStop: string): boolean {
   if (!parsedStart) return false
 
   const now = new Date()
-
-  const startDate = normalizeToNow(
-    new Date(now.getFullYear(), parsedStart.month - 1, parsedStart.day, parsedStart.hour, parsedStart.minute, 0),
-    now
-  )
+  const startDate = getCairoTargetDate(parsedStart, now)
 
   // For DUR format: compute stop relative to the stored schedStart date
   const stopDate = resolveStopDate(schedStop, startDate, now)
@@ -167,10 +179,7 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false): b
   }
 
   const now = new Date()
-  const target = normalizeToNow(
-    new Date(now.getFullYear(), parsed.month - 1, parsed.day, parsed.hour, parsed.minute, 0),
-    now
-  )
+  const target = getCairoTargetDate(parsed, now)
 
   // Pseudo-random deterministic jitter between -150 to +150 seconds
   const seedString = `${sched}_${slotIndex}_${isStopCheck ? 'stop' : 'start'}`
@@ -178,7 +187,9 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false): b
   for (let i = 0; i < seedString.length; i++) hash = Math.imul(31, hash) + seedString.charCodeAt(i)
   hash = Math.abs(hash)
   const jitterSecs = (hash % 301) - 150
-  target.setSeconds(target.getSeconds() + jitterSecs)
+  
+  // Fully timezone-safe timestamp jitter adjustment
+  target.setTime(target.getTime() + jitterSecs * 1000)
 
   const diffSecs = Math.floor((now.getTime() - target.getTime()) / 1000)
   // Stop: 5-minute grace window (generous for 15s tick interval)
@@ -186,7 +197,7 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false): b
   const graceSecs = 300
 
   const result = diffSecs >= 0 && diffSecs <= graceSecs
-  console.log(`[Scheduler] shouldTrigger(Slot ${slotIndex + 1}, ${isStopCheck ? 'STOP' : 'START'}): sched="${sched}", jitter=${jitterSecs}s, diffSecs=${diffSecs}, target=${target.toLocaleTimeString()}, trigger=${result}`)
+  console.log(`[Scheduler] shouldTrigger(Slot ${slotIndex + 1}, ${isStopCheck ? 'STOP' : 'START'}): sched="${sched}", jitter=${jitterSecs}s, diffSecs=${diffSecs}, target=${target.toLocaleTimeString('en-US', { timeZone: 'Africa/Cairo' })}, trigger=${result}`)
 
   return result
 }
@@ -337,10 +348,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (slot.schedStop && !slot.schedStop.startsWith('DUR')) {
         const parsedStop = parseScheduleTime(slot.schedStop)
         if (parsedStop) {
-          const stopDate = normalizeToNow(
-            new Date(now.getFullYear(), parsedStop.month - 1, parsedStop.day, parsedStop.hour, parsedStop.minute, 0),
-            now
-          )
+          const stopDate = getCairoTargetDate(parsedStop, now)
           const msSinceStop = now.getTime() - stopDate.getTime()
           if (msSinceStop >= 0 && msSinceStop < 10 * 60 * 1000) {
             skipRecovery = true
@@ -389,7 +397,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     if (slot.isRunning && slot.schedStop && slot.swapVideoEnabled && !slot.isSwapped && slot.swapVideoPath) {
       const parsedStart = slot.schedStart ? parseScheduleTime(slot.schedStart) : null
       const startDate = parsedStart
-        ? normalizeToNow(new Date(now.getFullYear(), parsedStart.month - 1, parsedStart.day, parsedStart.hour, parsedStart.minute, 0), now)
+        ? getCairoTargetDate(parsedStart, now)
         : now
       const stopDate = resolveStopDate(slot.schedStop, startDate, now)
       if (stopDate) {
@@ -479,9 +487,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
           const nParsed = parseScheduleTime(nextStartTime)
           if (nParsed) {
-            const nDate = new Date(new Date().getFullYear(), nParsed.month - 1, nParsed.day, nParsed.hour, nParsed.minute)
-            nDate.setMinutes(nDate.getMinutes() + durMins)
-            nextStopTime = `${String(nDate.getMonth() + 1).padStart(2, '0')}-${String(nDate.getDate()).padStart(2, '0')} ${String(nDate.getHours()).padStart(2, '0')}:${String(nDate.getMinutes()).padStart(2, '0')}`
+            const nDate = getCairoTargetDate(nParsed, now)
+            const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+            const stopFields = getCairoNowFields(stopDate)
+            nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
           }
         }
       }
@@ -537,7 +546,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           // It has a schedStart but no stop. It runs forever once started.
           const parsedStart = parseScheduleTime(slot.schedStart);
           if (parsedStart) {
-            const startDate = normalizeToNow(new Date(now.getFullYear(), parsedStart.month - 1, parsedStart.day, parsedStart.hour, parsedStart.minute, 0), now);
+            const startDate = getCairoTargetDate(parsedStart, now);
             if (now >= startDate) shouldRun = true;
           }
         }
@@ -568,10 +577,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     if (slot.schedStop && slot.schedStop.startsWith('DUR ') && slot.schedStart) {
       const parsedStart = parseScheduleTime(slot.schedStart)
       if (parsedStart) {
-        const schedStartDate = normalizeToNow(
-          new Date(now.getFullYear(), parsedStart.month - 1, parsedStart.day, parsedStart.hour, parsedStart.minute, 0),
-          now
-        )
+        const schedStartDate = getCairoTargetDate(parsedStart, now)
         actualSchedStop = durToActualStop(slot.schedStop, schedStartDate)
       } else {
         actualSchedStop = durToActualStop(slot.schedStop, now)
