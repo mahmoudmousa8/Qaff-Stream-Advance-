@@ -102,7 +102,8 @@ export async function setupYoutubeLiveStream(
   channelId: string,
   title: string,
   description: string,
-  thumbnailPath?: string
+  thumbnailPath?: string,
+  preferredStreamKey?: string
 ): Promise<{ streamKey: string; rtmpServer: string; broadcastId: string }> {
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
@@ -111,7 +112,7 @@ export async function setupYoutubeLiveStream(
   const scheduledStartTime = getCairoMidnightISO()
   console.log(`[YouTube Helper] Scheduling live broadcast start time (Cairo Midnight in UTC): ${scheduledStartTime}`)
 
-  // 3. Find or Create Default Stream Key
+  // 3. Find or Create Stream Key
   let streamId = ''
   let streamKey = ''
   let rtmpServer = 'rtmp://a.rtmp.youtube.com/live2' // fallback
@@ -123,16 +124,27 @@ export async function setupYoutubeLiveStream(
 
   if (streamsResponse.ok) {
     const streamsData = await streamsResponse.json()
-    const defaultStream = streamsData.items?.find((item: any) => 
-      item.snippet?.title?.toLowerCase().includes('default') || 
-      item.cdn?.ingestionInfo?.streamName
-    ) || streamsData.items?.[0]
+    
+    let selectedStream = null
+    if (preferredStreamKey) {
+      selectedStream = streamsData.items?.find((item: any) => 
+        item.cdn?.ingestionInfo?.streamName === preferredStreamKey
+      )
+    }
 
-    if (defaultStream) {
-      streamId = defaultStream.id
-      streamKey = defaultStream.cdn?.ingestionInfo?.streamName || ''
-      rtmpServer = defaultStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
-      console.log(`[YouTube Helper] Found existing YouTube Live Stream key: ${streamKey.substring(0, 4)}****`)
+    // Fallback if preferred stream key is not found or not specified
+    if (!selectedStream) {
+      selectedStream = streamsData.items?.find((item: any) => 
+        item.snippet?.title?.toLowerCase().includes('default') || 
+        item.cdn?.ingestionInfo?.streamName
+      ) || streamsData.items?.[0]
+    }
+
+    if (selectedStream) {
+      streamId = selectedStream.id
+      streamKey = selectedStream.cdn?.ingestionInfo?.streamName || ''
+      rtmpServer = selectedStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
+      console.log(`[YouTube Helper] Found matching YouTube Live Stream key: ${streamKey.substring(0, 4)}**** (ID: ${streamId})`)
     }
   } else {
     console.error('[YouTube Helper] Error fetching Live Streams:', await streamsResponse.text())

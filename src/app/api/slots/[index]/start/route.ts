@@ -125,7 +125,8 @@ export async function POST(
           slot.youtubeChannelId,
           slot.youtubeTitle || 'Live Stream',
           slot.youtubeDescription || '',
-          slot.youtubeThumbnailPath || undefined
+          slot.youtubeThumbnailPath || undefined,
+          slot.streamKey
         )
         finalStreamKey = yt.streamKey || finalStreamKey
         finalRtmpServer = yt.rtmpServer || finalRtmpServer
