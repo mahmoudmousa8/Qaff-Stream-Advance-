@@ -115,7 +115,7 @@ export async function setupYoutubeLiveStream(
   let rtmpServer = 'rtmp://a.rtmp.youtube.com/live2' // fallback
   let selectedStream: any = null
 
-  const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true'
+  const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true&maxResults=50'
   const streamsResponse = await fetch(streamsListUrl, {
     headers: { Authorization: `Bearer ${accessToken}` }
   })

@@ -1462,19 +1462,7 @@ export default function Home() {
         </main>
       ) : (
         <main className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2 overflow-y-auto xl:overflow-hidden">
-          {typeof window !== 'undefined' && window.location.hostname.includes('.trycloudflare.com') && (
-            <Alert variant="destructive" className="border-amber-500/20 bg-amber-500/5 text-amber-500 [&>svg]:text-amber-500 shrink-0">
-              <AlertCircle className="h-4 w-4 text-amber-500" />
-              <AlertTitle className="font-semibold text-sm text-amber-500">
-                {locale === 'ar' ? 'تنبيه: أنت متصل عبر نفق Cloudflare' : 'Warning: Connected via Cloudflare Tunnel'}
-              </AlertTitle>
-              <AlertDescription className="text-xs text-amber-500/90 font-medium">
-                {locale === 'ar' 
-                  ? `بث RTMP من OBS لا يمر عبر نفق HTTP الخاص بـ Cloudflare. يرجى استخدام عنوان الـ IP المباشر للسيرفر (${publicIp || '37.27.109.98'}) في إعدادات البث ببرنامج OBS.`
-                  : `RTMP streaming from OBS cannot pass through Cloudflare's HTTP tunnel. Please use the direct server IP (${publicIp || '37.27.109.98'}) in OBS stream settings.`}
-              </AlertDescription>
-            </Alert>
-          )}
+
           <Card className="flex-1 flex flex-col min-h-0 overflow-visible xl:overflow-hidden border-border/60 shadow-md">
             <CardHeader className="py-2 px-4 shrink-0">
               <div className="flex items-center justify-between">
