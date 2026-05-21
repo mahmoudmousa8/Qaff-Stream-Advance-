@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     const files = readdirSync(VIDEOS_DIR)
-    const allowedExtensions = ['.mp4', '.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac']
+    const allowedExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.ogv', '.mpeg', '.mpg', '.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac']
 
     const videos = files
       .filter(f => !f.startsWith('.') && allowedExtensions.includes(path.extname(f).toLowerCase()))

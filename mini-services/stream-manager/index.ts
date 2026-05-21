@@ -211,8 +211,8 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
       };
     }
 
-    // 2) Reject everything else to adhere strictly to server design
-    throw new Error(`Incompatible video format (${probe.videoCodec}+${probe.audioCodec}). Transcoding is disabled. Please upload a standard H.264/AAC MP4.`)
+    // 2) Any other format → fall through to transcode profile below
+    // (No error thrown — libx264 can re-encode any format ffmpeg can read)
   }
 
   // Dynamic profile switching: CPU transcoding enabled
