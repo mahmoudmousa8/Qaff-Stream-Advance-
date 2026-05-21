@@ -64,7 +64,7 @@ let isProcessingQueue = false
 
 // ── Active streams ───────────────────────────────────────────
 interface StreamInfo {
-  process: ChildProcess
+  process: ChildProcess | null
   slotIndex: number
   startTime: Date
   profile: string
@@ -77,6 +77,7 @@ interface StreamInfo {
   isStopping: boolean    // true if stopped by user
   restartCount: number   // to prevent infinite fast-restart loops
   options?: StreamOptions // save options for watchdog
+  status?: 'running' | 'connecting'
 }
 const activeStreams: Map<number, StreamInfo> = new Map()
 
@@ -262,7 +263,8 @@ function findOrphanPid(streamKey: string): number | null {
 
 // ── Start a stream immediately ───────────────────────────────
 function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string, options?: StreamOptions): { success: boolean; message: string } {
-  if (activeStreams.has(slotIndex)) {
+  const existing = activeStreams.get(slotIndex)
+  if (existing && existing.status !== 'connecting') {
     return { success: false, message: `Slot ${slotIndex + 1} is already streaming` }
   }
 
@@ -276,7 +278,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
     }
   }
 
-  if (activeStreams.size >= MAX_CONCURRENT) {
+  if (activeStreams.size >= MAX_CONCURRENT && !existing) {
     return { success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` }
   }
 
@@ -284,6 +286,8 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
   if (!isUrl && !existsSync(filePath)) {
     return { success: false, message: `File not found: ${filePath}` }
   }
+
+  const restartCount = existing ? existing.restartCount : 0
 
   // Mask the stream key in all log output
   const maskedUrl = streamKey
@@ -318,8 +322,9 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
       rtmpUrl,
       filePath,
       isStopping: false,
-      restartCount: 0,
-      options
+      restartCount,
+      options,
+      status: 'running'
     }
     activeStreams.set(slotIndex, streamInfo)
 
@@ -359,32 +364,58 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
       }
 
       // ── WATCHDOG / AUTO-RESTART LOGIC ───────────────────────
-      // If the stream ran stably for more than 60 seconds, reset the restart counter
-      let currentRestartCount = info?.restartCount || 0
-      if (info && (Date.now() - info.startTime.getTime() > 60000)) {
-        currentRestartCount = 0
-      }
+      if (info && !info.isStopping) {
+        // If the stream ran stably for more than 60 seconds, reset the restart counter
+        let currentRestartCount = info.restartCount
+        if (Date.now() - info.startTime.getTime() > 60000) {
+          currentRestartCount = 0
+        }
 
-      if (info && !info.isStopping && currentRestartCount < 30) {
-        log(`[WATCHDOG] Slot ${slotIndex + 1} crashed/stopped unexpectedly. Restarting in 500ms... (Attempt ${currentRestartCount + 1}/30)`)
-        
-        activeStreams.delete(slotIndex) // Clear current before restart
-        
-        setTimeout(() => {
-          const result = startStreamImmediate(slotIndex, info.rtmpUrl, info.streamKey, info.filePath, info.options)
-          if (result.success) {
-             const newInfo = activeStreams.get(slotIndex)
-             if (newInfo) newInfo.restartCount = currentRestartCount + 1
-             log(`[WATCHDOG] Slot ${slotIndex + 1} successfully restarted.`)
-          } else {
-             log(`[WATCHDOG] Slot ${slotIndex + 1} failed to restart: ${result.message}`)
+        const isUrl = info.filePath.startsWith('rtmp://') || info.filePath.startsWith('rtmps://') || info.filePath.startsWith('http://') || info.filePath.startsWith('https://') || info.filePath.startsWith('rtsp://')
+        const maxAttempts = isUrl ? 1000000 : 30
+        const restartDelay = isUrl ? 2000 : 500
+
+        if (currentRestartCount < maxAttempts) {
+          const nextAttempt = currentRestartCount + 1
+          
+          if (!isUrl || nextAttempt % 10 === 0 || nextAttempt === 1) {
+            log(`[WATCHDOG] Slot ${slotIndex + 1} crashed/stopped unexpectedly. Restarting in ${restartDelay}ms... (Attempt ${nextAttempt}/${maxAttempts === 1000000 ? 'inf' : maxAttempts})`)
           }
-        }, 500)
+
+          // Update slot to connecting state so it remains active in the manager status list
+          info.status = 'connecting'
+          info.process = null
+          info.restartCount = nextAttempt
+          
+          const attemptRestart = () => {
+            const currentInfo = activeStreams.get(slotIndex)
+            if (!currentInfo || currentInfo.isStopping) return
+
+            const result = startStreamImmediate(slotIndex, currentInfo.rtmpUrl, currentInfo.streamKey, currentInfo.filePath, currentInfo.options)
+            if (result.success) {
+              const newInfo = activeStreams.get(slotIndex)
+              if (newInfo) {
+                newInfo.restartCount = nextAttempt
+              }
+              if (!isUrl || nextAttempt % 10 === 0 || nextAttempt === 1) {
+                log(`[WATCHDOG] Slot ${slotIndex + 1} successfully restarted.`)
+              }
+            } else {
+              if (!isUrl || nextAttempt % 10 === 0 || nextAttempt === 1) {
+                log(`[WATCHDOG] Slot ${slotIndex + 1} failed to restart: ${result.message}. Retrying again in ${restartDelay}ms...`)
+              }
+              // Schedule retry since it's in connecting state and failed to start
+              setTimeout(attemptRestart, restartDelay)
+            }
+          }
+          
+          setTimeout(attemptRestart, restartDelay)
+        } else {
+          activeStreams.delete(slotIndex)
+          log(`[WATCHDOG] Slot ${slotIndex + 1} reached max consecutive restart attempts (${maxAttempts}). Giving up.`)
+        }
       } else {
         activeStreams.delete(slotIndex)
-        if (info && !info.isStopping && currentRestartCount >= 30) {
-          log(`[WATCHDOG] Slot ${slotIndex + 1} reached max consecutive restart attempts (30). Giving up.`)
-        }
       }
     })
 
@@ -421,8 +452,10 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
 
   try {
     stream.isStopping = true // Tell watchdog to NOT restart
-    stream.process.kill('SIGTERM')
-    setTimeout(() => { try { stream.process.kill('SIGKILL') } catch { } }, 3000)
+    if (stream.process) {
+      stream.process.kill('SIGTERM')
+      setTimeout(() => { try { stream?.process?.kill('SIGKILL') } catch { } }, 3000)
+    }
     activeStreams.delete(slotIndex)
     log(`Stopped stream for slot ${slotIndex + 1}`)
     return { success: true, message: `Slot ${slotIndex + 1}: Stopped` }
@@ -441,6 +474,7 @@ function getStreamStatus(slotIndex: number): object {
   const msSinceProgress = Date.now() - stream.lastProgressAt.getTime()
   return {
     isRunning: true,
+    status: stream.status || 'running',
     startTime: stream.startTime.toISOString(),
     duration,
     profile: stream.profile,
@@ -637,7 +671,8 @@ const server = createServer(async (req, res) => {
           msSinceProgress,
           isProgressStale: msSinceProgress > 20_000,
           profile: info.profile,
-          bitrateMbps: info.bitrateMbps
+          bitrateMbps: info.bitrateMbps,
+          status: info.status || 'running'
         })
       }
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -796,7 +831,9 @@ const shutdown = () => {
   log('Shutting down...')
   for (const [slotIndex, stream] of activeStreams) {
     log(`Stopping stream for slot ${slotIndex + 1}`)
-    stream.process.kill('SIGTERM')
+    if (stream.process) {
+      stream.process.kill('SIGTERM')
+    }
   }
   server.close(() => { log('Server closed'); process.exit(0) })
 }

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
+let cachedPublicIp: string | null = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in ms
+
 export async function GET() {
   const possiblePaths = [
     "/root/cloudflare.log",
@@ -38,9 +42,28 @@ export async function GET() {
     }
   }
 
+  // Fetch and cache public IP
+  const now = Date.now();
+  if (!cachedPublicIp || now - cacheTimestamp > CACHE_DURATION) {
+    try {
+      const res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ip) {
+          cachedPublicIp = data.ip;
+          cacheTimestamp = now;
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch public IP:", err);
+    }
+  }
+
   return NextResponse.json({
     success: !!tunnelUrl,
     tunnelUrl: tunnelUrl || null,
-    logPath: foundPath || null
+    logPath: foundPath || null,
+    publicIp: cachedPublicIp || null
   });
 }
+

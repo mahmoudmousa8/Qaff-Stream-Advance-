@@ -29,6 +29,7 @@ import { VideoManager } from '@/components/video-manager'
 import { DateTimePicker } from '@/components/date-time-picker'
 import { t, getLocale, setLocale, isRTL, type Locale } from '@/lib/i18n'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 
 // ── RTMP base URLs ────────────────────────────────────────────────────────────
 const RTMP_BASES: Record<string, string> = {
@@ -377,6 +378,7 @@ export default function Home() {
 
   // Cloudflare Tunnel state
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null)
+  const [publicIp, setPublicIp] = useState<string | null>(null)
   const [loadingTunnel, setLoadingTunnel] = useState(false)
 
   const fetchTunnelUrl = useCallback(async () => {
@@ -389,13 +391,29 @@ export default function Home() {
       } else {
         setTunnelUrl(null)
       }
+      if (data.publicIp) {
+        setPublicIp(data.publicIp)
+      } else {
+        setPublicIp(null)
+      }
     } catch (err) {
       console.error('Failed to fetch tunnel URL', err)
       setTunnelUrl(null)
+      setPublicIp(null)
     } finally {
       setLoadingTunnel(false)
     }
   }, [])
+
+  const getIngestUrl = useCallback(() => {
+    if (typeof window === 'undefined') return 'rtmp://127.0.0.1/live'
+    const hostname = window.location.hostname
+    if (hostname.includes('.trycloudflare.com')) {
+      const ipToUse = publicIp || '37.27.109.98'
+      return `rtmp://${ipToUse}/live`
+    }
+    return `rtmp://${hostname}/live`
+  }, [publicIp])
 
   // Initialize locale and theme
   useEffect(() => {
@@ -1424,6 +1442,19 @@ export default function Home() {
         </main>
       ) : (
         <main className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2 overflow-y-auto xl:overflow-hidden">
+          {typeof window !== 'undefined' && window.location.hostname.includes('.trycloudflare.com') && (
+            <Alert variant="destructive" className="border-amber-500/20 bg-amber-500/5 text-amber-500 [&>svg]:text-amber-500 shrink-0">
+              <AlertCircle className="h-4 w-4 text-amber-500" />
+              <AlertTitle className="font-semibold text-sm text-amber-500">
+                {locale === 'ar' ? 'تنبيه: أنت متصل عبر نفق Cloudflare' : 'Warning: Connected via Cloudflare Tunnel'}
+              </AlertTitle>
+              <AlertDescription className="text-xs text-amber-500/90 font-medium">
+                {locale === 'ar' 
+                  ? `بث RTMP من OBS لا يمر عبر نفق HTTP الخاص بـ Cloudflare. يرجى استخدام عنوان الـ IP المباشر للسيرفر (${publicIp || '37.27.109.98'}) في إعدادات البث ببرنامج OBS.`
+                  : `RTMP streaming from OBS cannot pass through Cloudflare's HTTP tunnel. Please use the direct server IP (${publicIp || '37.27.109.98'}) in OBS stream settings.`}
+              </AlertDescription>
+            </Alert>
+          )}
           <Card className="flex-1 flex flex-col min-h-0 overflow-visible xl:overflow-hidden border-border/60 shadow-md">
             <CardHeader className="py-2 px-4 shrink-0">
               <div className="flex items-center justify-between">
@@ -1529,13 +1560,13 @@ export default function Home() {
                                 <div className="flex gap-1 items-center flex-nowrap flex-1 min-w-0">
                                   <Input
                                     readOnly
-                                    value={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                    value={`${getIngestUrl()}/${user?.securityKey || 'key'}`}
                                     className="h-6 text-[10px] flex-1 font-mono bg-blue-500/5 text-blue-500 border-blue-500/20 outline-none cursor-default py-0 px-2"
                                     dir="ltr"
-                                    title={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                    title={`${getIngestUrl()}/${user?.securityKey || 'key'}`}
                                   />
                                   <CopyButton
-                                    text={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                    text={`${getIngestUrl()}/${user?.securityKey || 'key'}`}
                                     id={`copy-ingest-${slot.slotIndex}`}
                                     title={locale === 'ar' ? 'نسخ رابط البث المباشر' : 'Copy Live Stream URL'}
                                     className="h-6 w-6 p-0 shrink-0 hover:bg-blue-500/20"
@@ -1961,7 +1992,7 @@ export default function Home() {
                               {slot.inputType === 'live' ? (
                                 <Input
                                   readOnly
-                                  value={`rtmp://${typeof window !== 'undefined' ? window.location.hostname : '127.0.0.1'}/live/${user?.securityKey || 'key'}`}
+                                  value={`${getIngestUrl()}/${user?.securityKey || 'key'}`}
                                   className="h-8 text-[10px] flex-1 font-mono bg-blue-500/5 text-blue-500 border-blue-500/20 cursor-default"
                                   dir="ltr"
                                 />

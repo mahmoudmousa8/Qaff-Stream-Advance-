@@ -614,13 +614,22 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       let youtubeBroadcastId = slot.youtubeBroadcastId || ''
       if (slot.youtubeChannelId && slot.outputType === 'youtube') {
         try {
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Setting up YouTube Live broadcast...`)
+          let finalScheduledStartTime: string | undefined = undefined
+          if (slot.schedStart) {
+            const parsedStart = parseScheduleTime(slot.schedStart)
+            if (parsedStart) {
+              const startDate = getCairoTargetDate(parsedStart, now)
+              finalScheduledStartTime = startDate.toISOString()
+            }
+          }
+
           const yt = await setupYoutubeLiveStream(
             slot.youtubeChannelId,
             slot.youtubeTitle || 'Live Stream',
             slot.youtubeDescription || '',
             slot.youtubeThumbnailPath || undefined,
-            slot.streamKey
+            slot.streamKey,
+            finalScheduledStartTime
           )
           finalStreamKey = yt.streamKey || finalStreamKey
           finalRtmpServer = yt.rtmpServer || finalRtmpServer

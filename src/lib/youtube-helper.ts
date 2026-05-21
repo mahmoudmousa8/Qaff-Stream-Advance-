@@ -94,14 +94,15 @@ export async function setupYoutubeLiveStream(
   title: string,
   description: string,
   thumbnailPath?: string,
-  preferredStreamKey?: string
+  preferredStreamKey?: string,
+  scheduledStartTimeStr?: string
 ): Promise<{ streamKey: string; rtmpServer: string; broadcastId: string }> {
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
 
-  // 2. Cairo Midnight Start time
-  const scheduledStartTime = getCairoMidnightISO()
-  console.log(`[YouTube Helper] Scheduling live broadcast start time (Cairo Midnight in UTC): ${scheduledStartTime}`)
+  // 2. Scheduled Start time (default to now to ensure immediate activation when streaming starts)
+  const scheduledStartTime = scheduledStartTimeStr || new Date().toISOString()
+  console.log(`[YouTube Helper] Scheduling live broadcast start time: ${scheduledStartTime}`)
 
   // 3. Find or Create Stream Key
   let streamId = ''
