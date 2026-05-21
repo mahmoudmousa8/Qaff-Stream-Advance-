@@ -36,6 +36,9 @@ model StreamSlot {
   overlayTextRight String   @default("")
   overlayTextLeft  String   @default("")
   overlayTextEnabled Boolean @default(false)
+  swapVideoPath     String   @default("")
+  swapVideoEnabled  Boolean  @default(false)
+  isSwapped         Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

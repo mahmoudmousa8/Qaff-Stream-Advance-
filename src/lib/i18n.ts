@@ -4,9 +4,9 @@ export type Locale = 'en' | 'ar'
 
 const translations = {
     en: {
-        // Videos Manager
-        videos: 'Videos',
-        videosManager: 'Videos Manager',
+        // Files Manager
+        videos: 'Files',
+        videosManager: 'File Manager',
         selectVideoForSlot: 'Select Video for Slot',
         browseAndSelect: 'Browse and select a video file for streaming',
         name: 'Name',
@@ -28,7 +28,7 @@ const translations = {
         moveToFolder: 'Move to Folder',
         selectFolder: 'Select target folder',
         rootFolder: 'Root (Main)',
-        noVideosFound: 'No videos found',
+        noVideosFound: 'No files found',
         uploadVideo: 'Upload File',
         uploadFolder: 'Upload Folder',
         uploading: 'Uploading...',
@@ -229,19 +229,23 @@ const translations = {
         audioVolumeLabel: 'Output Audio Volume',
         bgMusicFile: 'Background Audio Loop File',
         noBgMusic: 'No Background Audio Selected',
-        selectAudioFile: 'Select Audio File',
-        bannerTextLabel: 'Bottom Text Banner Message',
-        bannerTextPlaceholder: 'Enter custom overlay text (Arabic/English)',
-        enableBannerText: 'Enable Bottom Text Banner Overlay',
-        saveSettings: 'Save Settings',
-        settingsSaved: 'Settings saved successfully',
+        // Pre-Stop Swap Video
+        preStopSwap: 'Pre-Stop Swap Video',
+        preStopSwapDesc: 'Select a video to automatically switch to 20 minutes before the scheduled stop time.',
+        enablePreStopSwap: 'Enable Pre-Stop Swap',
+        enablePreStopSwapDesc: 'Automatically switch to a pre-recorded video 20 minutes before the broadcast ends, replacing the live source and overlays.',
+        swapVideoFile: 'Swap Video File',
+        noSwapVideoSelected: 'No Swap Video Selected',
+        selectSwapVideo: 'Select Swap Video File',
+        swapVideoActive: 'Pre-stop swap is now active',
+        swapVideoNoStop: 'No scheduled stop time set — swap has no trigger.',
     },
     ar: {
-        // Videos Manager
-        videos: 'الفيديوهات',
-        videosManager: 'إدارة الفيديوهات',
-        selectVideoForSlot: 'اختيار فيديو للقناة',
-        browseAndSelect: 'تصفح واختر ملف فيديو للبث',
+        // Files Manager
+        videos: 'الملفات',
+        videosManager: 'إدارة الملفات',
+        selectVideoForSlot: 'اختيار ملف للقناة',
+        browseAndSelect: 'تصفح واختر ملفاً للبث',
         name: 'الاسم',
         size: 'الحجم',
         date: 'التاريخ',
@@ -261,7 +265,7 @@ const translations = {
         moveToFolder: 'نقل إلى مجلد',
         selectFolder: 'اختر المجلد المستهدف',
         rootFolder: 'الجذر (الرئيسي)',
-        noVideosFound: 'لا توجد فيديوهات',
+        noVideosFound: 'لا توجد ملفات',
         uploadVideo: 'رفع ملف',
         uploadFolder: 'رفع مجلد',
         uploading: 'جاري الرفع...',
@@ -468,6 +472,16 @@ const translations = {
         enableBannerText: 'تفعيل إظهار الشريط الإعلاني السفلي',
         saveSettings: 'حفظ الإعدادات',
         settingsSaved: 'تم حفظ الإعدادات بنجاح',
+        // Pre-Stop Swap Video
+        preStopSwap: 'فيديو التبديل قبل الإيقاف',
+        preStopSwapDesc: 'اختر فيديو للتبديل إليه تلقائياً قبل 20 دقيقة من موعد الإيقاف المجدول.',
+        enablePreStopSwap: 'تفعيل التبديل قبل الإيقاف',
+        enablePreStopSwapDesc: 'يتم التبديل تلقائياً إلى فيديو مسجل قبل 20 دقيقة من انتهاء البث، مع إلغاء المصدر المباشر والإعدادات الحالية.',
+        swapVideoFile: 'ملف فيديو التبديل',
+        noSwapVideoSelected: 'لم يتم اختيار فيديو تبديل',
+        selectSwapVideo: 'اختر ملف فيديو التبديل',
+        swapVideoActive: 'تم تفعيل التبديل قبل الإيقاف',
+        swapVideoNoStop: 'لا يوجد وقت إيقاف مجدول — لن يتم تفعيل التبديل.',
     }
 } as const
 

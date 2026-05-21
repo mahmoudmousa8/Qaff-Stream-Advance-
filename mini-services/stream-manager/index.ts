@@ -342,18 +342,20 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
   
   if (muteAudio) {
     if (finalAudioPath) {
-      filterComplexParts.push(`[${audioInputIndex}:a]volume=1.0[out_audio]`)
+      filterComplexParts.push(`[${audioInputIndex}:a]volume=${audioVolume}[out_audio]`)
       audioMap = 'out_audio'
     } else {
       audioMap = `${silentInputIndex}:a`
     }
   } else {
     if (finalAudioPath && probe.hasAudio) {
-      filterComplexParts.push(`[0:a]volume=${audioVolume}[original_scaled]`)
-      filterComplexParts.push(`[original_scaled][${audioInputIndex}:a]amix=inputs=2:duration=first:dropout_transition=2[out_audio]`)
+      // Scale both or just mix and scale the combined output
+      filterComplexParts.push(`[0:a]volume=1.0[orig_a]`)
+      filterComplexParts.push(`[orig_a][${audioInputIndex}:a]amix=inputs=2:duration=first:dropout_transition=2[mixed_a]`)
+      filterComplexParts.push(`[mixed_a]volume=${audioVolume}[out_audio]`)
       audioMap = 'out_audio'
     } else if (finalAudioPath && !probe.hasAudio) {
-      filterComplexParts.push(`[${audioInputIndex}:a]volume=1.0[out_audio]`)
+      filterComplexParts.push(`[${audioInputIndex}:a]volume=${audioVolume}[out_audio]`)
       audioMap = 'out_audio'
     } else if (!finalAudioPath && probe.hasAudio) {
       filterComplexParts.push(`[0:a]volume=${audioVolume}[out_audio]`)

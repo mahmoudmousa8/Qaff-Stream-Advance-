@@ -108,7 +108,8 @@ export async function POST(
         isScheduled: false,
         manuallyStopped: false,
         schedStart: updatedSchedStart,
-        schedStop: updatedSchedStop
+        schedStop: updatedSchedStop,
+        isSwapped: false
       }
     })
 

@@ -391,6 +391,71 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
+    // ── Pre-Stop Swap Video ────────────────────────────────
+    if (slot.isRunning && slot.schedStop && slot.swapVideoEnabled && !slot.isSwapped && slot.swapVideoPath) {
+      const parsedStart = slot.schedStart ? parseScheduleTime(slot.schedStart) : null
+      const startDate = parsedStart
+        ? normalizeToNow(new Date(now.getFullYear(), parsedStart.month - 1, parsedStart.day, parsedStart.hour, parsedStart.minute, 0), now)
+        : now
+      const stopDate = resolveStopDate(slot.schedStop, startDate, now)
+      if (stopDate) {
+        const msRemaining = stopDate.getTime() - now.getTime()
+        const minsRemaining = msRemaining / (1000 * 60)
+        // Trigger swap if 20 minutes or less remain (and stop time is in the future)
+        if (minsRemaining <= 20 && minsRemaining > 0) {
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (20 minutes or less remaining). Swapping to ${slot.swapVideoPath}`)
+
+          try {
+            // First mark as swapped in database to avoid multi-execution on concurrent ticks/workers
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: { isSwapped: true }
+            })
+
+            // Stop current broadcast
+            await fetch(`${STREAM_MANAGER_URL}/stop`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotIndex: slot.slotIndex })
+            })
+
+            // Delay for 1.5 seconds to allow clean FFmpeg processes to stop
+            await new Promise(r => setTimeout(r, 1500))
+
+            // Start new broadcast using the swap video path, with NO manual text/audio filters
+            const res = await fetch(`${STREAM_MANAGER_URL}/start`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                slotIndex: slot.slotIndex,
+                outputType: slot.outputType,
+                rtmpServer: slot.rtmpServer,
+                streamKey: slot.streamKey,
+                filePath: slot.swapVideoPath,
+                muteAudio: false,
+                audioVolume: 1.0,
+                audioFilePath: '',
+                overlayTextEnabled: false,
+                overlayText: '',
+                overlayTextRight: '',
+                overlayTextLeft: ''
+              })
+            })
+
+            const data = await res.json()
+            if (res.ok && data.success) {
+              logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
+            } else {
+              logs.push(`Slot ${slot.slotIndex + 1}: Swap start failed: ${data.error || data.message || 'Unknown'}`)
+            }
+          } catch (e: any) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Swap process failed: ${e.message || 'Network error'}`)
+          }
+        }
+      }
+    }
+
     // ── Auto-Stop ──────────────────────────────────────────
     if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true)) {
       try {
@@ -433,7 +498,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           status: newStatus,
           schedStart: nextStartTime,
           schedStop: nextStopTime,
-          nextRunTime: nextStartTime
+          nextRunTime: nextStartTime,
+          isSwapped: false
         }
       })
       if (claimed.count === 0) continue

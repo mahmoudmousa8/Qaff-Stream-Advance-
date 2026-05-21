@@ -39,11 +39,10 @@ export async function POST(
       data: {
         isRunning: false,
         manuallyStopped: true,
-        // Since the user is manually clicking Stop, we completely abort the schedule.
-        // They can edit and click Start again to re-arm the schedule if needed.
         isScheduled: false,
         status: 'Stopped',
         nextRunTime: '',
+        isSwapped: false,
       }
     })
 

@@ -60,6 +60,8 @@ interface StreamSlot {
   overlayTextRight?: string
   overlayTextLeft?: string
   overlayTextEnabled?: boolean
+  swapVideoPath?: string
+  swapVideoEnabled?: boolean
 }
 
 interface LogEntry {
@@ -285,9 +287,12 @@ export default function Home() {
     overlayTextRight: string
     overlayTextLeft: string
     overlayTextEnabled: boolean
+    swapVideoPath: string
+    swapVideoEnabled: boolean
   } | null>(null)
-  const [activeTab, setActiveTab] = useState<'audio' | 'overlay'>('audio')
+  const [activeTab, setActiveTab] = useState<'audio' | 'overlay' | 'swap'>('audio')
   const [audioSelectorSlot, setAudioSelectorSlot] = useState<number | null>(null)
+  const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
 
   // Initialize locale and theme
   useEffect(() => {
@@ -816,7 +821,7 @@ export default function Home() {
 
             <div className="flex items-center gap-1.5 flex-wrap">
               <Button size="sm" variant="outline" onClick={() => setVideosManagerOpen(true)}>
-                <Film className="w-4 h-4 mr-1" />
+                <FolderOpen className="w-4 h-4 mr-1" />
                 {t('videos')}
               </Button>
 
@@ -1440,6 +1445,8 @@ export default function Home() {
                                     overlayTextRight: slot.overlayTextRight ?? '',
                                     overlayTextLeft: slot.overlayTextLeft ?? '',
                                     overlayTextEnabled: slot.overlayTextEnabled ?? false,
+                                    swapVideoPath: slot.swapVideoPath ?? '',
+                                    swapVideoEnabled: slot.swapVideoEnabled ?? false,
                                   })
                                 }}
                                 title={t('advancedSettings')}>
@@ -1632,7 +1639,7 @@ export default function Home() {
         <DialogContent className="sm:max-w-6xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Film className="w-5 h-5" />{t('videosManager')}
+              <FolderOpen className="w-5 h-5" />{t('videosManager')}
             </DialogTitle>
             <DialogDescription>{t('browseAndSelect')}</DialogDescription>
           </DialogHeader>
@@ -1726,11 +1733,23 @@ export default function Home() {
                 <span>📺</span>
                 {t('videoOverlay')}
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('swap')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                  activeTab === 'swap'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                }`}
+              >
+                <span>🔁</span>
+                {t('preStopSwap')}
+              </button>
             </div>
 
             {settingsData && (
               <div className="space-y-6 min-h-[300px]">
-                {activeTab === 'audio' ? (
+                {activeTab === 'audio' && (
                   /* Audio Tab */
                   <div className="space-y-6">
                     {/* Toggle: Mute Source Audio */}
@@ -1828,7 +1847,9 @@ export default function Home() {
                       )}
                     </div>
                   </div>
-                ) : (
+                )}
+
+                {activeTab === 'overlay' && (
                   /* Video Overlay Tab */
                   <div className="space-y-5">
                     {/* Toggle: Enable Banner */}
@@ -1961,6 +1982,101 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+
+                {activeTab === 'swap' && (
+                  /* Pre-Stop Swap Video Tab */
+                  <div className="space-y-6">
+                    {/* Toggle: Enable Pre-Stop Swap */}
+                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
+                      <div className="space-y-0.5">
+                        <label htmlFor="swapVideoEnabled-toggle" className="text-sm font-bold text-foreground cursor-pointer">
+                          {t('enablePreStopSwap')}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {t('enablePreStopSwapDesc')}
+                        </p>
+                      </div>
+                      <Checkbox
+                        id="swapVideoEnabled-toggle"
+                        checked={settingsData.swapVideoEnabled}
+                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, swapVideoEnabled: !!checked } : p)}
+                        className="w-5 h-5 accent-primary"
+                      />
+                    </div>
+
+                    {/* Swap Video File Selection */}
+                    {settingsData.swapVideoEnabled && (
+                      <div className="space-y-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                        <label className="text-sm font-bold text-foreground block">
+                          {t('swapVideoFile')}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {t('preStopSwapDesc')}
+                        </p>
+
+                        {settingsData.swapVideoPath ? (
+                          <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-lg text-xs font-mono">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="shrink-0 text-base">📹</span>
+                              <span className="truncate text-foreground/95" title={settingsData.swapVideoPath}>
+                                {settingsData.swapVideoPath.split(/[/\\]/).pop()}
+                              </span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors ml-1"
+                              onClick={() => setSettingsData(p => p ? { ...p, swapVideoPath: '' } : p)}
+                              title={locale === 'ar' ? 'إزالة ملف الفيديو' : 'Remove Swap Video'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full flex items-center justify-center gap-2 text-xs border-dashed border-2 hover:bg-muted/50 border-border/80 h-10 transition-all rounded-lg"
+                            onClick={() => setSwapSelectorOpen(true)}
+                          >
+                            <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                            {t('selectSwapVideo')}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Helpful Warning if no schedStop is set */}
+                    {settingsData.swapVideoEnabled && !slots.find(s => s.slotIndex === settingsSlot)?.schedStop && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-600 dark:text-amber-400 flex gap-2">
+                        <span className="text-base select-none">⚠️</span>
+                        <div>
+                          <p className="font-bold">{t('swapVideoNoStop')}</p>
+                          <p className="opacity-90 mt-0.5">
+                            {locale === 'ar'
+                              ? 'قم بتعيين موعد إيقاف البث في لوحة التحكم لتفعيل عمل التبديل التلقائي.'
+                              : 'Set a scheduled stop time in the main channel card to let this swap trigger.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Informative Note if configured correctly */}
+                    {settingsData.swapVideoEnabled && slots.find(s => s.slotIndex === settingsSlot)?.schedStop && (
+                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-400 flex gap-2">
+                        <span className="text-base select-none">✅</span>
+                        <div>
+                          <p className="font-bold">{t('swapVideoActive')}</p>
+                          <p className="opacity-90 mt-0.5">
+                            {locale === 'ar'
+                              ? `البث سينتقل تلقائياً للفيديو المختار قبل 20 دقيقة من موعد الإيقاف المحدد: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`
+                              : `Broadcast will switch automatically to this video 20 minutes before stop time: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1989,6 +2105,8 @@ export default function Home() {
                     overlayTextRight: settingsData.overlayTextRight,
                     overlayTextLeft: settingsData.overlayTextLeft,
                     overlayTextEnabled: settingsData.overlayTextEnabled,
+                    swapVideoPath: settingsData.swapVideoPath,
+                    swapVideoEnabled: settingsData.swapVideoEnabled,
                   })
                   addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)
                 } catch {
@@ -2025,6 +2143,33 @@ export default function Home() {
                   setAudioSelectorSlot(null)
                 }}
                 onClose={() => setAudioSelectorSlot(null)}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Swap Video Selector Helper Dialog ── */}
+      <Dialog open={swapSelectorOpen} onOpenChange={(open) => !open && setSwapSelectorOpen(false)}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col bg-card border shadow-2xl rounded-xl">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              {t('selectSwapVideo')} #{settingsSlot !== null ? settingsSlot + 1 : ''}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar' ? 'تصفح واختر ملف فيديو مسجل مسبقاً (MP4, MKV, AVI) للتبديل قبل انتهاء البث.' : 'Browse and select a pre-recorded video file (MP4, MKV, AVI) for the pre-stop swap.'}
+            </DialogDescription>
+          </DialogHeader>
+          {swapSelectorOpen && (
+            <div className="flex-1 overflow-hidden min-h-0 px-4">
+              <VideoManager
+                mode="select"
+                onVideoSelect={(path) => {
+                  setSettingsData(p => p ? { ...p, swapVideoPath: path } : p)
+                  setSwapSelectorOpen(false)
+                }}
+                onClose={() => setSwapSelectorOpen(false)}
               />
             </div>
           )}

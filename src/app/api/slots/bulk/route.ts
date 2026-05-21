@@ -220,7 +220,10 @@ export async function POST(request: NextRequest) {
             isRunning: false,
             manuallyStopped: true,
             nextRunTime: '',
-            status: 'Stopped'
+            status: 'Stopped',
+            swapVideoPath: '',
+            swapVideoEnabled: false,
+            isSwapped: false
           }
         })
 

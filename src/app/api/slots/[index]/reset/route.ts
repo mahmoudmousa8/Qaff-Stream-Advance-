@@ -39,7 +39,10 @@ export async function POST(
         isRunning: false,
         manuallyStopped: true,
         nextRunTime: '',
-        status: 'Stopped'
+        status: 'Stopped',
+        swapVideoPath: '',
+        swapVideoEnabled: false,
+        isSwapped: false,
       }
     })
 
