@@ -12,6 +12,9 @@ const path = require('path')
 // Use __dirname so the config works from any directory
 const PROJECT_DIR = __dirname
 
+// Load .env file explicitly so PM2 injects it
+require('dotenv').config({ path: path.join(PROJECT_DIR, '.env') })
+
 module.exports = {
   apps: [
     // ── Web App (Next.js on port 3000) ─────────────────────

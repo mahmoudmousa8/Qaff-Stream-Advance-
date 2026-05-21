@@ -5,7 +5,10 @@ const CLIENT_ID = process.env.YOUTUBE_CLIENT_ID || ''
 const CLIENT_SECRET = process.env.YOUTUBE_CLIENT_SECRET || ''
 
 export async function GET(request: NextRequest) {
-  const origin = request.nextUrl.origin
+  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')
+  const forwardedProto = request.headers.get('x-forwarded-proto') || 'http'
+  const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : request.nextUrl.origin
+  
   const redirectUri = `${origin}/api/auth/youtube/callback`
 
   try {

@@ -8,7 +8,10 @@ export async function GET(request: NextRequest) {
     const name = searchParams.get('name') || 'YouTube Channel'
     
     // Extract the origin dynamically to support both localhost and production VPS IP/domain
-    const origin = request.nextUrl.origin
+    const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')
+    const forwardedProto = request.headers.get('x-forwarded-proto') || 'http'
+    const origin = forwardedHost ? `${forwardedProto}://${forwardedHost}` : request.nextUrl.origin
+    
     const redirectUri = `${origin}/api/auth/youtube/callback`
 
     const scopes = [
