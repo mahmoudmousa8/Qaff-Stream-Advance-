@@ -10,6 +10,7 @@
 
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
+import { setupYoutubeLiveStream } from '@/lib/youtube-helper'
 
 // Tracks consecutive missed ticks per slot
 const missCounters = new Map<string, number>()
@@ -363,14 +364,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             outputType: slot.outputType,
             rtmpServer: slot.rtmpServer,
             streamKey: slot.streamKey,
-            filePath: finalInputPath,
-            muteAudio: slot.muteAudio,
-            audioVolume: slot.audioVolume,
-            audioFilePath: slot.audioFilePath,
-            overlayText: slot.overlayText,
-            overlayTextRight: slot.overlayTextRight,
-            overlayTextLeft: slot.overlayTextLeft,
-            overlayTextEnabled: slot.overlayTextEnabled
+            filePath: finalInputPath
           }),
           signal: ctrl.signal
         })
@@ -401,10 +395,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (stopDate) {
         const msRemaining = stopDate.getTime() - now.getTime()
         const minsRemaining = msRemaining / (1000 * 60)
-        // Trigger swap if 20 minutes or less remain (and stop time is in the future)
-        if (minsRemaining <= 20 && minsRemaining > 0) {
+        // Trigger swap if 10 minutes or less remain (and stop time is in the future)
+        if (minsRemaining <= 10 && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (20 minutes or less remaining). Swapping to ${slot.swapVideoPath}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (10 minutes or less remaining). Swapping to ${slot.swapVideoPath}`)
 
           try {
             // First mark as swapped in database to avoid multi-execution on concurrent ticks/workers
@@ -423,7 +417,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             // Delay for 1.5 seconds to allow clean FFmpeg processes to stop
             await new Promise(r => setTimeout(r, 1500))
 
-            // Start new broadcast using the swap video path, with NO manual text/audio filters
+            // Start new broadcast using the swap video path — zero-transcode, direct copy
             const res = await fetch(`${STREAM_MANAGER_URL}/start`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -432,14 +426,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
                 outputType: slot.outputType,
                 rtmpServer: slot.rtmpServer,
                 streamKey: slot.streamKey,
-                filePath: slot.swapVideoPath,
-                muteAudio: false,
-                audioVolume: 1.0,
-                audioFilePath: '',
-                overlayTextEnabled: false,
-                overlayText: '',
-                overlayTextRight: '',
-                overlayTextLeft: ''
+                filePath: slot.swapVideoPath
               })
             })
 
@@ -604,6 +591,26 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     }
 
     try {
+      // If a YouTube channel is bound to this slot, run the YouTube Live broadcast setup
+      let finalStreamKey = slot.streamKey
+      let finalRtmpServer = slot.rtmpServer
+      if (slot.youtubeChannelId && slot.outputType === 'youtube') {
+        try {
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Setting up YouTube Live broadcast...`)
+          const yt = await setupYoutubeLiveStream(
+            slot.youtubeChannelId,
+            slot.youtubeTitle || 'Live Stream',
+            slot.youtubeDescription || '',
+            slot.youtubeThumbnailPath || undefined
+          )
+          finalStreamKey = yt.streamKey || finalStreamKey
+          finalRtmpServer = yt.rtmpServer || finalRtmpServer
+          logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
+        } catch (ytErr: any) {
+          logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed (using existing key): ${ytErr.message}`)
+        }
+      }
+
       const ctrl = new AbortController()
       const t = setTimeout(() => ctrl.abort(), 5000)
       await fetch(`${STREAM_MANAGER_URL}/start`, {
@@ -612,16 +619,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         body: JSON.stringify({
           slotIndex: slot.slotIndex,
           outputType: slot.outputType,
-          rtmpServer: slot.rtmpServer,
-          streamKey: slot.streamKey,
-          filePath: finalInputPath,
-          muteAudio: slot.muteAudio,
-          audioVolume: slot.audioVolume,
-          audioFilePath: slot.audioFilePath,
-          overlayText: slot.overlayText,
-          overlayTextRight: slot.overlayTextRight,
-          overlayTextLeft: slot.overlayTextLeft,
-          overlayTextEnabled: slot.overlayTextEnabled
+          rtmpServer: finalRtmpServer,
+          streamKey: finalStreamKey,
+          filePath: finalInputPath
         }),
         signal: ctrl.signal
       })

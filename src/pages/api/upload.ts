@@ -144,15 +144,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             }
 
             const allowedVideoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.ogv', '.mpeg', '.mpg']
-            const allowedAudioExts = ['.mp3', '.wav', '.aac', '.m4a', '.ogg', '.flac']
-            const allowedExtensions = [...allowedVideoExts, ...allowedAudioExts]
+            const allowedExtensions = [...allowedVideoExts, '.png']
             const ext = path.extname(originalName).toLowerCase()
             if (!allowedExtensions.includes(ext)) {
                 file.resume()
                 sendError(400, `Invalid file type (${ext}). Allowed: ${allowedExtensions.join(', ')}`)
                 return
             }
-            const isAudioFile = allowedAudioExts.includes(ext)
 
             if (folder) {
                 const candidateDir = path.join(VIDEOS_DIR, folder)
@@ -195,6 +193,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             // Track bytes for progress/reporting
             file.on('data', (chunk) => {
                 bytesWritten += chunk.length
+                if (ext === '.png' && bytesWritten > 2097152) {
+                    file.pause()
+                    writeStream.destroy()
+                    sendError(400, 'PNG thumbnail file size must be less than 2MB')
+                    return
+                }
                 if (currentStorageUsed + bytesWritten > maxStorageBytes) {
                     file.pause()
                     writeStream.destroy()

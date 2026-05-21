@@ -39,8 +39,24 @@ model StreamSlot {
   swapVideoPath     String   @default("")
   swapVideoEnabled  Boolean  @default(false)
   isSwapped         Boolean  @default(false)
+  youtubeChannelId  String?
+  youtubeTitle      String   @default("")
+  youtubeDescription String   @default("")
+  youtubeThumbnailPath String @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model YoutubeChannel {
+  id           String   @id @default(cuid())
+  name         String
+  channelId    String   @default("")
+  channelTitle String   @default("")
+  accessToken  String
+  refreshToken String
+  expiryDate   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model SystemLog {

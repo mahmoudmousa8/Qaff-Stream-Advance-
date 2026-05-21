@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -29,7 +29,7 @@ import { VideoManager } from '@/components/video-manager'
 import { DateTimePicker } from '@/components/date-time-picker'
 import { t, getLocale, setLocale, isRTL, type Locale } from '@/lib/i18n'
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ RTMP base URLs Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// ── RTMP base URLs ────────────────────────────────────────────────────────────
 const RTMP_BASES: Record<string, string> = {
   youtube: 'rtmp://a.rtmp.youtube.com/live2',
   facebook: 'rtmps://live-api-s.facebook.com:443/rtmp',
@@ -62,6 +62,10 @@ interface StreamSlot {
   overlayTextEnabled?: boolean
   swapVideoPath?: string
   swapVideoEnabled?: boolean
+  youtubeChannelId?: string | null
+  youtubeTitle?: string | null
+  youtubeDescription?: string | null
+  youtubeThumbnailPath?: string | null
 }
 
 interface LogEntry {
@@ -280,25 +284,52 @@ export default function Home() {
   // Advanced settings state
   const [settingsSlot, setSettingsSlot] = useState<number | null>(null)
   const [settingsData, setSettingsData] = useState<{
-    muteAudio: boolean
-    audioVolume: number
-    audioFilePath: string
-    overlayText: string
-    overlayTextRight: string
-    overlayTextLeft: string
-    overlayTextEnabled: boolean
     swapVideoPath: string
     swapVideoEnabled: boolean
+    youtubeChannelId: string
+    youtubeTitle: string
+    youtubeDescription: string
+    youtubeThumbnailPath: string
   } | null>(null)
-  const [activeTab, setActiveTab] = useState<'audio' | 'overlay' | 'swap'>('audio')
-  const [audioSelectorSlot, setAudioSelectorSlot] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
+  const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
+
+  // YouTube channels manager state
+  const [ytManagerOpen, setYtManagerOpen] = useState(false)
+  const [ytChannels, setYtChannels] = useState<{ id: string; name: string; channelTitle: string; channelId: string }[]>([])
+  const [ytLoading, setYtLoading] = useState(false)
+  const [ytLinkName, setYtLinkName] = useState('')
+  const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
+
+  // Cloudflare Tunnel state
+  const [tunnelUrl, setTunnelUrl] = useState<string | null>(null)
+  const [loadingTunnel, setLoadingTunnel] = useState(false)
+
+  const fetchTunnelUrl = useCallback(async () => {
+    setLoadingTunnel(true)
+    try {
+      const res = await fetch('/api/tunnel')
+      const data = await res.json()
+      if (data.success && data.tunnelUrl) {
+        setTunnelUrl(data.tunnelUrl)
+      } else {
+        setTunnelUrl(null)
+      }
+    } catch (err) {
+      console.error('Failed to fetch tunnel URL', err)
+      setTunnelUrl(null)
+    } finally {
+      setLoadingTunnel(false)
+    }
+  }, [])
 
   // Initialize locale and theme
   useEffect(() => {
     setLocaleState(getLocale())
     setIsDarkMode(document.documentElement.classList.contains('dark'))
-  }, [])
+    fetchTunnelUrl()
+  }, [fetchTunnelUrl])
 
   // Auto-scroll log to bottom
   useEffect(() => {
@@ -315,6 +346,45 @@ export default function Home() {
     }, 500)
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  // Fetch YouTube channels list
+  const fetchYtChannels = useCallback(async () => {
+    setYtLoading(true)
+    try {
+      const res = await fetch('/api/youtube/channels')
+      const data = await res.json()
+      setYtChannels(data.channels || [])
+    } catch (err) {
+      console.error('Failed to fetch YouTube channels', err)
+    } finally {
+      setYtLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ytManagerOpen) {
+      fetchYtChannels()
+      fetchTunnelUrl()
+    }
+  }, [ytManagerOpen, fetchYtChannels, fetchTunnelUrl])
+
+  // Handle YouTube Auth redirect status
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const ytAuth = urlParams.get('youtube_auth')
+    if (ytAuth) {
+      if (ytAuth === 'success') {
+        addLog(locale === 'ar' ? 'تم ربط قناة اليوتيوب بنجاح!' : 'YouTube channel linked successfully!')
+        alert(locale === 'ar' ? 'تم ربط القناة بنجاح!' : 'Channel linked successfully!')
+      } else if (ytAuth === 'error') {
+        const msg = urlParams.get('msg') || ''
+        addLog(locale === 'ar' ? `فشل ربط قناة اليوتيوب: ${msg}` : `Failed to link YouTube channel: ${msg}`)
+        alert((locale === 'ar' ? 'فشل ربط القناة: ' : 'Failed to link channel: ') + msg)
+      }
+      // Clean query parameters from URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+  }, [locale])
 
   // Session validation
   useEffect(() => {
@@ -510,18 +580,18 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    fetchSlots(); fetchLogs(); fetchStats(); fetchStorage()
+    fetchSlots(); fetchLogs(); fetchStats(); fetchStorage(); fetchTunnelUrl()
 
     const statusInterval = setInterval(async () => {
       try { await fetch('/api/status'); fetchSlots(); fetchStats() } catch { }
     }, 5000)
 
     const uiRefreshInterval = setInterval(async () => {
-      try { fetchSlots(); fetchLogs(); fetchStats() } catch { }
+      try { fetchSlots(); fetchLogs(); fetchStats(); fetchTunnelUrl() } catch { }
     }, 60000)
 
     return () => { clearInterval(statusInterval); clearInterval(uiRefreshInterval) }
-  }, [fetchSlots, fetchLogs, fetchStats, fetchStorage])
+  }, [fetchSlots, fetchLogs, fetchStats, fetchStorage, fetchTunnelUrl])
 
   const addLog = async (message: string) => {
     try {
@@ -829,6 +899,56 @@ export default function Home() {
                 <Activity className="w-4 h-4 mr-1" />
                 {t('logs')}
               </Button>
+
+              <Button size="sm" variant="outline" onClick={() => setYtManagerOpen(true)}>
+                <Youtube className="w-4 h-4 mr-1 text-red-500" />
+                {locale === 'ar' ? 'قنوات اليوتيوب' : 'YouTube Channels'}
+              </Button>
+
+              {tunnelUrl ? (
+                <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-ping mr-1 shrink-0" />
+                  <span className="font-mono truncate max-w-[200px]" title={tunnelUrl}>
+                    {tunnelUrl.replace("https://", "")}
+                  </span>
+                  <a
+                    href={tunnelUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-green-500 ml-1.5 shrink-0"
+                    title={locale === 'ar' ? 'فتح الرابط في علامة تبويب جديدة' : 'Open link in new tab'}
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                  </a>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-5 w-5 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded"
+                    onClick={() => {
+                      navigator.clipboard.writeText(tunnelUrl);
+                      alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!');
+                    }}
+                    title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}
+                  >
+                    <Copy className="w-3 h-3" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0 animate-pulse">
+                  <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
+                  <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-5 w-5 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded ml-1"
+                    onClick={fetchTunnelUrl}
+                    title={locale === 'ar' ? 'تحديث الحالة' : 'Refresh Tunnel Status'}
+                    disabled={loadingTunnel}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loadingTunnel ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+              )}
 
               <Button size="sm" variant="ghost" onClick={switchLocale} title={t('language')}>
                 <Globe className="w-4 h-4 mr-1" />
@@ -1438,15 +1558,12 @@ export default function Home() {
                                 onClick={() => {
                                   setSettingsSlot(slot.slotIndex)
                                   setSettingsData({
-                                    muteAudio: slot.muteAudio ?? false,
-                                    audioVolume: slot.audioVolume ?? 1.0,
-                                    audioFilePath: slot.audioFilePath ?? '',
-                                    overlayText: slot.overlayText ?? '',
-                                    overlayTextRight: slot.overlayTextRight ?? '',
-                                    overlayTextLeft: slot.overlayTextLeft ?? '',
-                                    overlayTextEnabled: slot.overlayTextEnabled ?? false,
                                     swapVideoPath: slot.swapVideoPath ?? '',
                                     swapVideoEnabled: slot.swapVideoEnabled ?? false,
+                                    youtubeChannelId: slot.youtubeChannelId ?? '',
+                                    youtubeTitle: slot.youtubeTitle ?? '',
+                                    youtubeDescription: slot.youtubeDescription ?? '',
+                                    youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
                                   })
                                 }}
                                 title={t('advancedSettings')}>
@@ -1700,8 +1817,8 @@ export default function Home() {
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground/80 mt-1">
               {locale === 'ar' 
-                ? 'قم بتخصيص إعدادات الصوت المعقدة والشريط الإعلاني المخصص للبث.' 
-                : 'Customize advanced audio controls and dynamic overlay text banners for this stream.'}
+                ? 'إعدادات تبديل الفيديو قبل الانتهاء وأتمتة البث المباشر على يوتيوب.' 
+                : 'Configure pre-stop video swap and automated YouTube live stream options.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1709,30 +1826,6 @@ export default function Home() {
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
             {/* Tabs Selector */}
             <div className="flex bg-muted/60 p-1 rounded-lg border border-border/40 shrink-0">
-              <button
-                type="button"
-                onClick={() => setActiveTab('audio')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
-                  activeTab === 'audio'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                }`}
-              >
-                <span>🎵</span>
-                {t('audioControls')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('overlay')}
-                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
-                  activeTab === 'overlay'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
-                }`}
-              >
-                <span>📺</span>
-                {t('videoOverlay')}
-              </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('swap')}
@@ -1745,244 +1838,22 @@ export default function Home() {
                 <span>🔁</span>
                 {t('preStopSwap')}
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('youtube')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                  activeTab === 'youtube'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                }`}
+              >
+                <Youtube className="w-3.5 h-3.5 text-red-500" />
+                {locale === 'ar' ? 'أتمتة اليوتيوب' : 'YouTube Automation'}
+              </button>
             </div>
 
             {settingsData && (
               <div className="space-y-6 min-h-[300px]">
-                {activeTab === 'audio' && (
-                  /* Audio Tab */
-                  <div className="space-y-6">
-                    {/* Toggle: Mute Source Audio */}
-                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
-                      <div className="space-y-0.5">
-                        <label htmlFor="muteAudio-toggle" className="text-sm font-bold text-foreground cursor-pointer">
-                          {t('muteOriginalAudio')}
-                        </label>
-                        <p className="text-xs text-muted-foreground">
-                          {locale === 'ar' 
-                            ? 'كتم صوت المصدر تماماً قبل معالجة وإرسال البث.' 
-                            : 'Silence the original source stream audio entirely before broadcast.'}
-                        </p>
-                      </div>
-                      <Checkbox
-                        id="muteAudio-toggle"
-                        checked={settingsData.muteAudio}
-                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, muteAudio: !!checked } : p)}
-                        className="w-5 h-5 accent-primary"
-                      />
-                    </div>
-
-                    {/* Slider: Audio Volume */}
-                    <div className="space-y-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                      <div className="flex justify-between items-center">
-                        <label className="text-sm font-bold text-foreground">
-                          {t('audioVolumeLabel')}
-                        </label>
-                        <span className="text-xs font-mono font-bold bg-primary/10 text-primary px-2.5 py-0.5 rounded-full">
-                          {(settingsData.audioVolume * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-1">
-                        {locale === 'ar' 
-                          ? 'تحكم في مستوى صوت البث الناتج (0% كتم، 100% طبيعي، حتى 200%).' 
-                          : 'Adjust the broadcast audio gain factor (0% mute, 100% normal, up to 200%).'}
-                      </p>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-muted-foreground">0%</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="2"
-                          step="0.05"
-                          value={settingsData.audioVolume}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value)
-                            setSettingsData(p => p ? { ...p, audioVolume: val } : p)
-                          }}
-                          className="flex-1 h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-                        />
-                        <span className="text-xs text-muted-foreground">200%</span>
-                      </div>
-                    </div>
-
-                    {/* File picker: Background Music Loop File */}
-                    <div className="space-y-3 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                      <label className="text-sm font-bold text-foreground block">
-                        {t('bgMusicFile')}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === 'ar' 
-                          ? 'اختر ملفاً صوتياً (موسيقى/خلفية) ليتم خلطه أو استبداله بالبث الرئيسي.' 
-                          : 'Select an audio track to overlay or completely replace the stream audio.'}
-                      </p>
-
-                      {settingsData.audioFilePath ? (
-                        <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-lg text-xs font-mono">
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="shrink-0 text-base">🎵</span>
-                            <span className="truncate text-foreground/95" title={settingsData.audioFilePath}>
-                              {settingsData.audioFilePath.split(/[/\\]/).pop()}
-                            </span>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors ml-1"
-                            onClick={() => setSettingsData(p => p ? { ...p, audioFilePath: '' } : p)}
-                            title={locale === 'ar' ? 'إزالة الملف الصوتي' : 'Remove Audio File'}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full flex items-center justify-center gap-2 text-xs border-dashed border-2 hover:bg-muted/50 border-border/80 h-10 transition-all rounded-lg"
-                          onClick={() => setAudioSelectorSlot(settingsSlot)}
-                        >
-                          <FolderOpen className="w-4 h-4 text-muted-foreground" />
-                          {t('selectAudioFile')}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'overlay' && (
-                  /* Video Overlay Tab */
-                  <div className="space-y-5">
-                    {/* Toggle: Enable Banner */}
-                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
-                      <div className="space-y-0.5">
-                        <label htmlFor="enableBannerText-toggle" className="text-sm font-bold text-foreground cursor-pointer">
-                          {t('enableBannerText')}
-                        </label>
-                        <p className="text-xs text-muted-foreground">
-                          {locale === 'ar' 
-                            ? 'تفعيل عرض شريط إعلاني أصفر أسفل الفيديو في البث.' 
-                            : 'Enable rendering a semi-transparent yellow banner at the bottom of the stream.'}
-                        </p>
-                      </div>
-                      <Checkbox
-                        id="enableBannerText-toggle"
-                        checked={settingsData.overlayTextEnabled}
-                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, overlayTextEnabled: !!checked } : p)}
-                        className="w-5 h-5 accent-primary"
-                      />
-                    </div>
-
-                    {/* Center Text Input */}
-                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                      <label className="text-sm font-bold text-foreground block">
-                        {locale === 'ar' ? '🟡 النص المركزي (الشريط الأصفر)' : '🟡 Center Text (Yellow Band)'}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === 'ar' ? 'مثال: القارئ وليد موسى — يظهر في منتصف الشريط الأصفر بخط كبير.' : 'e.g. Sheikh Waleed Musa — centered on yellow band.'}
-                      </p>
-                      <Input
-                        value={settingsData.overlayText}
-                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayText: e.target.value } : p)}
-                        placeholder={locale === 'ar' ? 'القارئ وليد موسى' : 'Sheikh / Reader Name'}
-                        dir="auto"
-                        className="text-center font-semibold bg-background"
-                      />
-                    </div>
-
-                    {/* Right Text Input */}
-                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                      <label className="text-sm font-bold text-foreground block">
-                        {locale === 'ar' ? '⬜ النص الأيمن (الشريط الأبيض الأيمن)' : '⬜ Right Text (White Right Band)'}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === 'ar' ? 'مثال: سورة الفرقان — يظهر في الجانب الأبيض الأيمن.' : 'e.g. Surah Al-Furqan — shown on the white right band.'}
-                      </p>
-                      <Input
-                        value={settingsData.overlayTextRight}
-                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayTextRight: e.target.value } : p)}
-                        placeholder={locale === 'ar' ? 'سورة الفرقان' : 'Surah Name'}
-                        dir="auto"
-                        className="text-right font-semibold bg-background"
-                      />
-                    </div>
-
-                    {/* Left Text Input */}
-                    <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                      <label className="text-sm font-bold text-foreground block">
-                        {locale === 'ar' ? '⬜ النص الأيسر (الشريط الأبيض الأيسر)' : '⬜ Left Text (White Left Band)'}
-                      </label>
-                      <p className="text-xs text-muted-foreground">
-                        {locale === 'ar' ? 'مثال: برواية حفص عن عاصم — يظهر في الجانب الأبيض الأيسر.' : 'e.g. Hafs \'an \'Asim — shown on the white left band.'}
-                      </p>
-                      <Input
-                        value={settingsData.overlayTextLeft}
-                        onChange={(e) => setSettingsData(p => p ? { ...p, overlayTextLeft: e.target.value } : p)}
-                        placeholder={locale === 'ar' ? 'برواية حفص عن عاصم' : 'Narration / Riwaya'}
-                        dir="auto"
-                        className="text-left font-semibold bg-background"
-                      />
-                    </div>
-
-                    {/* Premium Live Simulated Preview */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                        {locale === 'ar' ? 'معاينة البث المباشر الفورية' : 'Live Broadcast Simulation Preview'}
-                      </label>
-                      <div className="relative aspect-video w-full max-w-md mx-auto bg-black rounded-xl overflow-hidden shadow-lg border border-border flex flex-col justify-end">
-                        {/* Simulation Video Content */}
-                        <div className="absolute inset-0 flex items-center justify-center bg-slate-950 text-muted-foreground/30 select-none text-[10px] font-semibold tracking-widest uppercase">
-                          <div className="text-center space-y-1">
-                            <Activity className="w-8 h-8 mx-auto animate-pulse text-muted-foreground/20" />
-                            <span>Live Video Stream</span>
-                          </div>
-                        </div>
-
-                        {/* 3-Column Banner Preview */}
-                        {settingsData.overlayTextEnabled && (
-                          <div className="absolute bottom-0 left-0 right-0 flex items-stretch" style={{ height: '22%' }}>
-                            {/* Right white band */}
-                            <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
-                              <span
-                                className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
-                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
-                              >
-                                {settingsData.overlayTextRight || (locale === 'ar' ? 'سورة الفرقان' : 'Surah Name')}
-                              </span>
-                            </div>
-                            {/* Center yellow band */}
-                            <div className="flex-1 flex items-center justify-center px-3 bg-[#f5a623] border-t border-[#e09000]">
-                              <span
-                                className="text-white font-extrabold text-center drop-shadow-[0_1px_2px_rgba(0,0,0,0.6)] text-[10px] md:text-[13px] select-none break-all line-clamp-1"
-                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
-                              >
-                                {settingsData.overlayText || (locale === 'ar' ? 'القارئ وليد موسى' : 'Sheikh / Reader Name')}
-                              </span>
-                            </div>
-                            {/* Left white band */}
-                            <div className="flex items-center justify-center px-2 bg-white/90 border-t border-white/60" style={{ width: '25%' }}>
-                              <span
-                                className="text-gray-900 font-bold text-center text-[9px] md:text-[11px] leading-tight select-none break-all line-clamp-2"
-                                style={{ fontFamily: "'Al Jazeera', sans-serif", direction: 'rtl' }}
-                              >
-                                {settingsData.overlayTextLeft || (locale === 'ar' ? 'برواية حفص عن عاصم' : 'Narration')}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Watermark/Indicators */}
-                        <div className="absolute top-2 left-2 bg-red-600 text-white font-bold text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider animate-pulse flex items-center gap-1 shadow-sm">
-                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                          <span>Live</span>
-                        </div>
-                        <div className="absolute top-2 right-2 bg-black/60 text-white font-mono text-[9px] px-1.5 py-0.5 rounded shadow-sm">
-                          1080p
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {activeTab === 'swap' && (
                   /* Pre-Stop Swap Video Tab */
                   <div className="space-y-6">
@@ -2069,11 +1940,128 @@ export default function Home() {
                           <p className="font-bold">{t('swapVideoActive')}</p>
                           <p className="opacity-90 mt-0.5">
                             {locale === 'ar'
-                              ? `البث سينتقل تلقائياً للفيديو المختار قبل 20 دقيقة من موعد الإيقاف المحدد: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`
-                              : `Broadcast will switch automatically to this video 20 minutes before stop time: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`}
+                              ? `البث سينتقل تلقائياً للفيديو المختار قبل 10 دقائق من موعد الإيقاف المحدد: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`
+                              : `Broadcast will switch automatically to this video 10 minutes before stop time: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`}
                           </p>
                         </div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'youtube' && (
+                  /* YouTube Automation Tab */
+                  <div className="space-y-6">
+                    {/* Bound Channel Selection */}
+                    <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                      <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                        <Youtube className="w-4 h-4 text-red-500" />
+                        {locale === 'ar' ? 'ربط القناة للبث المباشر التلقائي' : 'Bind Channel for Automated Streaming'}
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {locale === 'ar'
+                          ? 'اختر القناة التي ترغب في إنشاء البث عليها تلقائياً عند بدء البث.'
+                          : 'Select which YouTube channel to automatically create the broadcast and start keys on.'}
+                      </p>
+                      <select
+                        value={settingsData.youtubeChannelId || ''}
+                        onChange={(e) => setSettingsData(p => p ? { ...p, youtubeChannelId: e.target.value } : p)}
+                        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        dir="ltr"
+                      >
+                        <option value="">{locale === 'ar' ? '-- بدون أتمتة البث على يوتيوب --' : '-- No YouTube Stream Automation --'}</option>
+                        {ytChannels.map(ch => (
+                          <option key={ch.id} value={ch.id}>
+                            {ch.name} ({ch.channelTitle})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {settingsData.youtubeChannelId && (
+                      <>
+                        {/* Title character counter & validation */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-bold text-foreground">
+                              {locale === 'ar' ? 'عنوان البث المباشر' : 'Live Stream Title'}
+                            </label>
+                            <span className="text-[10px] text-muted-foreground font-mono font-semibold">
+                              {settingsData.youtubeTitle.length} / 100
+                            </span>
+                          </div>
+                          <Input
+                            maxLength={100}
+                            value={settingsData.youtubeTitle}
+                            onChange={(e) => setSettingsData(p => p ? { ...p, youtubeTitle: e.target.value } : p)}
+                            placeholder={locale === 'ar' ? 'العنوان الافتراضي: Live Stream' : 'Default: Live Stream'}
+                            dir="auto"
+                          />
+                        </div>
+
+                        {/* Description character counter & validation */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-bold text-foreground">
+                              {locale === 'ar' ? 'وصف البث المباشر' : 'Live Stream Description'}
+                            </label>
+                            <span className="text-[10px] text-muted-foreground font-mono font-semibold">
+                              {settingsData.youtubeDescription.length} / 4500
+                            </span>
+                          </div>
+                          <textarea
+                            maxLength={4500}
+                            rows={4}
+                            value={settingsData.youtubeDescription}
+                            onChange={(e) => setSettingsData(p => p ? { ...p, youtubeDescription: e.target.value } : p)}
+                            placeholder={locale === 'ar' ? 'أدخل تفاصيل البث ووسومه...' : 'Enter stream description, tags, etc...'}
+                            className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                            dir="auto"
+                          />
+                        </div>
+
+                        {/* PNG Thumbnail Picker */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <label className="text-sm font-bold text-foreground block">
+                            {locale === 'ar' ? 'صورة مصغرة مخصصة (Thumbnail)' : 'Custom Thumbnail Image'}
+                          </label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {locale === 'ar'
+                              ? 'صورة PNG حصرياً وحجمها أقل من 2 ميجابايت.'
+                              : 'Strictly PNG format and under 2MB limit.'}
+                          </p>
+
+                          {settingsData.youtubeThumbnailPath ? (
+                            <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-lg text-xs font-mono">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="shrink-0 text-base">🖼️</span>
+                                <span className="truncate text-foreground/95" title={settingsData.youtubeThumbnailPath}>
+                                  {settingsData.youtubeThumbnailPath.split(/[/\\]/).pop()}
+                                </span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors ml-1"
+                                onClick={() => setSettingsData(p => p ? { ...p, youtubeThumbnailPath: '' } : p)}
+                                title={locale === 'ar' ? 'إزالة الصورة' : 'Remove Thumbnail'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full flex items-center justify-center gap-2 text-xs border-dashed border-2 hover:bg-muted/50 border-border/80 h-10 transition-all rounded-lg"
+                              onClick={() => setThumbnailSelectorOpen(true)}
+                            >
+                              <FolderOpen className="w-4 h-4 text-muted-foreground" />
+                              {locale === 'ar' ? 'اختر صورة غلاف PNG' : 'Select PNG Thumbnail Image'}
+                            </Button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -2098,15 +2086,12 @@ export default function Home() {
                 if (settingsSlot === null || !settingsData) return
                 try {
                   await updateSlot(settingsSlot, {
-                    muteAudio: settingsData.muteAudio,
-                    audioVolume: settingsData.audioVolume,
-                    audioFilePath: settingsData.audioFilePath,
-                    overlayText: settingsData.overlayText,
-                    overlayTextRight: settingsData.overlayTextRight,
-                    overlayTextLeft: settingsData.overlayTextLeft,
-                    overlayTextEnabled: settingsData.overlayTextEnabled,
                     swapVideoPath: settingsData.swapVideoPath,
                     swapVideoEnabled: settingsData.swapVideoEnabled,
+                    youtubeChannelId: settingsData.youtubeChannelId || null,
+                    youtubeTitle: settingsData.youtubeTitle,
+                    youtubeDescription: settingsData.youtubeDescription,
+                    youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
                   })
                   addLog(locale === 'ar' ? `القناة ${settingsSlot + 1}: تم حفظ الإعدادات المتقدمة بنجاح` : `Slot ${settingsSlot + 1}: Advanced settings saved successfully`)
                 } catch {
@@ -2122,27 +2107,35 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Audio Selector Helper Dialog ── */}
-      <Dialog open={audioSelectorSlot !== null} onOpenChange={(open) => !open && setAudioSelectorSlot(null)}>
+      {/* ── Thumbnail Selector Helper Dialog ── */}
+      <Dialog open={thumbnailSelectorOpen} onOpenChange={(open) => !open && setThumbnailSelectorOpen(false)}>
         <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col bg-card border shadow-2xl rounded-xl">
           <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <FolderOpen className="w-5 h-5 text-primary" />
-              {t('selectAudioFile')} #{audioSelectorSlot !== null ? audioSelectorSlot + 1 : ''}
+              {locale === 'ar' ? 'اختر صورة غلاف البث' : 'Select Stream Thumbnail Image'} #{settingsSlot !== null ? settingsSlot + 1 : ''}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              {locale === 'ar' ? 'تصفح واختر ملفاً صوتياً (MP3, WAV, M4A, AAC) من المجلدات.' : 'Browse and select an audio loop file (MP3, WAV, M4A, AAC) from your workspace.'}
+              {locale === 'ar' 
+                ? 'تصفح واختر ملف صورة (يجب أن يكون بصيغة PNG وبحجم أقل من 2 ميجابايت).' 
+                : 'Browse and select an image file (must be strictly PNG and size under 2MB).'}
             </DialogDescription>
           </DialogHeader>
-          {audioSelectorSlot !== null && (
+          {thumbnailSelectorOpen && (
             <div className="flex-1 overflow-hidden min-h-0 px-4">
               <VideoManager
                 mode="select"
                 onVideoSelect={(path) => {
-                  setSettingsData(p => p ? { ...p, audioFilePath: path } : p)
-                  setAudioSelectorSlot(null)
+                  if (!path.toLowerCase().endsWith('.png')) {
+                    alert(locale === 'ar' 
+                      ? 'عذراً، يجب اختيار ملف بصيغة PNG فقط لصورة الغلاف!' 
+                      : 'Please select a strictly PNG file format for the thumbnail!')
+                    return
+                  }
+                  setSettingsData(p => p ? { ...p, youtubeThumbnailPath: path } : p)
+                  setThumbnailSelectorOpen(false)
                 }}
-                onClose={() => setAudioSelectorSlot(null)}
+                onClose={() => setThumbnailSelectorOpen(false)}
               />
             </div>
           )}
@@ -2173,6 +2166,217 @@ export default function Home() {
               />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── YouTube Channels Manager Dialog ── */}
+      <Dialog open={ytManagerOpen} onOpenChange={(open) => !open && setYtManagerOpen(false)}>
+        <DialogContent className="sm:max-w-3xl w-[95vw] max-h-[90vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-border/80">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <Youtube className="w-6 h-6 text-red-500 animate-pulse" />
+              {locale === 'ar' ? 'إدارة قنوات اليوتيوب المرتبطة' : 'Linked YouTube Channels Manager'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {locale === 'ar' 
+                ? 'اربط قنواتك التابعة لـ Google لبدء البث عليها بضغطة زر مع ضبط العنوان والغلاف التلقائي.' 
+                : 'Link Google-authenticated YouTube channels to enable automatic stream initialization, metadata updates, and custom PNG thumbnails.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-[350px]">
+            {/* Google Console Config Info */}
+            <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-3 animate-fade-in">
+              <h5 className="text-xs font-bold text-blue-500 flex items-center gap-1.5">
+                ℹ️ {locale === 'ar' ? 'إعدادات مطور Google (Google Cloud Console)' : 'Google Developer Console Setup'}
+              </h5>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                {locale === 'ar' 
+                  ? 'لتتمكن من ربط قنواتك بنجاح، يجب أن يكون رابط استدعاء التطبيق (Callback URI) التالي مضافاً في إعدادات OAuth الخاصة بك في منصة Google Cloud:' 
+                  : 'To link channels successfully, the following Callback URI must be whitelisted in your Google Cloud Console OAuth 2.0 Client credentials:'}
+              </p>
+              <div className="flex items-center justify-between gap-3 bg-background border border-border/80 rounded-lg p-2.5 font-mono text-[11px]">
+                <span className="text-foreground/80 break-all select-all">
+                  {tunnelUrl 
+                    ? `${tunnelUrl}/api/auth/youtube/callback` 
+                    : typeof window !== 'undefined' ? `${window.location.origin}/api/auth/youtube/callback` : 'http://YOUR_VPS_IP/api/auth/youtube/callback'}
+                </span>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  className="h-7 text-[10px] px-2 flex items-center gap-1 shrink-0 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 border-blue-500/30"
+                  onClick={() => {
+                    const cbUrl = tunnelUrl 
+                      ? `${tunnelUrl}/api/auth/youtube/callback` 
+                      : `${window.location.origin}/api/auth/youtube/callback`;
+                    navigator.clipboard.writeText(cbUrl);
+                    alert(locale === 'ar' ? 'تم نسخ رابط الاستدعاء!' : 'Callback URI copied!');
+                  }}
+                >
+                  <Copy className="w-3 h-3" />
+                  {locale === 'ar' ? 'نسخ' : 'Copy'}
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                💡 {locale === 'ar' 
+                  ? 'إذا كنت تستخدم التونل (Cloudflare Tunnel)، فيرجى الدخول إلى لوحة التحكم من خلال رابط التونل أولاً لكي يعمل الترخيص بشكل صحيح.' 
+                  : 'If using a Cloudflare Tunnel, make sure to access this dashboard via the tunnel URL first before initiating Google authorization.'}
+              </p>
+            </div>
+
+            {/* Form: Link a new channel */}
+            <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-4">
+              <h4 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                🔗 {locale === 'ar' ? 'ربط قناة جديدة' : 'Link New Channel'}
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ar' 
+                  ? 'أدخل اسماً مستعاراً مخصصاً ليسهل عليك اختيار هذه القناة في إعدادات البث (مثال: قناة البث العام، قناة التلاوات).' 
+                  : 'Enter a custom nickname to easily identify this channel when binding to slots (e.g. Main Channel, Recitations).'}
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  value={ytLinkName}
+                  onChange={(e) => setYtLinkName(e.target.value)}
+                  placeholder={locale === 'ar' ? 'اسم القناة المخصص (مثال: قناة القرآن الكريم المباشرة)' : 'Custom nickname (e.g. Holy Quran Live Channel)'}
+                  className="flex-1 bg-background"
+                  dir="auto"
+                />
+                <Button
+                  disabled={!ytLinkName.trim()}
+                  onClick={() => {
+                    const authUrl = `/api/auth/youtube/redirect?name=${encodeURIComponent(ytLinkName.trim())}`
+                    window.open(authUrl, '_blank')
+                    // Instruct user to reload list after login
+                    alert(locale === 'ar' 
+                      ? 'سيتم فتح نافذة ترخيص Google. يرجى إتمام عملية تسجيل الدخول بنجاح، ثم انقر على زر تحديث القائمة.' 
+                      : 'Google authorization window will open. Complete the login, then click refresh list.')
+                  }}
+                  className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 flex items-center gap-2 shadow-md transition-all duration-200"
+                >
+                  <Youtube className="w-4 h-4" />
+                  {locale === 'ar' ? 'ترخيص وربط القناة' : 'Authorize & Link Channel'}
+                </Button>
+              </div>
+            </div>
+
+            {/* List of channels */}
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <h4 className="text-sm font-bold text-foreground">
+                  🔑 {locale === 'ar' ? 'القنوات المرتبطة حالياً' : 'Currently Linked Channels'}
+                </h4>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={fetchYtChannels} 
+                  disabled={ytLoading}
+                  className="h-8 text-xs flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${ytLoading ? 'animate-spin' : ''}`} />
+                  {locale === 'ar' ? 'تحديث القائمة' : 'Refresh List'}
+                </Button>
+              </div>
+
+              {ytLoading && ytChannels.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2 border border-dashed rounded-xl bg-muted/20">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  <span>{locale === 'ar' ? 'جاري تحميل القنوات...' : 'Loading channels...'}</span>
+                </div>
+              ) : ytChannels.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground text-xs border border-dashed rounded-xl bg-muted/10">
+                  📭 {locale === 'ar' ? 'لا توجد قنوات مرتبطة حالياً. استخدم النموذج أعلاه لربط قناتك.' : 'No channels linked yet. Use the form above to link one.'}
+                </div>
+              ) : (
+                <div className="border border-border rounded-xl overflow-hidden shadow-sm bg-card">
+                  <Table>
+                    <TableHeader className="bg-muted/40">
+                      <TableRow>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'الاسم المستعار' : 'Nickname'}</TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'عنوان يوتيوب الرسمي' : 'Official YouTube Title'}</TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 120 }}>{locale === 'ar' ? 'الحالة' : 'Status'}</TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 80 }}></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ytChannels.map(ch => (
+                        <TableRow key={ch.id} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="px-4 py-3 font-semibold text-xs text-foreground/95">{ch.name}</TableCell>
+                          <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">{ch.channelTitle}</TableCell>
+                          <TableCell className="px-4 py-3 text-xs text-center">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 font-bold text-[10px]">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                              {locale === 'ar' ? 'جاهز' : 'Ready'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="px-4 py-3 text-center">
+                            {ytUnlinkConfirm === ch.id ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await fetch(`/api/youtube/channels?id=${ch.id}`, { method: 'DELETE' })
+                                      const data = await res.json()
+                                      if (data.success) {
+                                        addLog(locale === 'ar' ? `تم إلغاء ربط القناة: ${ch.name}` : `Unlinked channel: ${ch.name}`)
+                                        fetchYtChannels()
+                                        fetchSlots()
+                                      } else {
+                                        alert(data.error || 'Failed to unlink channel')
+                                      }
+                                    } catch {
+                                      alert('Network error')
+                                    } finally {
+                                      setYtUnlinkConfirm(null)
+                                    }
+                                  }}
+                                >
+                                  {locale === 'ar' ? 'تأكيد' : 'Confirm'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => setYtUnlinkConfirm(null)}
+                                >
+                                  {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded-md shrink-0 transition-colors"
+                                onClick={() => setYtUnlinkConfirm(ch.id)}
+                                title={locale === 'ar' ? 'إلغاء ربط القناة' : 'Unlink Channel'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="px-6 py-4 bg-muted/40 border-t border-border/80 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setYtManagerOpen(false)}
+              className="text-xs"
+            >
+              {locale === 'ar' ? 'إغلاق' : 'Close'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

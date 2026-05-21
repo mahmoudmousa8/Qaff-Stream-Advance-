@@ -161,246 +161,39 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
   // Check if it is a live stream network URL
   const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
 
-  const muteAudio = options?.muteAudio || false
-  const audioVolume = typeof options?.audioVolume === 'number' ? options.audioVolume : 1.0
-  const audioFilePath = options?.audioFilePath || ''
-  const overlayText = options?.overlayText || ''
-  const overlayTextRight = options?.overlayTextRight || ''
-  const overlayTextLeft = options?.overlayTextLeft || ''
-  const overlayTextEnabled = options?.overlayTextEnabled || false
-
-  const hasAnyOverlay = overlayTextEnabled && (overlayText !== '' || overlayTextRight !== '' || overlayTextLeft !== '')
-  const needsTranscode = muteAudio || audioVolume !== 1.0 || audioFilePath !== '' || hasAnyOverlay
-
-  if (!needsTranscode) {
-    if (isUrl) {
-      log(`  Profile: Live Relay (source is URL: ${filePath})`);
-      return {
-        profile: 'copy',
-        args: [
-          '-fflags', '+genpts',
-          '-i', filePath,
-          '-c', 'copy',
-          '-max_muxing_queue_size', '1024',
-          '-f', 'flv',
-          '-flvflags', 'no_duration_filesize',
-          rtmpUrl
-        ]
-      };
-    }
-
-    const probe = probeFile(filePath);
-    
-    // 1) Direct copy profile for standard MP4 files (ZERO CPU)
-    if (probe.compatible) {
-      log(`  Profile: Direct Copy (source is H264+AAC, fps=${probe.fps})`);
-      return {
-        profile: 'copy',
-        args: [
-          '-re',
-          '-stream_loop', '-1',
-          '-fflags', '+genpts',
-          '-i', filePath,
-          '-c', 'copy',
-          '-avoid_negative_ts', 'make_zero',
-          '-max_muxing_queue_size', '1024',
-          '-f', 'flv',
-          '-flvflags', 'no_duration_filesize',
-          rtmpUrl
-        ]
-      };
-    }
-
-    // 2) Any other format → fall through to transcode profile below
-    // (No error thrown — libx264 can re-encode any format ffmpeg can read)
-  }
-
-  // Dynamic profile switching: CPU transcoding enabled
-  log(`  Profile: Advanced Transcoding Fallback (filters active)`);
-  const probe = isUrl ? { width: 1280, height: 720, hasAudio: true } : probeFile(filePath)
-
-  const args: string[] = []
-  
-  // 1. Video and audio inputs
   if (isUrl) {
-    args.push('-i', filePath)
-  } else {
-    args.push('-re', '-stream_loop', '-1', '-i', filePath)
+    log(`  Profile: Live Relay (source is URL: ${filePath})`);
+    return {
+      profile: 'copy',
+      args: [
+        '-fflags', '+genpts',
+        '-i', filePath,
+        '-c', 'copy',
+        '-max_muxing_queue_size', '1024',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ]
+    };
   }
 
-  let nextInputIndex = 1
-
-  // Banner input (if enabled)
-  let bannerInputIndex = -1
-  if (hasAnyOverlay) {
-    bannerInputIndex = nextInputIndex++
-    const bannerPath = resolve(PROJECT_ROOT, 'public', 'overlay-banner.png')
-    args.push('-i', bannerPath)
-  }
-
-  // Custom audio background input (if enabled)
-  let audioInputIndex = -1
-  let finalAudioPath = ''
-  if (audioFilePath) {
-    if (existsSync(audioFilePath)) {
-      finalAudioPath = audioFilePath
-    } else {
-      const resolved = resolve(VIDEOS_DIR, audioFilePath)
-      if (existsSync(resolved)) {
-        finalAudioPath = resolved
-      }
-    }
-  }
-
-  if (finalAudioPath) {
-    audioInputIndex = nextInputIndex++
-    args.push('-stream_loop', '-1', '-i', finalAudioPath)
-  }
-
-  // Silent fallback audio virtual source (always add as last input for absolute safety)
-  const silentInputIndex = nextInputIndex++
-  args.push('-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100')
-
-  // 2. Filter Graph Complex
-  const filterComplexParts: string[] = []
-  
-  // Video overlay & text banner
-  const fontPath = resolve(PROJECT_ROOT, 'public', 'Al-Jazeera-Arabic-Bold.ttf')
-  const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:')
-  
-  let videoMap = '0:v'
-  if (hasAnyOverlay) {
-    const vidW = probe.width
-    const vidH = probe.height
-
-    // Font sizes dynamically scaled relative to height (1024x576 base)
-    // 22px center, 16px side relative to 576px height
-    const centerFontSize = Math.max(12, Math.round(22 / 576 * vidH))
-    const sideFontSize   = Math.max(10, Math.round(16 / 576 * vidH))
-
-    // Vertical centerline Y = 530 relative to 576 height.
-    // Center it exactly vertically by subtracting half the text height (th/2)
-    const textY = `(${Math.round(530 / 576 * vidH)}-th/2)`
-
-    // Horizontal centers relative to 1024 width
-    const leftCenterX = Math.round(296.5 / 1024 * vidW)
-    const centerCenterX = Math.round(510 / 1024 * vidW)
-    const rightCenterX = Math.round(715.5 / 1024 * vidW)
-
-    // Escape helper: handle backslash, single quote, colon, comma
-    const esc = (s: string) =>
-      s.replace(/\\/g, '/').replace(/'/g, "\\'").replace(/:/g, '\\:').replace(/,/g, '\\,')
-    const efp = escapedFontPath
-
-    // Step 1: Scale banner PNG to match video width and height
-    filterComplexParts.push(
-      `[${bannerInputIndex}:v]scale=w=${vidW}:h=${vidH}[scaled_banner]`
-    )
-    // Step 2: Overlay banner on video
-    filterComplexParts.push(
-      `[0:v][scaled_banner]overlay=x=0:y=0[banner_video]`
-    )
-
-    let lastLabel = 'banner_video'
-
-    // ── Text: Right zone (Surah name) ──
-    if (overlayTextRight) {
-      const escapedR = esc(overlayTextRight)
-      filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedR}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${rightCenterX}-tw/2:y=${textY}[rt_v]`
-      )
-      lastLabel = 'rt_v'
-    }
-
-    // ── Text: Center zone (Sheikh / Reader name) ──
-    if (overlayText) {
-      const escapedC = esc(overlayText)
-      filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedC}':fontcolor=white:fontsize=${centerFontSize}:x=${centerCenterX}-tw/2:y=${textY}:shadowcolor=black@0.6:shadowx=2:shadowy=2[ct_v]`
-      )
-      lastLabel = 'ct_v'
-    }
-
-    // ── Text: Left zone (Riwaya / Narration) ──
-    if (overlayTextLeft) {
-      const escapedL = esc(overlayTextLeft)
-      filterComplexParts.push(
-        `[${lastLabel}]drawtext=fontfile='${efp}':text='${escapedL}':fontcolor=0x1a1a1a:fontsize=${sideFontSize}:x=${leftCenterX}-tw/2:y=${textY}[lt_v]`
-      )
-      lastLabel = 'lt_v'
-    }
-
-    // Rename the final label to [out_video]
-    filterComplexParts[filterComplexParts.length - 1] =
-      filterComplexParts[filterComplexParts.length - 1].replace(`[${lastLabel}]`, '[out_video]')
-    videoMap = 'out_video'
-  }
-
-
-  // Audio mute/volume/replace mixing
-  let audioMap = `${silentInputIndex}:a` // default to silence
-  
-  if (muteAudio) {
-    if (finalAudioPath) {
-      filterComplexParts.push(`[${audioInputIndex}:a]volume=${audioVolume}[out_audio]`)
-      audioMap = 'out_audio'
-    } else {
-      audioMap = `${silentInputIndex}:a`
-    }
-  } else {
-    if (finalAudioPath && probe.hasAudio) {
-      // Scale both or just mix and scale the combined output
-      filterComplexParts.push(`[0:a]volume=1.0[orig_a]`)
-      filterComplexParts.push(`[orig_a][${audioInputIndex}:a]amix=inputs=2:duration=first:dropout_transition=2[mixed_a]`)
-      filterComplexParts.push(`[mixed_a]volume=${audioVolume}[out_audio]`)
-      audioMap = 'out_audio'
-    } else if (finalAudioPath && !probe.hasAudio) {
-      filterComplexParts.push(`[${audioInputIndex}:a]volume=${audioVolume}[out_audio]`)
-      audioMap = 'out_audio'
-    } else if (!finalAudioPath && probe.hasAudio) {
-      filterComplexParts.push(`[0:a]volume=${audioVolume}[out_audio]`)
-      audioMap = 'out_audio'
-    } else {
-      audioMap = `${silentInputIndex}:a`
-    }
-  }
-
-  if (filterComplexParts.length > 0) {
-    args.push('-filter_complex', filterComplexParts.join(';'))
-  }
-
-  // Output mappings
-  if (videoMap === 'out_video') {
-    args.push('-map', '[out_video]')
-  } else {
-    args.push('-map', '0:v')
-  }
-
-  if (audioMap === 'out_audio') {
-    args.push('-map', '[out_audio]')
-  } else {
-    args.push('-map', audioMap)
-  }
-
-  // Premium RTMP Out Transcoding Settings
-  args.push(
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-maxrate', '3000k',
-    '-bufsize', '6000k',
-    '-pix_fmt', 'yuv420p',
-    '-g', '50',
-    '-c:a', 'aac',
-    '-b:a', '128k',
-    '-ar', '44100',
-    '-avoid_negative_ts', 'make_zero',
-    '-max_muxing_queue_size', '1024',
-    '-f', 'flv',
-    '-flvflags', 'no_duration_filesize',
-    rtmpUrl
-  )
-
-  return { profile: 'transcode', args }
+  log(`  Profile: Direct Copy (source file: ${filePath})`);
+  return {
+    profile: 'copy',
+    args: [
+      '-re',
+      '-stream_loop', '-1',
+      '-fflags', '+genpts',
+      '-i', filePath,
+      '-c', 'copy',
+      '-avoid_negative_ts', 'make_zero',
+      '-max_muxing_queue_size', '1024',
+      '-f', 'flv',
+      '-flvflags', 'no_duration_filesize',
+      rtmpUrl
+    ]
+  };
+}
 }
 
 // ── Build final RTMP URL from outputType + server + key ─────

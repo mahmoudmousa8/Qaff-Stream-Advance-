@@ -1,0 +1,269 @@
+{
+  "name": "My workflow 3",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/youtube/v3/liveBroadcasts/bind",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "id,contentDetails"
+            },
+            {
+              "name": "id",
+              "value": "={{ $('Send Broadcast7').item.json.id }}"
+            },
+            {
+              "name": "streamId",
+              "value": "={{ $('HTTP Request7').item.json.items.find( item => item.snippet.title === \"Default stream key\" )?.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2240,
+        272
+      ],
+      "id": "9bc98e56-e414-4fcc-a656-2dd6408cd848",
+      "name": "Key Stream 7",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "pBEujiww5i8HrlTw",
+          "name": "PK 64"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"snippet\": {\n    \"title\": \"Surah Al-Waqiah | Wealth, Barakah, Calm Nights and Heart Relief Quran Recitation سورة الواقعة\",\n    \"description\": \"Surah Al-Waqiah | Wealth, Barakah, Calm Nights and Heart Relief Quran Recitation سورة الواقعة\\n\\n➤ Surah: Surah Al-Waqiah\\n➤ Ayah: 96\\n\\n🎧 Make it a daily night habit and let your surroundings be filled with remembrance and peace.\\n\\n✨ Benefits of Surah Al-Waqiah\\n✔ A meaningful reminder of Allah’s provision, power, and promise.\\n✔ Brings ease, tranquility, and hope to the heart.\\n✔ Perfect for evening listening with reflection and calm.\\n✔ Encourages barakah, gratitude, and spiritual steadiness.\\n\\nDon't Forget to LIKE • SHARE • SUBSCRIBE 🔔 for more Quran recitations & Islamic reminders.\\n\\nMay Allah protect us, forgive us, and grant us peace, guidance, and barakah in this life 🤲\\n\\n🎙 Powered By : Qaff Digital\\n#SurahAlWaqiah #QaffDigital #QuranForRizq #Barakah #NightRecitation #PeacefulQuran #HealingQuran #BeautifulRecitation #IslamicReminder #HolyQuran\",\n    \"scheduledStartTime\": \"{{ $json.next12UtcISO }}\",\n    \"defaultLanguage\": \"en\",\n    \"defaultAudioLanguage\": \"ar\"\n  },\n  \"status\": {\n    \"privacyStatus\": \"public\",\n    \"selfDeclaredMadeForKids\": false\n  },\n  \"contentDetails\": {\n    \"enableAutoStart\": true,\n    \"enableAutoStop\": true\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2016,
+        272
+      ],
+      "id": "746d5886-5e63-4f72-a4ab-d4c54aff6d9e",
+      "name": "Send Broadcast7",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "pBEujiww5i8HrlTw",
+          "name": "PK 64"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/youtube/v3/liveStreams?part=id,snippet,cdn&mine=true&maxResults=50",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1552,
+        272
+      ],
+      "id": "93ce665c-b649-46e4-a66c-0ae106a9204e",
+      "name": "HTTP Request7",
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "pBEujiww5i8HrlTw",
+          "name": "PK 64"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "update",
+        "videoId": "={{ $('Send Broadcast7').item.json.id }}",
+        "title": "={{ $('Send Broadcast7').item.json.snippet.title }}",
+        "regionCode": "US",
+        "categoryId": "22",
+        "updateFields": {
+          "defaultLanguage": "en",
+          "description": "={{ $('Send Broadcast7').item.json.snippet.description }}",
+          "embeddable": true,
+          "notifySubscribers": true,
+          "privacyStatus": "public",
+          "publicStatsViewable": true
+        }
+      },
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        272
+      ],
+      "id": "6e20d120-f60e-435c-b51b-b0210b0fecce",
+      "name": "Update a video7",
+      "retryOnFail": true,
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "sA6IyD0C46AxPBM6",
+          "name": "PK 58"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date();\n\n// وقت القاهرة \"الوهمي\"\nconst cairoNowFake = new Date(\n  now.toLocaleString(\"en-US\", { timeZone: \"Africa/Cairo\" })\n);\n\n// فرق التوقيت\nconst offsetMs = cairoNowFake.getTime() - now.getTime();\n\n// Formatter\nconst cairoFormatter = new Intl.DateTimeFormat(\"en-GB\", {\n  timeZone: \"Africa/Cairo\",\n  year: \"numeric\",\n  month: \"2-digit\",\n  day: \"2-digit\",\n  hour: \"2-digit\",\n  minute: \"2-digit\",\n  second: \"2-digit\",\n  hour12: false\n});\n\n// نبدأ من الوقت الحالي\nlet targetCairoFake = new Date(cairoNowFake.getTime());\n\n// نحدد أقرب 12 صباحًا (منتصف الليل القادم)\ntargetCairoFake.setDate(targetCairoFake.getDate() + 1);\ntargetCairoFake.setHours(0, 0, 0, 0);\n\n// نحول لـ UTC\nconst targetUtc = new Date(targetCairoFake.getTime() - offsetMs);\n\nreturn [\n  {\n    json: {\n      nowUtcISO: now.toISOString(),\n      nowCairoFormatted: cairoFormatter.format(now),\n\n      nextMidnightCairoFormatted: cairoFormatter.format(targetUtc),\n      next12UtcISO: targetUtc.toISOString(), // 👈 الاسم الجديد\n\n      timezone: \"Africa/Cairo\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1776,
+        272
+      ],
+      "id": "7f9d9bec-dce9-43d3-9f39-04f22fdba07f",
+      "name": "Generete TimeAM4",
+      "retryOnFail": true,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={{ $('Send Broadcast7').item.json.id }}&uploadType=media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "thumbnail",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2640,
+        272
+      ],
+      "id": "3a00f548-056d-427e-b3ff-50e7975fdc6f",
+      "name": "Set YouTube Thumbnail17",
+      "alwaysOutputData": true,
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "sA6IyD0C46AxPBM6",
+          "name": "PK 58"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        272
+      ],
+      "id": "a5326b3d-3429-4538-950e-dcb3b095fa9a",
+      "name": "When clicking ‘Execute workflow’"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Key Stream 7": {
+      "main": [
+        [
+          {
+            "node": "Update a video7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Broadcast7": {
+      "main": [
+        [
+          {
+            "node": "Key Stream 7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request7": {
+      "main": [
+        [
+          {
+            "node": "Generete TimeAM4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a video7": {
+      "main": [
+        [
+          {
+            "node": "Set YouTube Thumbnail17",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generete TimeAM4": {
+      "main": [
+        [
+          {
+            "node": "Send Broadcast7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set YouTube Thumbnail17": {
+      "main": [
+        []
+      ]
+    },
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e1a29292-7c06-4113-84da-c3d6a8afdd85",
+  "meta": {
+    "instanceId": "a07e9bbe3db4c2293adfc62200a36192428b608218f0e47766975243f05e0850"
+  },
+  "id": "J0n2Sr9anoIoLD22",
+  "tags": []
+}

@@ -113,7 +113,28 @@ export async function POST(
       }
     })
 
-    // Call stream manager
+    // If a YouTube channel is bound, create a Live Broadcast and fetch the active stream key
+    let finalStreamKey = slot.streamKey
+    let finalRtmpServer = slot.rtmpServer
+    if (slot.youtubeChannelId && outputType === 'youtube') {
+      try {
+        console.log(`[Start Route] Slot ${slotIndex}: Setting up YouTube Live broadcast...`)
+        const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+        const yt = await setupYoutubeLiveStream(
+          slot.youtubeChannelId,
+          slot.youtubeTitle || 'Live Stream',
+          slot.youtubeDescription || '',
+          slot.youtubeThumbnailPath || undefined
+        )
+        finalStreamKey = yt.streamKey || finalStreamKey
+        finalRtmpServer = yt.rtmpServer || finalRtmpServer
+        console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
+      } catch (ytErr: any) {
+        console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed, falling back to saved stream key:`, ytErr.message)
+      }
+    }
+
+    // Call stream manager — zero-transcode, direct copy only
     try {
       const response = await fetch(`${STREAM_MANAGER_URL}/start`, {
         method: 'POST',
@@ -121,16 +142,9 @@ export async function POST(
         body: JSON.stringify({
           slotIndex,
           outputType,
-          rtmpServer: slot.rtmpServer,
-          streamKey: slot.streamKey,
-          filePath: finalInputPath,
-          muteAudio: slot.muteAudio,
-          audioVolume: slot.audioVolume,
-          audioFilePath: slot.audioFilePath,
-          overlayText: slot.overlayText,
-          overlayTextRight: slot.overlayTextRight,
-          overlayTextLeft: slot.overlayTextLeft,
-          overlayTextEnabled: slot.overlayTextEnabled
+          rtmpServer: finalRtmpServer,
+          streamKey: finalStreamKey,
+          filePath: finalInputPath
         })
       })
 
