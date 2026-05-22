@@ -243,8 +243,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   let startedCount = 0
   let stoppedCount = 0
 
-  // 1) Fetch currently active streams from Stream Manager
+  // 1) Fetch currently active and queued streams from Stream Manager
   let activeInManager: Set<number> = new Set()
+  let queuedInManager: Set<number> = new Set()
   let streamManagerResponded = false
   let streamManagerUptimeMs = Infinity
   let isManagerInStartupGrace = false
@@ -258,6 +259,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       const data = await res.json()
       if (Array.isArray(data.activeStreams)) {
         activeInManager = new Set(data.activeStreams)
+      }
+      if (Array.isArray(data.queuedStreams)) {
+        queuedInManager = new Set(data.queuedStreams)
       }
       if (typeof data.uptimeMs === 'number') {
         streamManagerUptimeMs = data.uptimeMs
@@ -310,7 +314,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     }
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
-    if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex)) {
+    if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
       const missKey = `miss_${slot.slotIndex}`
       const missCount = (missCounters.get(missKey) ?? 0) + 1
       missCounters.set(missKey, missCount)

@@ -17,6 +17,62 @@ const LOGS_DIR = resolve(PROJECT_ROOT, process.env.LOGS_DIR || './data/logs')
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_STREAMS || '500', 10)
 const STAGGER_DELAY_MS = parseInt(process.env.STAGGER_MS || '1000', 10)
 
+// ── Database configuration and update helper ─────────────────
+let dbPath: string | null = null
+
+function getDbPath(): string {
+  if (dbPath) return dbPath
+
+  let resolvedPath = resolve(PROJECT_ROOT, 'prisma/data/app.db')
+  if (process.env.DATABASE_URL) {
+    const rawPath = process.env.DATABASE_URL.replace('file:', '').replace('sqlite:', '')
+    if (rawPath.startsWith('/') || rawPath.includes(':\\') || rawPath.includes(':/')) {
+      resolvedPath = rawPath
+    } else {
+      const prismaDbPath = resolve(PROJECT_ROOT, 'prisma', rawPath)
+      if (existsSync(prismaDbPath)) {
+        resolvedPath = prismaDbPath
+      } else {
+        resolvedPath = resolve(PROJECT_ROOT, rawPath)
+      }
+    }
+  } else {
+    if (!existsSync(resolvedPath)) {
+      resolvedPath = resolve(PROJECT_ROOT, 'data/app.db')
+    }
+  }
+  dbPath = resolvedPath
+  return resolvedPath
+}
+
+async function updateDbSlotStatus(slotIndex: number, isRunning: boolean, status: string) {
+  try {
+    const path = getDbPath()
+    if (!existsSync(path)) {
+      log(`Warning: DB file not found at ${path}, skipping status update.`)
+      return
+    }
+
+    const Database = (await import('better-sqlite3')).default
+    const db = new Database(path)
+
+    // Safeguard: do not overwrite status if it's already 'Scheduled' in DB (due to scheduler stop logic)
+    const current = db.prepare("SELECT status FROM StreamSlot WHERE slotIndex = ?").get(slotIndex) as { status: string } | undefined
+    if (current && current.status === 'Scheduled' && (status === 'Failed' || status === 'Stopped')) {
+      log(`Slot ${slotIndex + 1}: Skipping status update to '${status}' because it is already 'Scheduled' in DB.`)
+      db.close()
+      return
+    }
+
+    db.prepare("UPDATE StreamSlot SET isRunning = ?, status = ? WHERE slotIndex = ?").run(isRunning ? 1 : 0, status, slotIndex)
+    db.close()
+    log(`Slot ${slotIndex + 1}: Updated DB status to isRunning=${isRunning}, status=${status}`)
+  } catch (err) {
+    log(`Failed to update DB slot status for slot ${slotIndex + 1}: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
+
 // ── Boot: ensure dirs ────────────────────────────────────────
 const ALL_DIRS = [
   resolve(PROJECT_ROOT, process.env.APP_DATA_DIR || './data'),
@@ -232,18 +288,22 @@ async function processStaggerQueue() {
   if (isProcessingQueue) return
   isProcessingQueue = true
 
-  // Safely take all current queue items immediately
-  const batch = [...staggerQueue]
-  staggerQueue = []
+  while (staggerQueue.length > 0) {
+    const item = staggerQueue.shift()
+    if (!item) continue
 
-  // Fire them all in a single tick synchronously without any setTimeout
-  for (const item of batch) {
     if (activeStreams.size >= MAX_CONCURRENT) {
       item.resolve({ success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` })
       continue
     }
+
     const result = startStreamImmediate(item.slotIndex, item.rtmpUrl, item.streamKey, item.filePath, item.options)
     item.resolve(result)
+
+    if (staggerQueue.length > 0) {
+      log(`Waiting ${STAGGER_DELAY_MS}ms before starting next stream in queue...`)
+      await new Promise(resolve => setTimeout(resolve, STAGGER_DELAY_MS))
+    }
   }
 
   isProcessingQueue = false
@@ -284,6 +344,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
 
   const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
   if (!isUrl && !existsSync(filePath)) {
+    updateDbSlotStatus(slotIndex, false, 'Failed')
     return { success: false, message: `File not found: ${filePath}` }
   }
 
@@ -327,6 +388,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
       status: 'running'
     }
     activeStreams.set(slotIndex, streamInfo)
+    updateDbSlotStatus(slotIndex, true, 'Streaming')
 
     let stderrBuffer = ''
     ffmpegProcess.stderr?.on('data', (data) => {
@@ -371,12 +433,20 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
           currentRestartCount = 0
         }
 
-        const isUrl = info.filePath.startsWith('rtmp://') || info.filePath.startsWith('rtmps://') || info.filePath.startsWith('http://') || info.filePath.startsWith('https://') || info.filePath.startsWith('rtsp://')
         const maxAttempts = isUrl ? 1000000 : 30
-        const restartDelay = isUrl ? 2000 : 500
 
         if (currentRestartCount < maxAttempts) {
           const nextAttempt = currentRestartCount + 1
+          
+          // Exponential backoff for URLs
+          let restartDelay = 500
+          if (isUrl) {
+            if (nextAttempt === 1) restartDelay = 2000
+            else if (nextAttempt === 2) restartDelay = 5000
+            else if (nextAttempt === 3) restartDelay = 10000
+            else if (nextAttempt === 4) restartDelay = 30000
+            else restartDelay = 60000
+          }
           
           if (!isUrl || nextAttempt % 10 === 0 || nextAttempt === 1) {
             log(`[WATCHDOG] Slot ${slotIndex + 1} crashed/stopped unexpectedly. Restarting in ${restartDelay}ms... (Attempt ${nextAttempt}/${maxAttempts === 1000000 ? 'inf' : maxAttempts})`)
@@ -413,15 +483,18 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
         } else {
           activeStreams.delete(slotIndex)
           log(`[WATCHDOG] Slot ${slotIndex + 1} reached max consecutive restart attempts (${maxAttempts}). Giving up.`)
+          updateDbSlotStatus(slotIndex, false, 'Failed')
         }
       } else {
         activeStreams.delete(slotIndex)
+        updateDbSlotStatus(slotIndex, false, 'Stopped')
       }
     })
 
     ffmpegProcess.on('error', (err) => {
       log(`Slot ${slotIndex + 1} error: ${err.message}`)
       activeStreams.delete(slotIndex)
+      updateDbSlotStatus(slotIndex, false, 'Failed')
     })
 
     const profileLabel = profile === 'copy' ? 'Direct Copy' : 'Transcode'
@@ -429,12 +502,23 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     log(`Failed to start stream for slot ${slotIndex + 1}: ${errorMessage}`)
+    updateDbSlotStatus(slotIndex, false, 'Failed')
     return { success: false, message: `Failed to start: ${errorMessage}` }
   }
 }
 
 // ── Queue a stream for staggered start ───────────────────────
 function startStream(slotIndex: number, rtmpUrl: string, streamKey: string, filePath: string, options?: StreamOptions): { success: boolean; message: string } {
+  const existing = activeStreams.get(slotIndex)
+  if (existing && existing.status !== 'connecting') {
+    return { success: false, message: `Slot ${slotIndex + 1} is already streaming` }
+  }
+
+  const inQueue = staggerQueue.some(item => item.slotIndex === slotIndex)
+  if (inQueue) {
+    return { success: true, message: `Slot ${slotIndex + 1} is already in the start queue` }
+  }
+
   // Fire and forget — resolve immediately with "queued" to avoid blocking Next.js scheduler
   staggerQueue.push({ slotIndex, rtmpUrl, streamKey, filePath, options, resolve: () => {} })
   log(`Slot ${slotIndex + 1} queued async for start (queue position: ${staggerQueue.length})`)
@@ -447,6 +531,15 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
   const stream = activeStreams.get(slotIndex)
 
   if (!stream) {
+    // Check if the slot is in the queue
+    const queuedIndex = staggerQueue.findIndex(item => item.slotIndex === slotIndex)
+    if (queuedIndex >= 0) {
+      const [item] = staggerQueue.splice(queuedIndex, 1)
+      log(`Removed slot ${slotIndex + 1} from stagger queue (cancelled before start)`)
+      updateDbSlotStatus(slotIndex, false, 'Stopped')
+      item.resolve({ success: false, message: `Removed from queue (stopped)` })
+      return { success: true, message: `Slot ${slotIndex + 1}: Stopped (removed from queue)` }
+    }
     return { success: false, message: `Slot ${slotIndex + 1} is not streaming` }
   }
 
@@ -457,6 +550,7 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
       setTimeout(() => { try { stream?.process?.kill('SIGKILL') } catch { } }, 3000)
     }
     activeStreams.delete(slotIndex)
+    updateDbSlotStatus(slotIndex, false, 'Stopped')
     log(`Stopped stream for slot ${slotIndex + 1}`)
     return { success: true, message: `Slot ${slotIndex + 1}: Stopped` }
   } catch (error) {
@@ -468,7 +562,13 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
 // ── Get stream status ────────────────────────────────────────
 function getStreamStatus(slotIndex: number): object {
   const stream = activeStreams.get(slotIndex)
-  if (!stream) return { isRunning: false }
+  if (!stream) {
+    const queuedPos = staggerQueue.findIndex(item => item.slotIndex === slotIndex)
+    if (queuedPos >= 0) {
+      return { isRunning: true, status: 'queued', queuePosition: queuedPos + 1 }
+    }
+    return { isRunning: false }
+  }
 
   const duration = Math.floor((Date.now() - stream.startTime.getTime()) / 1000)
   const msSinceProgress = Date.now() - stream.lastProgressAt.getTime()
@@ -626,10 +726,24 @@ const server = createServer(async (req, res) => {
     // POST /stop-all
     if (pathname === '/stop-all' && req.method === 'POST') {
       const stopped: number[] = []
+      
+      // Clear stagger queue and mark them as Stopped in DB
+      while (staggerQueue.length > 0) {
+        const item = staggerQueue.shift()
+        if (item) {
+          log(`Cancelled queued slot ${item.slotIndex + 1} from stagger queue via stop-all`)
+          updateDbSlotStatus(item.slotIndex, false, 'Stopped')
+          item.resolve({ success: false, message: 'Cancelled via stop-all' })
+          stopped.push(item.slotIndex)
+        }
+      }
+
+      // Stop all running active streams
       for (const [slotIndex] of activeStreams) {
         stopStream(slotIndex)
         stopped.push(slotIndex)
       }
+      
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true, stopped, count: stopped.length }))
       return
@@ -648,6 +762,7 @@ const server = createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({
           activeStreams: active,
+          queuedStreams: staggerQueue.map(item => item.slotIndex),
           count: active.length,
           queueLength: staggerQueue.length,
           uptimeMs,
@@ -709,6 +824,27 @@ function readBody(req: any): Promise<string> {
     req.on('error', reject)
   })
 }
+
+// ── Hung Process Watchdog ────────────────────────────────────
+setInterval(() => {
+  const now = Date.now()
+  for (const [slotIndex, info] of activeStreams) {
+    if (info.process && info.status === 'running') {
+      const msSinceProgress = now - info.lastProgressAt.getTime()
+      const runDurationMs = now - info.startTime.getTime()
+      // If the stream has been running for more than 45 seconds, but has had no progress updates for over 45 seconds:
+      if (runDurationMs > 45000 && msSinceProgress > 45000) {
+        log(`[HUNG WATCHDOG] Slot ${slotIndex + 1} has hung (no progress updates for ${Math.round(msSinceProgress / 1000)}s). Terminating to trigger watchdog recovery...`)
+        try {
+          info.process.kill('SIGTERM')
+          setTimeout(() => { try { info.process?.kill('SIGKILL') } catch {} }, 3000)
+        } catch (e) {
+          log(`Failed to terminate hung process for slot ${slotIndex + 1}: ${e instanceof Error ? e.message : e}`)
+        }
+      }
+    }
+  }
+}, 10000)
 
 // ── Start server with port-in-use guard ──────────────────────
 async function startServer() {

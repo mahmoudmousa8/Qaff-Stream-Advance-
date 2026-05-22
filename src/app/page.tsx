@@ -784,11 +784,28 @@ export default function Home() {
   }
 
   const handleSlotChange = (index: number, field: keyof StreamSlot, value: string | boolean) => {
+    let updates: Partial<StreamSlot> = { [field]: value }
+
+    if (field === 'schedStart') {
+      const slot = slots.find(s => s.slotIndex === index)
+      if (slot) {
+        if (value === '') {
+          updates.schedStop = ''
+        } else if (slot.schedStop && typeof value === 'string' && /^\d{2}-\d{2} \d{2}:\d{2}$/.test(value)) {
+          const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
+          if (durH >= 0 && durM >= 0) {
+            updates.schedStop = buildStopByDuration(value, durH, durM)
+          }
+        }
+      }
+    }
+
     setSlots(prev => prev.map(slot =>
-      slot.slotIndex === index ? { ...slot, [field]: value } : slot
+      slot.slotIndex === index ? { ...slot, ...updates } : slot
     ))
-    updateSlot(index, { [field]: value })
+    updateSlot(index, updates)
   }
+
 
   const handleOutputTypeChange = (slotIndex: number, newType: string) => {
     // When switching to YouTube/Facebook, set the fixed RTMP base

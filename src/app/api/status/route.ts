@@ -7,6 +7,7 @@ export async function GET() {
     try {
         // Get active streams from stream-manager
         let managerActiveSlots: number[] = []
+        let managerQueuedSlots: number[] = []
         let managerReachable = false
 
         try {
@@ -14,6 +15,7 @@ export async function GET() {
             if (res.ok) {
                 const data = await res.json()
                 managerActiveSlots = data.activeStreams || []
+                managerQueuedSlots = data.queuedStreams || []
                 managerReachable = true
             }
         } catch { }
@@ -35,7 +37,7 @@ export async function GET() {
         if (managerReachable) {
             // Fix slots that DB says are running but stream-manager says they are not
             for (const dbSlot of dbRunningSlots) {
-                if (!managerActiveSlots.includes(dbSlot.slotIndex)) {
+                if (!managerActiveSlots.includes(dbSlot.slotIndex) && !managerQueuedSlots.includes(dbSlot.slotIndex)) {
                     await db.streamSlot.update({
                         where: { slotIndex: dbSlot.slotIndex },
                         data: { isRunning: false, status: 'Stopped' }
@@ -53,6 +55,19 @@ export async function GET() {
                         data: { isRunning: true, status: 'Streaming' }
                     })
                     reconciled.push({ slotIndex: activeSlot, action: 'set to streaming (found in manager)' })
+                }
+            }
+
+            // Fix slots that stream-manager says are queued but DB doesn't say are running/starting
+            for (const queuedSlot of managerQueuedSlots) {
+                const dbSlot = dbRunningSlots.find(s => s.slotIndex === queuedSlot)
+                const dbStarting = dbStartingSlots.find(s => s.slotIndex === queuedSlot)
+                if (!dbSlot && !dbStarting) {
+                    await db.streamSlot.update({
+                        where: { slotIndex: queuedSlot },
+                        data: { isRunning: true, status: 'Starting' }
+                    })
+                    reconciled.push({ slotIndex: queuedSlot, action: 'set to starting (found in manager queue)' })
                 }
             }
 

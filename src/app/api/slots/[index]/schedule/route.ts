@@ -31,6 +31,27 @@ export async function POST(
       return NextResponse.json({ error: 'Please fill Stream Key' }, { status: 400 })
     }
 
+    // Check for overlap before scheduling
+    const otherSlots = await db.streamSlot.findMany({
+      where: {
+        slotIndex: { not: slotIndex },
+        OR: [
+          { isScheduled: true },
+          { isRunning: true }
+        ]
+      }
+    })
+
+    const { areSlotsOverlapping } = await import('@/lib/schedule-validator')
+    for (const otherSlot of otherSlots) {
+      if (areSlotsOverlapping(slot, otherSlot, new Date())) {
+        const channelDesc = otherSlot.channelName ? `(${otherSlot.channelName})` : ''
+        return NextResponse.json({
+          error: `عذراً، يوجد تعارض في الجدولة مع البث في السلوت رقم ${otherSlot.slotIndex + 1} ${channelDesc}`
+        }, { status: 400 })
+      }
+    }
+
     const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
 
     const updatedSlot = await db.streamSlot.update({
