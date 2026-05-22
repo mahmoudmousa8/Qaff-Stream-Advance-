@@ -156,27 +156,22 @@ export async function POST(request: NextRequest) {
       }
 
       case 'setTimeAll': {
-        // Set alternating AM/PM schedule for empty slots
-        // slotIndex % 2 === 0 → AM (next midnight 00:00)
-        // slotIndex % 2 === 1 → PM (nearest noon 12:00)
+        const { ampm } = await req.clone().json().catch(() => ({}))
         const now = new Date()
 
         const slots = await db.streamSlot.findMany({
-          where: { schedStart: '' },
           orderBy: { slotIndex: 'asc' }
         })
 
         for (const slot of slots) {
-          const isAM = slot.slotIndex % 2 === 0 // even index → AM
+          const isAM = ampm === 'AM'
 
           let target: Date
           if (isAM) {
-            // Next midnight (always tomorrow at 00:00)
             target = new Date(now)
             target.setDate(target.getDate() + 1)
             target.setHours(0, 0, 0, 0)
           } else {
-            // Nearest noon — today if not yet 12, else tomorrow
             target = new Date(now)
             if (now.getHours() >= 12) {
               target.setDate(target.getDate() + 1)
@@ -197,13 +192,11 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating AM/PM schedule for ${slots.length} empty slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set 12 ${ampm} schedule for all ${slots.length} slots` })
       }
 
       case 'setClosest5MinAll': {
-        // Set alternating AM/PM schedule starting from closest 5 minutes
-        // slotIndex % 2 === 0 → AM
-        // slotIndex % 2 === 1 → PM
+        const { ampm } = await req.clone().json().catch(() => ({}))
         const now = new Date()
         let m = Math.floor(now.getMinutes() / 5) * 5 + 5
         let h = now.getHours()
@@ -215,12 +208,11 @@ export async function POST(request: NextRequest) {
         if (h12 === 0) h12 = 12
 
         const slots = await db.streamSlot.findMany({
-          where: { schedStart: '' },
           orderBy: { slotIndex: 'asc' }
         })
 
         for (const slot of slots) {
-          const isAM = slot.slotIndex % 2 === 0
+          const isAM = ampm === 'AM'
 
           let target = new Date(now)
           target.setMinutes(m, 0, 0)
@@ -248,7 +240,7 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set closest 5-min schedule for ${slots.length} empty slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set closest 5-min ${ampm} schedule for all ${slots.length} slots` })
       }
 
       case 'dailyAll': {
