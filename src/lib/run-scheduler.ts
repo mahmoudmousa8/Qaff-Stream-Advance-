@@ -384,6 +384,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       logs.push(`Slot ${slot.slotIndex + 1}: Crash #${state.crashCount} confirmed. Recovering (backoff level ${state.backoffLevel - 1}, next wait ${Math.round(delay / 1000)}s)`)
 
       try {
+        // Use swapVideoPath for recovery if the stream was swapped — preserves original filePath in DB
+        const recoveryFilePath = (slot.isSwapped && slot.swapVideoPath) ? slot.swapVideoPath : finalInputPath
         const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -392,7 +394,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             outputType: slot.outputType,
             rtmpServer: slot.rtmpServer,
             streamKey: slot.streamKey,
-            filePath: finalInputPath
+            filePath: recoveryFilePath
           })
         }, 5000)
         const data = await res.json()
@@ -421,12 +423,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (stopDate) {
         const msRemaining = stopDate.getTime() - now.getTime()
         const minsRemaining = msRemaining / (1000 * 60)
-        // Adaptive swap threshold: 25% of total duration or 5 minutes minimum, max 10 minutes
-        // This ensures short streams (e.g. 22 min) still get their swap triggered in time
-        const totalDurationMs = stopDate.getTime() - startDate.getTime()
-        const totalDurationMins = totalDurationMs / (1000 * 60)
-        const swapThresholdMins = Math.min(10, Math.max(5, totalDurationMins * 0.25))
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=${swapThresholdMins.toFixed(2)}m, total=${totalDurationMins.toFixed(2)}m`)
+        // Fixed 5-minute swap threshold: always trigger 5 minutes before stop
+        const swapThresholdMins = 5
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=5m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
           logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${slot.swapVideoPath}`)
@@ -458,13 +457,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             const data = await res.json()
             if (res.ok && data.success) {
               // Step 4: ONLY mark isSwapped=true AFTER confirmed success.
-              // Also update filePath so crash-recovery restarts with swap video (not original)
+              // Do NOT update filePath in DB so: (a) next daily/weekly run uses original file,
+              // (b) recovery logic above already handles swapVideoPath via isSwapped check.
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
-                data: {
-                  isSwapped: true,
-                  filePath: slot.swapVideoPath
-                }
+                data: { isSwapped: true }
               })
               logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
             } else {
@@ -526,17 +523,21 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       }
 
       const newStatus = slot.daily || slot.weekly ? 'Scheduled' : 'Stopped'
+      const isRecurring = slot.daily || slot.weekly
       const claimed = await db.streamSlot.updateMany({
         where: { slotIndex: slot.slotIndex, isRunning: true },
         data: {
           isRunning: false,
-          isScheduled: slot.daily || slot.weekly,
+          isScheduled: isRecurring,
           status: newStatus,
           schedStart: nextStartTime,
           schedStop: nextStopTime,
           nextRunTime: nextStartTime,
           isSwapped: false,
-          youtubeBroadcastId: ''
+          youtubeBroadcastId: '',
+          // For one-time streams: lock manuallyStopped=true so orphan recovery won't restart
+          // For daily/weekly streams: keep manuallyStopped=false so next occurrence can run
+          ...(!isRecurring ? { manuallyStopped: true } : {})
         }
       })
       if (claimed.count === 0) continue
@@ -715,9 +716,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       logs.push(`Slot ${slot.slotIndex + 1}: Failed to auto-start (rolled back)`)
     }
 
-    // Brief gap between HTTP sends — stream-manager handles the real 1s stagger internally
+    // 5-second gap between sends to prevent simultaneous streams from interfering.
+    // The stream-manager's internal stagger adds additional delay on top of this.
     if (i < slotsToStart.length - 1) {
-      await new Promise(r => setTimeout(r, 200))
+      await new Promise(r => setTimeout(r, 5000))
     }
   }
 
