@@ -429,26 +429,20 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=${swapThresholdMins.toFixed(2)}m, total=${totalDurationMins.toFixed(2)}m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (10 minutes or less remaining). Swapping to ${slot.swapVideoPath}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${slot.swapVideoPath}`)
 
           try {
-            // First mark as swapped in database to avoid multi-execution on concurrent ticks/workers
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: { isSwapped: true }
-            })
-
-            // Stop current broadcast
+            // Step 1: Stop current broadcast FIRST (before marking swapped to allow retry on failure)
             await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ slotIndex: slot.slotIndex })
             }, 5000)
 
-            // Delay for 1.5 seconds to allow clean FFmpeg processes to stop
+            // Step 2: Wait 1.5s for clean FFmpeg shutdown
             await new Promise(r => setTimeout(r, 1500))
 
-            // Start new broadcast using the swap video path — zero-transcode, direct copy
+            // Step 3: Start the swap video stream
             const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -463,33 +457,32 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
             const data = await res.json()
             if (res.ok && data.success) {
+              // Step 4: ONLY mark isSwapped=true AFTER confirmed success.
+              // Also update filePath so crash-recovery restarts with swap video (not original)
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  isSwapped: true,
+                  filePath: slot.swapVideoPath
+                }
+              })
               logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
             } else {
-              logs.push(`Slot ${slot.slotIndex + 1}: Swap start failed: ${data.error || data.message || 'Unknown'}`)
+              // Start failed — isSwapped stays false so next tick can retry
+              logs.push(`Slot ${slot.slotIndex + 1}: Swap start failed: ${data.error || data.message || 'Unknown'}. Will retry next tick.`)
             }
           } catch (e: any) {
-            logs.push(`Slot ${slot.slotIndex + 1}: Swap process failed: ${e.message || 'Network error'}`)
+            // Exception — isSwapped stays false so next tick can retry
+            logs.push(`Slot ${slot.slotIndex + 1}: Swap process failed: ${e.message || 'Network error'}. Will retry next tick.`)
           }
         }
       }
     }
 
     // ── Auto-Stop ──────────────────────────────────────────
-    // For DUR-format stops (stored as real MM-DD HH:MM after start), use direct time comparison
-    // to avoid jitter causing late stops on short-duration streams.
-    let shouldAutoStop = false
-    if (slot.isRunning && slot.schedStop) {
-      const parsedStopForCheck = parseScheduleTime(slot.schedStop)
-      if (parsedStopForCheck) {
-        const stopDateForCheck = getCairoTargetDate(parsedStopForCheck, now)
-        const diffMs = now.getTime() - stopDateForCheck.getTime()
-        const diffSecs = Math.floor(diffMs / 1000)
-        // Stop if we are past the stop time by 0–5 minutes (300s grace, no jitter for DUR)
-        shouldAutoStop = diffSecs >= 0 && diffSecs <= 300
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Auto-stop check — diffSecs=${diffSecs}, shouldStop=${shouldAutoStop}`)
-      }
-    }
-    if (slot.isRunning && slot.schedStop && shouldAutoStop) {
+    // Uses shouldTrigger() which applies a deterministic jitter (-150s to +150s)
+    // and a 5-minute grace window. This intentional behavior is preserved as-is.
+    if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true)) {
       try {
         await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
           method: 'POST',
