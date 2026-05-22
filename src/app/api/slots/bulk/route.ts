@@ -11,7 +11,8 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'startAll': {
-        // Start all configured slots IN PARALLEL — all fire at the same instant
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
+
         const slots = await db.streamSlot.findMany({
           where: {
             streamKey: { not: '' },
@@ -20,17 +21,30 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // Phase 1: Mark all as "Starting" in DB simultaneously
-        await Promise.all(slots.map(async (slot) => {
-          let updatedSchedStart = slot.schedStart;
-          if (!updatedSchedStart) {
-            const now = new Date();
-            const sMonth = String(now.getMonth() + 1).padStart(2, '0');
-            const sDate = String(now.getDate()).padStart(2, '0');
-            const sH = String(now.getHours()).padStart(2, '0');
-            const sM = String(now.getMinutes()).padStart(2, '0');
-            updatedSchedStart = `${sMonth}-${sDate} ${sH}:${sM}`;
-          }
+        const slotsToSchedule = slots.filter(s => !!s.schedStart)
+        const slotsToStart = slots.filter(s => !s.schedStart)
+
+        // Phase 1: Schedule slots with schedStart
+        for (const slot of slotsToSchedule) {
+          const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              isScheduled: true,
+              status: 'Scheduled',
+              nextRunTime
+            }
+          })
+        }
+
+        // Phase 2: Mark remaining slots as "Starting" in DB simultaneously
+        await Promise.all(slotsToStart.map(async (slot) => {
+          const now = new Date();
+          const sMonth = String(now.getMonth() + 1).padStart(2, '0');
+          const sDate = String(now.getDate()).padStart(2, '0');
+          const sH = String(now.getHours()).padStart(2, '0');
+          const sM = String(now.getMinutes()).padStart(2, '0');
+          const updatedSchedStart = `${sMonth}-${sDate} ${sH}:${sM}`;
 
           let updatedSchedStop = slot.schedStop;
           if (updatedSchedStop && updatedSchedStop.startsWith('DUR ')) {
@@ -51,14 +65,10 @@ export async function POST(request: NextRequest) {
             where: { slotIndex: slot.slotIndex },
             data: { status: 'Starting', isRunning: false, manuallyStopped: false, schedStart: updatedSchedStart, schedStop: updatedSchedStop }
           })
-
-          // Attach resolved times to slot for phase 2
-          ;(slot as any)._resolvedStart = updatedSchedStart
-          ;(slot as any)._resolvedStop = updatedSchedStop
         }))
 
-        // Phase 2: Fire ALL stream-manager start requests simultaneously
-        const results = await Promise.allSettled(slots.map(async (slot) => {
+        // Phase 3: Fire stream-manager start requests simultaneously for slotsToStart
+        const results = await Promise.allSettled(slotsToStart.map(async (slot) => {
           const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -100,9 +110,9 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          count,
+          count: count + slotsToSchedule.length,
           errors: errors.length > 0 ? errors : undefined,
-          message: `Started ${count} slots in parallel`
+          message: `Started ${count} slots, scheduled ${slotsToSchedule.length} slots.`
         })
       }
 
