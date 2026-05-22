@@ -529,15 +529,6 @@ export default function Home() {
     }
   }, [])
 
-  // Auto-fetch stream keys for slots that have a YouTube channel bound
-  useEffect(() => {
-    slots.forEach(slot => {
-      if (slot.youtubeChannelId && !slotStreamKeys[slot.slotIndex] && !slotStreamKeysLoading[slot.slotIndex]) {
-        fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId)
-      }
-    })
-  }, [slots, fetchStreamKeysForSlot, slotStreamKeys, slotStreamKeysLoading])
-
   useEffect(() => {
     if (ytManagerOpen) {
       fetchYtChannels()
@@ -1724,8 +1715,13 @@ export default function Home() {
                                   <option value="">
                                     {slotStreamKeysLoading[slot.slotIndex]
                                       ? (locale === 'ar' ? 'جارٍ التحميل...' : 'Loading...')
-                                      : (locale === 'ar' ? '-- جلب تلقائي --' : '-- Auto-Fetch --')}
+                                      : (locale === 'ar' ? '-- اختر أو جلب --' : '-- Select or fetch --')}
                                   </option>
+                                  {slot.streamKey && (!slotStreamKeys[slot.slotIndex] || !slotStreamKeys[slot.slotIndex].find(k => k.streamKey === slot.streamKey)) && (
+                                    <option value={slot.streamKey}>
+                                      {locale === 'ar' ? '(محفوظ) ' : '(Saved) '} {slot.streamKey.substring(0, 4)}...{slot.streamKey.substring(slot.streamKey.length - 4)}
+                                    </option>
+                                  )}
                                   {(slotStreamKeys[slot.slotIndex] || []).map(k => (
                                     <option key={k.id} value={k.streamKey}>
                                       {k.title}
@@ -2161,7 +2157,14 @@ export default function Home() {
                                     className="h-8 text-xs font-mono border rounded bg-background focus:outline-none cursor-pointer px-2 flex-1 min-w-0"
                                     dir="ltr"
                                   >
-                                    <option value="">{slotStreamKeysLoading[slot.slotIndex] ? 'Loading...' : '-- Auto-Fetch --'}</option>
+                                    <option value="">
+                                      {slotStreamKeysLoading[slot.slotIndex] ? 'Loading...' : '-- Select or fetch --'}
+                                    </option>
+                                    {slot.streamKey && (!slotStreamKeys[slot.slotIndex] || !slotStreamKeys[slot.slotIndex].find(k => k.streamKey === slot.streamKey)) && (
+                                      <option value={slot.streamKey}>
+                                        (Saved) {slot.streamKey.substring(0, 4)}...{slot.streamKey.substring(slot.streamKey.length - 4)}
+                                      </option>
+                                    )}
                                     {(slotStreamKeys[slot.slotIndex] || []).map(k => (
                                       <option key={k.id} value={k.streamKey}>{k.title}</option>
                                     ))}
