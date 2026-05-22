@@ -67,34 +67,42 @@ export async function POST(request: NextRequest) {
           })
         }))
 
-        // Phase 3: Fire stream-manager start requests simultaneously for slotsToStart
-        const results = await Promise.allSettled(slotsToStart.map(async (slot) => {
-          const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              slotIndex: slot.slotIndex,
-              rtmpServer: slot.rtmpServer,
-              streamKey: slot.streamKey,
-              filePath: slot.filePath
+        // Phase 3: Fire stream-manager start requests sequentially with a delay to prevent overwhelming the server
+        const results = []
+        for (const slot of slotsToStart) {
+          try {
+            const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                slotIndex: slot.slotIndex,
+                rtmpServer: slot.rtmpServer,
+                streamKey: slot.streamKey,
+                filePath: slot.filePath
+              })
             })
-          })
-          const result = await response.json()
+            const result = await response.json()
 
-          if (result.success) {
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: { isRunning: true, isScheduled: false, status: 'Streaming' }
-            })
-            return { success: true, slotIndex: slot.slotIndex }
-          } else {
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: { status: 'Failed', isRunning: false }
-            })
-            return { success: false, slotIndex: slot.slotIndex, message: result.message }
+            if (result.success) {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: { isRunning: true, isScheduled: false, status: 'Streaming' }
+              })
+              results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
+            } else {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: { status: 'Failed', isRunning: false }
+              })
+              results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
+            }
+          } catch (error) {
+            results.push({ status: 'rejected', reason: error })
           }
-        }))
+          
+          // Delay to prevent thundering herd
+          await new Promise(resolve => setTimeout(resolve, 3000))
+        }
 
         let count = 0
         const errors: string[] = []
