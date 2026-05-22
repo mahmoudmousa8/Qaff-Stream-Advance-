@@ -1258,29 +1258,14 @@ export default function Home() {
                   onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
                   <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
                 </Button>
-                {/* 12 Group */}
-                <div className="flex bg-muted/50 rounded overflow-hidden border border-primary/20">
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] hover:bg-primary/20 hover:text-primary transition-colors border-r rounded-none"
-                    onClick={() => confirmBulkAction('setTimeAll', locale === 'ar' ? 'ضبط كل القنوات لـ 12 صباحاً؟' : 'Set all to 12 AM?', 'AM')} title="12 ص للكل">
-                    12 ص
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] hover:bg-primary/20 hover:text-primary transition-colors rounded-none"
-                    onClick={() => confirmBulkAction('setTimeAll', locale === 'ar' ? 'ضبط كل القنوات لـ 12 مساءاً؟' : 'Set all to 12 PM?', 'PM')} title="12 م للكل">
-                    12 م
-                  </Button>
-                </div>
-
-                {/* 5 Group */}
-                <div className="flex bg-muted/50 rounded overflow-hidden border border-blue-500/20">
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r rounded-none"
-                    onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'ضبط كل القنوات لـ 5 دقائق صباحاً؟' : 'Set all to 5m AM?', 'AM')} title="5 ص للكل">
-                    5 ص
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 hover:text-blue-500 transition-colors rounded-none"
-                    onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'ضبط كل القنوات لـ 5 دقائق مساءاً؟' : 'Set all to 5m PM?', 'PM')} title="5 م للكل">
-                    5 م
-                  </Button>
-                </div>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('setTimeAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 12؟' : 'Set all slots to nearest 12?')} title={t('setTimeAll')}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 12 للكل' : 'Set 12 All'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400"
+                  onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 5 دقائق؟' : 'Set all slots to closest 5 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 5 للكل' : 'Set 5m All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 5 للكل' : 'Set 5 All'}
+                </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
                   <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}

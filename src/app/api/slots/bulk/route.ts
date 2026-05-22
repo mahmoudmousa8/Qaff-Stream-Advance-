@@ -156,7 +156,6 @@ export async function POST(request: NextRequest) {
       }
 
       case 'setTimeAll': {
-        const { ampm } = await req.clone().json().catch(() => ({}))
         const now = new Date()
 
         const slots = await db.streamSlot.findMany({
@@ -164,7 +163,7 @@ export async function POST(request: NextRequest) {
         })
 
         for (const slot of slots) {
-          const isAM = ampm === 'AM'
+          const isAM = slot.slotIndex % 2 === 0
 
           let target: Date
           if (isAM) {
@@ -192,11 +191,10 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set 12 ${ampm} schedule for all ${slots.length} slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating 12 AM/PM schedule for all ${slots.length} slots` })
       }
 
       case 'setClosest5MinAll': {
-        const { ampm } = await req.clone().json().catch(() => ({}))
         const now = new Date()
         let m = Math.floor(now.getMinutes() / 5) * 5 + 5
         let h = now.getHours()
@@ -212,7 +210,7 @@ export async function POST(request: NextRequest) {
         })
 
         for (const slot of slots) {
-          const isAM = ampm === 'AM'
+          const isAM = slot.slotIndex % 2 === 0
 
           let target = new Date(now)
           target.setMinutes(m, 0, 0)
@@ -240,7 +238,7 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set closest 5-min ${ampm} schedule for all ${slots.length} slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating closest 5-min schedule for all ${slots.length} slots` })
       }
 
       case 'dailyAll': {
