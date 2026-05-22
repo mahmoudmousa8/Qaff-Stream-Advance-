@@ -95,7 +95,26 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   return occurrences
 }
 
+function shareSameDestination(slotA: any, slotB: any): boolean {
+  if (slotA.youtubeChannelId && slotB.youtubeChannelId && slotA.youtubeChannelId === slotB.youtubeChannelId) {
+    return true
+  }
+  if (slotA.streamKey && slotB.streamKey && slotA.streamKey === slotB.streamKey) {
+    const serverA = slotA.rtmpServer || ''
+    const serverB = slotB.rtmpServer || ''
+    if (serverA === serverB) {
+      return true
+    }
+  }
+  return false
+}
+
 export function areSlotsOverlapping(slotA: any, slotB: any, now: Date = new Date()): boolean {
+  // Only validate overlap if they stream to the same destination (channel/key)
+  if (!shareSameDestination(slotA, slotB)) {
+    return false
+  }
+
   const parsedStartA = parseScheduleTime(slotA.schedStart)
   const parsedStopA = slotA.schedStop
   const parsedStartB = parseScheduleTime(slotB.schedStart)
