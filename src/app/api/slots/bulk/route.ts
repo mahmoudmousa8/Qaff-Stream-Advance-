@@ -13,11 +13,23 @@ export async function POST(request: NextRequest) {
       case 'startAll': {
         const { calculateNextRun } = await import('@/lib/timezone-helper')
 
-        const slots = await db.streamSlot.findMany({
+        const allSlots = await db.streamSlot.findMany({
           where: {
-            streamKey: { not: '' },
-            filePath: { not: '' },
             isRunning: false
+          }
+        })
+
+        const slots = allSlots.filter(slot => {
+          if (slot.inputType !== 'live' && !slot.filePath) return false
+
+          const outputType = slot.outputType || 'youtube'
+          if (outputType === 'youtube' || outputType === 'facebook') {
+            const ytId = slot.youtubeChannelId
+            const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+            const hasStreamKey = slot.streamKey && slot.streamKey.trim() !== ''
+            return !!(hasYtChannel || hasStreamKey)
+          } else {
+            return !!(slot.streamKey && slot.streamKey.trim() !== '')
           }
         })
 
@@ -32,10 +44,17 @@ export async function POST(request: NextRequest) {
             data: {
               isScheduled: true,
               status: 'Scheduled',
-              nextRunTime
+              nextRunTime,
+              manuallyStopped: false
             }
           })
         }
+
+        // Fetch client user to get security key for live streaming
+        const clientUser = await db.user.findUnique({
+          where: { username: 'user' }
+        })
+        const securityKey = clientUser?.securityKey || 'qaff-key-123'
 
         // Phase 2: Mark remaining slots as "Starting" in DB simultaneously
         await Promise.all(slotsToStart.map(async (slot) => {
@@ -74,14 +93,53 @@ export async function POST(request: NextRequest) {
         > = []
         for (const slot of slotsToStart) {
           try {
+            let finalInputPath = slot.filePath
+            if (slot.inputType === 'live') {
+              finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+            }
+
+            const outputType = slot.outputType || 'youtube'
+            let finalStreamKey = slot.streamKey
+            let finalRtmpServer = slot.rtmpServer
+            let youtubeBroadcastId = ""
+
+            if (slot.youtubeChannelId && outputType === 'youtube') {
+              try {
+                console.log(`[Bulk Start] Slot ${slot.slotIndex}: Setting up YouTube Live broadcast...`)
+                const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+                const yt = await setupYoutubeLiveStream(
+                  slot.youtubeChannelId,
+                  slot.youtubeTitle || 'Live Stream',
+                  slot.youtubeDescription || '',
+                  slot.youtubeThumbnailPath || undefined,
+                  slot.streamKey
+                )
+                finalStreamKey = yt.streamKey || finalStreamKey
+                finalRtmpServer = yt.rtmpServer || finalRtmpServer
+                youtubeBroadcastId = yt.broadcastId || ""
+              } catch (ytErr: any) {
+                console.error(`[Bulk Start] Slot ${slot.slotIndex}: YouTube setup failed:`, ytErr.message)
+                await db.streamSlot.update({
+                  where: { slotIndex: slot.slotIndex },
+                  data: { status: 'Failed', isRunning: false }
+                })
+                await db.systemLog.create({
+                  data: { message: `Slot ${slot.slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
+                })
+                results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: `YouTube API Error: ${ytErr.message}` } })
+                continue
+              }
+            }
+
             const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 slotIndex: slot.slotIndex,
-                rtmpServer: slot.rtmpServer,
-                streamKey: slot.streamKey,
-                filePath: slot.filePath
+                outputType,
+                rtmpServer: finalRtmpServer,
+                streamKey: finalStreamKey,
+                filePath: finalInputPath
               })
             })
             const result = await response.json()
@@ -89,7 +147,14 @@ export async function POST(request: NextRequest) {
             if (result.success) {
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
-                data: { isRunning: true, isScheduled: false, status: 'Streaming' }
+                data: {
+                  isRunning: true,
+                  isScheduled: false,
+                  status: 'Streaming',
+                  streamKey: finalStreamKey,
+                  rtmpServer: finalRtmpServer,
+                  youtubeBroadcastId
+                }
               })
               results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
             } else {
@@ -99,10 +164,10 @@ export async function POST(request: NextRequest) {
               })
               results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
             }
-          } catch (error) {
+          } catch (error: any) {
             results.push({ status: 'rejected', reason: error })
           }
-          
+
           // Delay to prevent thundering herd
           await new Promise(resolve => setTimeout(resolve, 3000))
         }
@@ -184,38 +249,49 @@ export async function POST(request: NextRequest) {
       }
 
       case 'setTimeAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
         const now = new Date()
+        const cairoNow = getCairoNowFields(now)
 
         const slots = await db.streamSlot.findMany({
           orderBy: { slotIndex: 'asc' }
         })
 
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
         for (const slot of slots) {
           const isAM = slot.slotIndex % 2 === 0
 
-          let target: Date
+          let targetDate: Date
           if (isAM) {
-            target = new Date(now)
-            target.setDate(target.getDate() + 1)
-            target.setHours(0, 0, 0, 0)
+            // 12 AM (00:00) of the next day in Cairo
+            targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + 1, 0, 0, 0)
           } else {
-            target = new Date(now)
-            if (now.getHours() >= 12) {
-              target.setDate(target.getDate() + 1)
+            // 12 PM (12:00) of today or next day in Cairo
+            if (cairoNow.hour >= 12) {
+              targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + 1, 12, 0, 0)
+            } else {
+              targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, 12, 0, 0)
             }
-            target.setHours(12, 0, 0, 0)
           }
 
-          const fmt = (d: Date) =>
-            `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-
-          const startTime = fmt(target)
-          const stopDate = new Date(target.getTime() + 11 * 60 * 60 * 1000 + 45 * 60 * 1000)
-          const stopTime = fmt(stopDate)
+          const startTime = formatCairoDate(targetDate)
+          const stopDate = new Date(targetDate.getTime() + (11 * 60 + 45) * 60 * 1000)
+          const stopTime = formatCairoDate(stopDate)
 
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
-            data: { schedStart: startTime, schedStop: stopTime }
+            data: {
+              schedStart: startTime,
+              schedStop: stopTime,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
           })
         }
 
@@ -223,9 +299,12 @@ export async function POST(request: NextRequest) {
       }
 
       case 'setClosest5MinAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
         const now = new Date()
-        let m = Math.floor(now.getMinutes() / 5) * 5 + 5
-        let h = now.getHours()
+        const cairoNow = getCairoNowFields(now)
+
+        let m = Math.floor(cairoNow.minute / 5) * 5 + 5
+        let h = cairoNow.hour
         if (m >= 60) {
           m -= 60
           h += 1
@@ -237,32 +316,41 @@ export async function POST(request: NextRequest) {
           orderBy: { slotIndex: 'asc' }
         })
 
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
         for (const slot of slots) {
           const isAM = slot.slotIndex % 2 === 0
 
-          let target = new Date(now)
-          target.setMinutes(m, 0, 0)
-          
+          let targetHour = h
           if (isAM) {
-            target.setHours(h12 === 12 ? 0 : h12)
+            targetHour = (h12 === 12 ? 0 : h12)
           } else {
-            target.setHours(h12 === 12 ? 12 : h12 + 12)
+            targetHour = (h12 === 12 ? 12 : h12 + 12)
           }
 
-          if (target.getTime() <= now.getTime()) {
-            target.setDate(target.getDate() + 1)
+          let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, m, 0)
+
+          if (targetDate.getTime() <= now.getTime()) {
+            targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + 1, targetHour, m, 0)
           }
 
-          const fmt = (d: Date) =>
-            `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-
-          const startTime = fmt(target)
-          const stopDate = new Date(target.getTime() + 11 * 60 * 60 * 1000 + 45 * 60 * 1000)
-          const stopTime = fmt(stopDate)
+          const startTime = formatCairoDate(targetDate)
+          const stopDate = new Date(targetDate.getTime() + (11 * 60 + 45) * 60 * 1000)
+          const stopTime = formatCairoDate(stopDate)
 
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
-            data: { schedStart: startTime, schedStop: stopTime }
+            data: {
+              schedStart: startTime,
+              schedStop: stopTime,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
           })
         }
 
@@ -275,6 +363,9 @@ export async function POST(request: NextRequest) {
             schedStart: '',
             schedStop: '',
             isScheduled: false,
+            manuallyStopped: true,
+            nextRunTime: '',
+            status: 'Stopped'
           }
         })
         return NextResponse.json({ success: true, count: result.count, message: `Cleared start and stop times for all slots` })
@@ -291,7 +382,11 @@ export async function POST(request: NextRequest) {
         const result = await db.streamSlot.updateMany({
           data: {
             daily: targetState,
-            weekly: false
+            weekly: false,
+            isScheduled: false,
+            manuallyStopped: true,
+            nextRunTime: '',
+            status: 'Stopped'
           }
         })
 
@@ -334,14 +429,27 @@ export async function POST(request: NextRequest) {
       }
 
       case 'scheduleAll': {
-        // Schedule all configured slots (have key + file + schedStart) that aren't already running
-        const slots = await db.streamSlot.findMany({
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
+
+        const allSlots = await db.streamSlot.findMany({
           where: {
-            streamKey: { not: '' },
-            filePath: { not: '' },
             schedStart: { not: '' },
             isRunning: false,
             isScheduled: false,
+          }
+        })
+
+        const slots = allSlots.filter(slot => {
+          if (slot.inputType !== 'live' && !slot.filePath) return false
+
+          const outputType = slot.outputType || 'youtube'
+          if (outputType === 'youtube' || outputType === 'facebook') {
+            const ytId = slot.youtubeChannelId
+            const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+            const hasStreamKey = slot.streamKey && slot.streamKey.trim() !== ''
+            return !!(hasYtChannel || hasStreamKey)
+          } else {
+            return !!(slot.streamKey && slot.streamKey.trim() !== '')
           }
         })
 
@@ -350,13 +458,19 @@ export async function POST(request: NextRequest) {
 
         for (const slot of slots) {
           try {
+            const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
             await db.streamSlot.update({
               where: { slotIndex: slot.slotIndex },
-              data: { isScheduled: true, status: 'Scheduled' }
+              data: {
+                isScheduled: true,
+                status: 'Scheduled',
+                nextRunTime,
+                manuallyStopped: false
+              }
             })
             count++
-          } catch {
-            errors.push(`Slot ${slot.slotIndex + 1}: Failed to schedule`)
+          } catch (err: any) {
+            errors.push(`Slot ${slot.slotIndex + 1}: Failed to schedule: ${err.message}`)
           }
         }
 

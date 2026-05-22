@@ -21,7 +21,24 @@ export async function PUT(
 
     const proposedSlot = { ...slot, ...updates }
 
-    if (proposedSlot.isScheduled && proposedSlot.schedStart) {
+    const schedulingFields = [
+      'schedStart',
+      'schedStop',
+      'daily',
+      'weekly',
+      'isScheduled',
+      'outputType',
+      'youtubeChannelId',
+      'streamKey',
+      'rtmpServer'
+    ]
+
+    const hasSchedulingChanges = schedulingFields.some(field => {
+      if (!(field in updates)) return false
+      return updates[field] !== (slot as any)[field]
+    })
+
+    if (proposedSlot.isScheduled && proposedSlot.schedStart && hasSchedulingChanges) {
       const otherSlots = await db.streamSlot.findMany({
         where: {
           slotIndex: { not: slotIndex },
@@ -46,9 +63,10 @@ export async function PUT(
     const extraUpdates: any = {}
     if (!slot.isRunning && !updates.isRunning) {
       extraUpdates.manuallyStopped = true
-      if ('schedStart' in updates || 'schedStop' in updates) {
+      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates) {
         extraUpdates.isScheduled = false
         extraUpdates.nextRunTime = ''
+        extraUpdates.status = 'Stopped'
       }
     }
 

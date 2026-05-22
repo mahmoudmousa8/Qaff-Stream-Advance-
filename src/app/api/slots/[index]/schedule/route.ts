@@ -59,7 +59,8 @@ export async function POST(
       data: {
         isScheduled: true,
         status: 'Scheduled',
-        nextRunTime
+        nextRunTime,
+        manuallyStopped: false
       }
     })
 

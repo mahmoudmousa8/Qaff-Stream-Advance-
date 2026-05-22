@@ -95,15 +95,36 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   return occurrences
 }
 
+function isValidDestinationValue(val: any): boolean {
+  if (val === null || val === undefined) return false
+  const s = String(val).trim()
+  if (s === '' || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return false
+  return true
+}
+
 function shareSameDestination(slotA: any, slotB: any): boolean {
-  if (slotA.youtubeChannelId && slotB.youtubeChannelId && slotA.youtubeChannelId === slotB.youtubeChannelId) {
-    return true
+  const typeA = slotA.outputType || 'youtube'
+  const typeB = slotB.outputType || 'youtube'
+  
+  if (typeA !== typeB) {
+    return false
   }
-  if (slotA.streamKey && slotB.streamKey && slotA.streamKey === slotB.streamKey) {
-    const serverA = slotA.rtmpServer || ''
-    const serverB = slotB.rtmpServer || ''
-    if (serverA === serverB) {
+
+  if (typeA === 'youtube') {
+    const ytA = slotA.youtubeChannelId
+    const ytB = slotB.youtubeChannelId
+    if (isValidDestinationValue(ytA) && isValidDestinationValue(ytB) && ytA === ytB) {
       return true
+    }
+  } else if (typeA === 'custom') {
+    const keyA = slotA.streamKey
+    const keyB = slotB.streamKey
+    if (isValidDestinationValue(keyA) && isValidDestinationValue(keyB) && keyA === keyB) {
+      const serverA = (slotA.rtmpServer || '').trim()
+      const serverB = (slotB.rtmpServer || '').trim()
+      if (serverA === serverB) {
+        return true
+      }
     }
   }
   return false

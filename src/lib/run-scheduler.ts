@@ -298,7 +298,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         {
           manuallyStopped: false,
           isRunning: false,
-          streamKey: { not: '' },
           OR: [
             { filePath: { not: '' } },
             { inputType: 'live' }
@@ -548,7 +547,13 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     }
 
     // ── Collect for Sequential Auto-Start ──────────────────
-    if (slot.isScheduled && !slot.isRunning && slot.schedStart && slot.streamKey && (slot.filePath || slot.inputType === 'live')) {
+    const outputType = slot.outputType || 'youtube'
+    const hasDestination = (outputType === 'youtube' || outputType === 'facebook')
+      ? (slot.youtubeChannelId && slot.youtubeChannelId !== 'null' && slot.youtubeChannelId !== 'undefined' && slot.youtubeChannelId.trim() !== '') || (slot.streamKey && slot.streamKey.trim() !== '')
+      : (slot.streamKey && slot.streamKey.trim() !== '')
+    const hasInput = slot.inputType === 'live' || (slot.filePath && slot.filePath.trim() !== '')
+
+    if (slot.isScheduled && !slot.isRunning && slot.schedStart && hasDestination && hasInput) {
       // Exact trigger: within 5 minutes of the exact scheduled start time
       const exactTrigger = shouldTrigger(slot.schedStart, slot.slotIndex, false)
 
@@ -565,7 +570,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     }
 
     // ── Orphaned / Crashed streams recovery (manual Stop guard) ──
-    if (slot.isRunning === false && slot.manuallyStopped === false && (slot.filePath || slot.inputType === 'live') && slot.streamKey) {
+    if (slot.isRunning === false && slot.manuallyStopped === false && hasInput && hasDestination) {
       let shouldRun = false;
       if (!slot.daily && !slot.weekly && !slot.schedStart) {
         // It's a completely manual 24/7 stream. If manuallyStopped is false, it MUST run!

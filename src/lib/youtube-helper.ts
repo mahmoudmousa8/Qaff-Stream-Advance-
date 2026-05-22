@@ -237,7 +237,7 @@ export async function setupYoutubeLiveStream(
       },
       contentDetails: {
         enableAutoStart: true,
-        enableAutoStop: false
+        enableAutoStop: true
       }
     })
   }, 10000)
