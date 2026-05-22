@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   try {
     // Run TTL cleanup periodically (10% chance per request)
     if (Math.random() < 0.1) {
-      cleanupOldLogs()
+      await cleanupOldLogs()
     }
 
     const slotIndexParam = request.nextUrl.searchParams.get('slotIndex')

@@ -46,6 +46,7 @@ function getDbPath(): string {
 }
 
 async function updateDbSlotStatus(slotIndex: number, isRunning: boolean, status: string) {
+  let db: any = null
   try {
     const path = getDbPath()
     if (!existsSync(path)) {
@@ -54,21 +55,27 @@ async function updateDbSlotStatus(slotIndex: number, isRunning: boolean, status:
     }
 
     const Database = (await import('better-sqlite3')).default
-    const db = new Database(path)
+    db = new Database(path)
 
     // Safeguard: do not overwrite status if it's already 'Scheduled' in DB (due to scheduler stop logic)
     const current = db.prepare("SELECT status FROM StreamSlot WHERE slotIndex = ?").get(slotIndex) as { status: string } | undefined
     if (current && current.status === 'Scheduled' && (status === 'Failed' || status === 'Stopped')) {
       log(`Slot ${slotIndex + 1}: Skipping status update to '${status}' because it is already 'Scheduled' in DB.`)
-      db.close()
       return
     }
 
     db.prepare("UPDATE StreamSlot SET isRunning = ?, status = ? WHERE slotIndex = ?").run(isRunning ? 1 : 0, status, slotIndex)
-    db.close()
     log(`Slot ${slotIndex + 1}: Updated DB status to isRunning=${isRunning}, status=${status}`)
   } catch (err) {
     log(`Failed to update DB slot status for slot ${slotIndex + 1}: ${err instanceof Error ? err.message : err}`)
+  } finally {
+    if (db) {
+      try {
+        db.close()
+      } catch (closeErr) {
+        log(`Failed to close DB for slot ${slotIndex + 1}: ${closeErr instanceof Error ? closeErr.message : closeErr}`)
+      }
+    }
   }
 }
 
@@ -889,67 +896,73 @@ async function startServer() {
         const Database = (await import('better-sqlite3')).default
         const db = new Database(dbPath, { readonly: true })
         
-        // Fetch client user to get security key for live streaming
-        let securityKey = 'qaff-key-123'
         try {
-          const clientUser = db.prepare("SELECT securityKey FROM User WHERE username = 'user' LIMIT 1").get() as { securityKey: string } | undefined
-          if (clientUser?.securityKey) {
-            securityKey = clientUser.securityKey
+          // Fetch client user to get security key for live streaming
+          let securityKey = 'qaff-key-123'
+          try {
+            const clientUser = db.prepare("SELECT securityKey FROM User WHERE username = 'user' LIMIT 1").get() as { securityKey: string } | undefined
+            if (clientUser?.securityKey) {
+              securityKey = clientUser.securityKey
+            }
+          } catch (e) {
+            log(`Warning: Failed to fetch client securityKey for live auto-resume: ${e}`)
           }
-        } catch (e) {
-          log(`Warning: Failed to fetch client securityKey for live auto-resume: ${e}`)
-        }
 
-        // Fetch slots where isRunning is true (1)
-        const activeSlots = db.prepare(`
-          SELECT slotIndex, outputType, rtmpServer, streamKey, filePath, inputType 
-          FROM StreamSlot 
-          WHERE isRunning = 1 OR status = 'Live'
-        `).all() as Array<{
-          slotIndex: number
-          outputType: string
-          rtmpServer: string
-          streamKey: string
-          filePath: string
-          inputType: string
-        }>
+          // Fetch slots where isRunning is true (1)
+          const activeSlots = db.prepare(`
+            SELECT slotIndex, outputType, rtmpServer, streamKey, filePath, inputType 
+            FROM StreamSlot 
+            WHERE isRunning = 1 OR status = 'Live'
+          `).all() as Array<{
+            slotIndex: number
+            outputType: string
+            rtmpServer: string
+            streamKey: string
+            filePath: string
+            inputType: string
+          }>
 
-        db.close()
-
-        if (activeSlots.length > 0) {
-          log(`Found ${activeSlots.length} active stream(s) to auto-resume...`)
-          for (const slot of activeSlots) {
-            let finalInputPath = slot.filePath
-            if (slot.inputType === 'live') {
-              finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
-            }
-            const finalRtmp = buildRtmpUrl(slot.outputType, slot.rtmpServer, slot.streamKey, slot.slotIndex)
-
-            // Orphan detection: kill any stale FFmpeg with same streamKey before restarting
-            const orphanPid = findOrphanPid(slot.streamKey)
-            if (orphanPid) {
-              log(`Slot ${slot.slotIndex + 1}: Found orphan FFmpeg (PID ${orphanPid}). Terminating before restart...`)
-              try {
-                process.kill(orphanPid, 'SIGTERM')
-                await new Promise(r => setTimeout(r, 500))
-                try { process.kill(orphanPid, 'SIGKILL') } catch { }
-              } catch { }
-            }
-
-            staggerQueue.push({
-              slotIndex: slot.slotIndex,
-              rtmpUrl: finalRtmp,
-              streamKey: slot.streamKey,
-              filePath: finalInputPath,
-              resolve: (res) => {
-                log(`Auto-resume slot ${slot.slotIndex + 1}: ${res.success ? 'Success' : `Failed (${res.message})`}`)
+          if (activeSlots.length > 0) {
+            log(`Found ${activeSlots.length} active stream(s) to auto-resume...`)
+            for (const slot of activeSlots) {
+              let finalInputPath = slot.filePath
+              if (slot.inputType === 'live') {
+                finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
               }
-            })
+              const finalRtmp = buildRtmpUrl(slot.outputType, slot.rtmpServer, slot.streamKey, slot.slotIndex)
+
+              // Orphan detection: kill any stale FFmpeg with same streamKey before restarting
+              const orphanPid = findOrphanPid(slot.streamKey)
+              if (orphanPid) {
+                log(`Slot ${slot.slotIndex + 1}: Found orphan FFmpeg (PID ${orphanPid}). Terminating before restart...`)
+                try {
+                  process.kill(orphanPid, 'SIGTERM')
+                  await new Promise(r => setTimeout(r, 500))
+                  try { process.kill(orphanPid, 'SIGKILL') } catch { }
+                } catch { }
+              }
+
+              staggerQueue.push({
+                slotIndex: slot.slotIndex,
+                rtmpUrl: finalRtmp,
+                streamKey: slot.streamKey,
+                filePath: finalInputPath,
+                resolve: (res) => {
+                  log(`Auto-resume slot ${slot.slotIndex + 1}: ${res.success ? 'Success' : `Failed (${res.message})`}`)
+                }
+              })
+            }
+            // Kickoff the queue processor
+            processStaggerQueue()
+          } else {
+            log('No active streams found to auto-resume.')
           }
-          // Kickoff the queue processor
-          processStaggerQueue()
-        } else {
-          log('No active streams found to auto-resume.')
+        } finally {
+          try {
+            db.close()
+          } catch (closeErr) {
+            log(`Failed to close readonly DB connection during auto-resume: ${closeErr}`)
+          }
         }
       } else {
         log(`Skipping auto-resume: Database not found at ${dbPath}`)

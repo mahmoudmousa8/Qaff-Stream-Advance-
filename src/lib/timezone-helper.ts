@@ -5,20 +5,22 @@
  * All calculations are timezone-independent of the underlying server OS.
  */
 
+// Shared single instance of Intl.DateTimeFormat for Africa/Cairo timezone to avoid the massive cost of recreating it.
+const cairoFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Africa/Cairo',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+  hour12: false
+});
+
 // Returns the absolute timezone offset of 'Africa/Cairo' for a given absolute date in milliseconds.
 // E.g., +2 hours = 7200000, +3 hours = 10800000.
 export function getCairoOffsetMs(date: Date): number {
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Africa/Cairo',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: false
-  });
-  const parts = formatter.formatToParts(date);
+  const parts = cairoFormatter.formatToParts(date);
   const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
   
   const year = getPart('year');
