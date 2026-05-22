@@ -423,9 +423,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (stopDate) {
         const msRemaining = stopDate.getTime() - now.getTime()
         const minsRemaining = msRemaining / (1000 * 60)
-        // Fixed 5-minute swap threshold: always trigger 5 minutes before stop
-        const swapThresholdMins = 5
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=5m`)
+        // Fixed 20-minute swap threshold: always trigger 20 minutes before stop
+        const swapThresholdMins = 20
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=20m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
           logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${slot.swapVideoPath}`)
