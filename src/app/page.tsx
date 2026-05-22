@@ -1268,7 +1268,7 @@ export default function Home() {
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
                   onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
-                  <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'ضبط البدء والإيقاف (مسح التواريخ)' : 'Clear Times'}
+                  <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'ضبط البدء والإيقاف' : 'Clear Times'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
