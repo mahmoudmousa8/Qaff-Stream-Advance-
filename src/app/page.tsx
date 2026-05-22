@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -296,6 +296,7 @@ export default function Home() {
   const router = useRouter()
   const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
   const [slots, setSlots] = useState<StreamSlot[]>([])
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'scheduled'>('all')
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [autoSave, setAutoSave] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -304,6 +305,12 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [stats, setStats] = useState({ streaming: 0, scheduled: 0, stopped: 0, configured: 0, dailyCount: 0, weeklyCount: 0, renewalDate: null as string | null })
+
+  const filteredSlots = slots.filter(slot => {
+    if (filterStatus === 'active') return slot.isRunning
+    if (filterStatus === 'scheduled') return slot.isScheduled
+    return true
+  })
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: string; onConfirm: () => void } | null>(null)
   const [videoSelectorSlot, setVideoSelectorSlot] = useState<number | null>(null)
   const [videosManagerOpen, setVideosManagerOpen] = useState(false)
@@ -1073,11 +1080,31 @@ export default function Home() {
                 <Image src="/logo-white.png?v=1" unoptimized alt="Qaff Streamer" width={32} height={32} priority className="object-contain hidden dark:block" />
                 <h1 className="text-lg font-bold text-primary">Qaff Streamer</h1>
               </a>
-              <Badge className="bg-green-500 text-white text-xs">
+              <Badge 
+                className={`bg-green-500 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
+                  filterStatus === 'active' 
+                    ? 'ring-2 ring-green-500 ring-offset-1 ring-offset-background font-bold scale-[1.03] shadow-md shadow-green-500/20' 
+                    : filterStatus !== 'all' 
+                      ? 'opacity-40 hover:opacity-80' 
+                      : 'hover:opacity-90'
+                }`}
+                onClick={() => setFilterStatus(prev => prev === 'active' ? 'all' : 'active')}
+                title={locale === 'ar' ? 'تصفية البثوث النشطة' : 'Filter active streams'}
+              >
                 <Play className="w-3 h-3 mr-1" />
                 {stats.streaming} {t('active')}
               </Badge>
-              <Badge className="bg-orange-500 text-white text-xs">
+              <Badge 
+                className={`bg-orange-500 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
+                  filterStatus === 'scheduled' 
+                    ? 'ring-2 ring-orange-500 ring-offset-1 ring-offset-background font-bold scale-[1.03] shadow-md shadow-orange-500/20' 
+                    : filterStatus !== 'all' 
+                      ? 'opacity-40 hover:opacity-80' 
+                      : 'hover:opacity-90'
+                }`}
+                onClick={() => setFilterStatus(prev => prev === 'scheduled' ? 'all' : 'scheduled')}
+                title={locale === 'ar' ? 'تصفية البثوث المجدولة' : 'Filter scheduled streams'}
+              >
                 <Calendar className="w-3 h-3 mr-1" />
                 {stats.scheduled} {t('scheduled')}
               </Badge>
@@ -1490,14 +1517,31 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <CardTitle className="text-base">{t('slots')}</CardTitle>
-                  <div className="relative font-normal">
-                    <Search className="w-4 h-4 absolute inset-y-0 start-2 my-auto text-muted-foreground" />
-                    <Input 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder={locale === 'ar' ? 'بحث في الملاحظات...' : 'Search notes...'}
-                      className="h-7 w-[200px] ps-8 text-xs focus-visible:ring-1"
-                    />
+                  <div className="relative font-normal flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="w-4 h-4 absolute inset-y-0 start-2 my-auto text-muted-foreground" />
+                      <Input 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder={locale === 'ar' ? 'بحث في الملاحظات...' : 'Search notes...'}
+                        className="h-7 w-[200px] ps-8 text-xs focus-visible:ring-1"
+                      />
+                    </div>
+                    {filterStatus !== 'all' && (
+                      <Badge 
+                        variant="secondary" 
+                        className={`h-7 px-2 cursor-pointer transition-all hover:bg-destructive/15 hover:text-destructive flex items-center gap-1 text-[11px] border border-dashed select-none shrink-0 ${
+                          filterStatus === 'active' 
+                            ? 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400' 
+                            : 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                        }`}
+                        onClick={() => setFilterStatus('all')}
+                        title={locale === 'ar' ? 'إزالة التصفية' : 'Clear filter'}
+                      >
+                        <span>{filterStatus === 'active' ? (locale === 'ar' ? 'نشط فقط' : 'Active Only') : (locale === 'ar' ? 'مجدول فقط' : 'Scheduled Only')}</span>
+                        <X className="w-3 h-3 ml-0.5" />
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1544,7 +1588,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {slots.map((slot) => {
+                    {filteredSlots.map((slot) => {
                       const outputType = slot.outputType || 'youtube'
                       const isYtFb = outputType === 'youtube' || outputType === 'facebook'
                       const rtmpBase = RTMP_BASES[outputType] || ''
@@ -1894,7 +1938,7 @@ export default function Home() {
                 </table>
 
                 {/* Empty state – desktop */}
-                {!loading && slots.length === 0 && (
+                {!loading && filteredSlots.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
                     <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
                       <Search className="w-8 h-8 text-muted-foreground/50" />
@@ -1903,13 +1947,23 @@ export default function Home() {
                       {locale === 'ar' ? 'لا توجد نتائج' : 'No slots found'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {debouncedSearchQuery
-                        ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
-                        : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
+                      {filterStatus !== 'all' 
+                        ? (locale === 'ar' 
+                            ? `لا توجد قنوات ${filterStatus === 'active' ? 'نشطة' : 'مجدولة'} مطابقة للتصفية` 
+                            : `No ${filterStatus === 'active' ? 'active' : 'scheduled'} channels matching the filter`)
+                        : debouncedSearchQuery
+                          ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
+                          : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
                     </p>
-                    {debouncedSearchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
-                        {locale === 'ar' ? 'مسح البحث' : 'Clear search'}
+                    {(debouncedSearchQuery || filterStatus !== 'all') && (
+                      <button 
+                        onClick={() => {
+                          setSearchQuery('');
+                          setFilterStatus('all');
+                        }} 
+                        className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                      >
+                        {locale === 'ar' ? 'تهيئة الفلاتر والبحث' : 'Reset filters and search'}
                       </button>
                     )}
                   </div>
@@ -1929,7 +1983,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                ) : slots.length === 0 ? (
+                ) : filteredSlots.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-20 gap-3 text-center p-6">
                     <div className="w-16 h-16 rounded-full bg-muted/60 flex items-center justify-center">
                       <Search className="w-8 h-8 text-muted-foreground/50" />
@@ -1938,19 +1992,29 @@ export default function Home() {
                       {locale === 'ar' ? 'لا توجد نتائج' : 'No slots found'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {debouncedSearchQuery
-                        ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
-                        : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
+                      {filterStatus !== 'all' 
+                        ? (locale === 'ar' 
+                            ? `لا توجد قنوات ${filterStatus === 'active' ? 'نشطة' : 'مجدولة'} مطابقة للتصفية` 
+                            : `No ${filterStatus === 'active' ? 'active' : 'scheduled'} channels matching the filter`)
+                        : debouncedSearchQuery
+                          ? (locale === 'ar' ? `لا يوجد شيء يطابق "${debouncedSearchQuery}"` : `Nothing matched "${debouncedSearchQuery}"`)
+                          : (locale === 'ar' ? 'لا توجد قنوات مضافة بعد' : 'No channels configured yet')}
                     </p>
-                    {debouncedSearchQuery && (
-                      <button onClick={() => setSearchQuery('')} className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors">
-                        {locale === 'ar' ? 'مسح البحث' : 'Clear search'}
+                    {(debouncedSearchQuery || filterStatus !== 'all') && (
+                      <button 
+                        onClick={() => {
+                          setSearchQuery('');
+                          setFilterStatus('all');
+                        }} 
+                        className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                      >
+                        {locale === 'ar' ? 'تهيئة الفلاتر والبحث' : 'Reset filters and search'}
                       </button>
                     )}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
-                    {slots.map((slot) => {
+                    {filteredSlots.map((slot) => {
                       const outputType = slot.outputType || 'youtube'
                       const isYtFb = outputType === 'youtube' || outputType === 'facebook'
                       const rtmpBase = RTMP_BASES[outputType] || ''

@@ -17,9 +17,20 @@ const cairoFormatter = new Intl.DateTimeFormat('en-US', {
   hour12: false
 });
 
+// Cache for timezone offsets to prevent massive performance penalty of Intl formatting in loop operations.
+// The key is the UTC timestamp rounded to the hour (since timezone offsets only change on DST transition boundaries, usually on hour/day boundary).
+const offsetCache = new Map<number, number>();
+
 // Returns the absolute timezone offset of 'Africa/Cairo' for a given absolute date in milliseconds.
 // E.g., +2 hours = 7200000, +3 hours = 10800000.
 export function getCairoOffsetMs(date: Date): number {
+  const timeMs = date.getTime();
+  const hourTimestamp = Math.floor(timeMs / 3600000);
+  
+  if (offsetCache.has(hourTimestamp)) {
+    return offsetCache.get(hourTimestamp)!;
+  }
+
   const parts = cairoFormatter.formatToParts(date);
   const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
   
@@ -33,7 +44,15 @@ export function getCairoOffsetMs(date: Date): number {
   const localUtc = Date.UTC(year, month, day, hour, minute, second);
   // Round to nearest second to eliminate sub-millisecond floating point noise
   // (Intl only has second-level resolution, so the raw diff may have fractional ms)
-  return Math.round((localUtc - date.getTime()) / 1000) * 1000;
+  const offset = Math.round((localUtc - timeMs) / 1000) * 1000;
+
+  // Prevent memory leaks in long-running processes by capping cache size
+  if (offsetCache.size > 10000) {
+    offsetCache.clear();
+  }
+  offsetCache.set(hourTimestamp, offset);
+
+  return offset;
 }
 
 // Converts Cairo local datetime components (year, month (0-indexed), day, hour, minute, second)
