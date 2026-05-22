@@ -43,7 +43,11 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   
   const occurrences: { start: Date, end: Date }[] = []
 
-  while (currentDayDate.getTime() <= windowEnd.getTime()) {
+  let loopCount = 0
+  const maxIterations = 500 // Safety guard against infinite loops
+
+  while (currentDayDate.getTime() <= windowEnd.getTime() && loopCount < maxIterations) {
+    loopCount++
     const currentFields = getCairoNowFields(currentDayDate)
     
     let shouldInclude = false
@@ -73,9 +77,19 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
     }
 
     // Advance to next day safely (28 hours ensures we cross midnight/DST boundary)
+    const prevTime = currentDayDate.getTime()
     currentDayDate = new Date(currentDayDate.getTime() + 28 * 60 * 60 * 1000)
     const nextFields = getCairoNowFields(currentDayDate)
     currentDayDate = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, 0, 0, 0)
+
+    // Safety check: ensure currentDayDate strictly increases in every iteration to prevent infinite loop.
+    if (currentDayDate.getTime() <= prevTime) {
+      currentDayDate = new Date(prevTime + 24 * 60 * 60 * 1000)
+    }
+  }
+
+  if (loopCount >= maxIterations) {
+    console.warn(`[getOccurrences] Reached maxIterations (${maxIterations}) guard for slot:`, slot)
   }
 
   return occurrences

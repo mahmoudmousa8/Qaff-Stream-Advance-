@@ -68,7 +68,10 @@ export async function POST(request: NextRequest) {
         }))
 
         // Phase 3: Fire stream-manager start requests sequentially with a delay to prevent overwhelming the server
-        const results = []
+        const results: Array<
+          | { status: 'fulfilled'; value: { success: boolean; slotIndex: number; message?: string } }
+          | { status: 'rejected'; reason: any }
+        > = []
         for (const slot of slotsToStart) {
           try {
             const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {

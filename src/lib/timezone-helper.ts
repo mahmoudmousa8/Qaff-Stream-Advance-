@@ -25,26 +25,55 @@ const offsetCache = new Map<number, number>();
 // E.g., +2 hours = 7200000, +3 hours = 10800000.
 export function getCairoOffsetMs(date: Date): number {
   const timeMs = date.getTime();
+  if (isNaN(timeMs)) {
+    return 2 * 3600000; // Fallback to standard Cairo offset (UTC+2) if date is invalid
+  }
   const hourTimestamp = Math.floor(timeMs / 3600000);
   
   if (offsetCache.has(hourTimestamp)) {
     return offsetCache.get(hourTimestamp)!;
   }
 
-  const parts = cairoFormatter.formatToParts(date);
-  const getPart = (type: string) => parseInt(parts.find(p => p.type === type)?.value || '0', 10);
-  
-  const year = getPart('year');
-  const month = getPart('month') - 1; // 0-indexed
-  const day = getPart('day');
-  const hour = getPart('hour');
-  const minute = getPart('minute');
-  const second = getPart('second');
-  
-  const localUtc = Date.UTC(year, month, day, hour, minute, second);
-  // Round to nearest second to eliminate sub-millisecond floating point noise
-  // (Intl only has second-level resolution, so the raw diff may have fractional ms)
-  const offset = Math.round((localUtc - timeMs) / 1000) * 1000;
+  let offset: number;
+  try {
+    const parts = cairoFormatter.formatToParts(date);
+    const getPart = (type: string) => {
+      const val = parts.find(p => p.type === type)?.value;
+      return val ? parseInt(val, 10) : NaN;
+    };
+    
+    const year = getPart('year');
+    const month = getPart('month') - 1; // 0-indexed
+    const day = getPart('day');
+    const hour = getPart('hour');
+    const minute = getPart('minute');
+    const second = getPart('second');
+
+    if (
+      isNaN(year) || year < 1970 ||
+      isNaN(month) || month < 0 || month > 11 ||
+      isNaN(day) || day < 1 || day > 31 ||
+      isNaN(hour) || hour < 0 || hour > 23 ||
+      isNaN(minute) || minute < 0 || minute > 59 ||
+      isNaN(second) || second < 0 || second > 59
+    ) {
+      throw new Error('Invalid date parts parsed from cairoFormatter');
+    }
+    
+    const localUtc = Date.UTC(year, month, day, hour, minute, second);
+    offset = Math.round((localUtc - timeMs) / 1000) * 1000;
+
+    // Cairo offsets should always be UTC+2 or UTC+3 (+7200000 or +10800000 ms)
+    // We allow a range of 1.5 to 3.5 hours for sanity check.
+    if (offset < 1.5 * 3600000 || offset > 3.5 * 3600000) {
+      throw new Error(`Cairo offset ${offset} is outside expected range`);
+    }
+  } catch (err) {
+    // Fallback to approximate Egypt DST rule:
+    // DST: May (4) to October (9) is UTC+3 (10800000 ms), otherwise UTC+2 (7200000 ms)
+    const utcMonth = date.getUTCMonth();
+    offset = (utcMonth >= 4 && utcMonth <= 9) ? 3 * 3600000 : 2 * 3600000;
+  }
 
   // Prevent memory leaks in long-running processes by capping cache size
   if (offsetCache.size > 10000) {
