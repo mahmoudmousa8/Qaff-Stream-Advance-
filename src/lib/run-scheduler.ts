@@ -421,8 +421,13 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (stopDate) {
         const msRemaining = stopDate.getTime() - now.getTime()
         const minsRemaining = msRemaining / (1000 * 60)
-        // Trigger swap if 10 minutes or less remain (and stop time is in the future)
-        if (minsRemaining <= 10 && minsRemaining > 0) {
+        // Adaptive swap threshold: 25% of total duration or 5 minutes minimum, max 10 minutes
+        // This ensures short streams (e.g. 22 min) still get their swap triggered in time
+        const totalDurationMs = stopDate.getTime() - startDate.getTime()
+        const totalDurationMins = totalDurationMs / (1000 * 60)
+        const swapThresholdMins = Math.min(10, Math.max(5, totalDurationMins * 0.25))
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=${swapThresholdMins.toFixed(2)}m, total=${totalDurationMins.toFixed(2)}m`)
+        if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
           logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (10 minutes or less remaining). Swapping to ${slot.swapVideoPath}`)
 
@@ -470,7 +475,21 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     }
 
     // ── Auto-Stop ──────────────────────────────────────────
-    if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true)) {
+    // For DUR-format stops (stored as real MM-DD HH:MM after start), use direct time comparison
+    // to avoid jitter causing late stops on short-duration streams.
+    let shouldAutoStop = false
+    if (slot.isRunning && slot.schedStop) {
+      const parsedStopForCheck = parseScheduleTime(slot.schedStop)
+      if (parsedStopForCheck) {
+        const stopDateForCheck = getCairoTargetDate(parsedStopForCheck, now)
+        const diffMs = now.getTime() - stopDateForCheck.getTime()
+        const diffSecs = Math.floor(diffMs / 1000)
+        // Stop if we are past the stop time by 0–5 minutes (300s grace, no jitter for DUR)
+        shouldAutoStop = diffSecs >= 0 && diffSecs <= 300
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Auto-stop check — diffSecs=${diffSecs}, shouldStop=${shouldAutoStop}`)
+      }
+    }
+    if (slot.isRunning && slot.schedStop && shouldAutoStop) {
       try {
         await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
           method: 'POST',
