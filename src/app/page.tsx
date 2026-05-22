@@ -319,6 +319,7 @@ export default function Home() {
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [channelLogs, setChannelLogs] = useState<ChannelLogsState | null>(null)
   const channelLogsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const channelLogsAbortControllerRef = useRef<AbortController | null>(null)
   const [serverTime, setServerTime] = useState<string>('')
 
   // Admin client settings state
@@ -489,12 +490,12 @@ export default function Home() {
   }, [])
 
   // Fetch YouTube stream keys for a given channel (used in settings dialog dropdown)
-  const fetchYtStreamKeys = useCallback(async (channelId: string) => {
+  const fetchYtStreamKeys = useCallback(async (channelId: string, force = false) => {
     if (!channelId) { setYtStreamKeys([]); return }
     setYtStreamKeysLoading(true)
     setYtStreamKeysError('')
     try {
-      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}`)
+      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}${force ? '&force=true' : ''}`)
       const data = await res.json()
       if (data.success) {
         setYtStreamKeys(data.streamKeys || [])
@@ -512,11 +513,11 @@ export default function Home() {
   }, [])
 
   // Fetch YouTube stream keys for a specific slot index (used in main table row)
-  const fetchStreamKeysForSlot = useCallback(async (slotIndex: number, channelId: string) => {
+  const fetchStreamKeysForSlot = useCallback(async (slotIndex: number, channelId: string, force = false) => {
     if (!channelId) return
     setSlotStreamKeysLoading(prev => ({ ...prev, [slotIndex]: true }))
     try {
-      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}`)
+      const res = await fetch(`/api/youtube/streams?channelId=${encodeURIComponent(channelId)}${force ? '&force=true' : ''}`)
       const data = await res.json()
       if (data.success) {
         setSlotStreamKeys(prev => ({ ...prev, [slotIndex]: data.streamKeys || [] }))
@@ -974,33 +975,64 @@ export default function Home() {
     }
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Per-channel Logs Panel Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ── Per-channel Logs Panel ───────────────────────────────────
   const openChannelLogs = async (slotIndex: number) => {
+    if (channelLogsAbortControllerRef.current) {
+      channelLogsAbortControllerRef.current.abort()
+    }
+    channelLogsAbortControllerRef.current = new AbortController()
+    const initialSignal = channelLogsAbortControllerRef.current.signal
+
     setChannelLogs({ slotIndex, logs: [], ramPercent: 0, bitrateMbps: 0, loading: true })
 
     const refresh = async () => {
-      try {
-        const [logsRes, ramRes, bitrateRes] = await Promise.all([
-          fetch(`/api/logs?slotIndex=${slotIndex}`),
-          fetch('/api/stats/ram'),
-          fetch(`/api/stats/bitrate?slotIndex=${slotIndex}`)
-        ])
-        const [logsData, ramData, bitrateData] = await Promise.all([
-          logsRes.json(), ramRes.json(), bitrateRes.json()
-        ])
-        setChannelLogs(prev => prev?.slotIndex === slotIndex ? {
-          ...prev,
-          logs: logsData.logs || [],
-          ramPercent: ramData.usedPercent || 0,
-          bitrateMbps: bitrateData.bitrateMbps || 0,
-          loading: false
-        } : prev)
-      } catch {
-        setChannelLogs(prev => prev ? { ...prev, loading: false } : null)
+      // Abort previous requests if they are still running
+      if (channelLogsAbortControllerRef.current) {
+        channelLogsAbortControllerRef.current.abort()
       }
+      const newController = new AbortController()
+      channelLogsAbortControllerRef.current = newController
+      const sig = newController.signal
+
+      // 1. Fetch system logs (primary display)
+      fetch(`/api/logs?slotIndex=${slotIndex}`, { signal: sig })
+        .then(res => res.json())
+        .then(logsData => {
+          setChannelLogs(prev => prev?.slotIndex === slotIndex ? {
+            ...prev,
+            logs: logsData.logs || [],
+            loading: false
+          } : prev)
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return
+          setChannelLogs(prev => prev ? { ...prev, loading: false } : null)
+        })
+
+      // 2. Fetch RAM usage (secondary, non-blocking)
+      fetch('/api/stats/ram', { signal: sig })
+        .then(res => res.json())
+        .then(ramData => {
+          setChannelLogs(prev => prev?.slotIndex === slotIndex ? {
+            ...prev,
+            ramPercent: ramData.usedPercent || 0
+          } : prev)
+        })
+        .catch(() => {})
+
+      // 3. Fetch channel bitrate (secondary, non-blocking)
+      fetch(`/api/stats/bitrate?slotIndex=${slotIndex}`, { signal: sig })
+        .then(res => res.json())
+        .then(bitrateData => {
+          setChannelLogs(prev => prev?.slotIndex === slotIndex ? {
+            ...prev,
+            bitrateMbps: bitrateData.bitrateMbps || 0
+          } : prev)
+        })
+        .catch(() => {})
     }
 
-    await refresh()
+    refresh()
 
     if (channelLogsIntervalRef.current) clearInterval(channelLogsIntervalRef.current)
     channelLogsIntervalRef.current = setInterval(refresh, 3000)
@@ -1008,6 +1040,10 @@ export default function Home() {
 
   const closeChannelLogs = () => {
     if (channelLogsIntervalRef.current) { clearInterval(channelLogsIntervalRef.current); channelLogsIntervalRef.current = null }
+    if (channelLogsAbortControllerRef.current) {
+      channelLogsAbortControllerRef.current.abort()
+      channelLogsAbortControllerRef.current = null
+    }
     setChannelLogs(null)
   }
 
@@ -1699,7 +1735,7 @@ export default function Home() {
                                 <button
                                   type="button"
                                   disabled={isLocked || slotStreamKeysLoading[slot.slotIndex]}
-                                  onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!)}
+                                  onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!, true)}
                                   className="h-6 w-6 flex items-center justify-center rounded border bg-muted/30 hover:bg-muted transition-all text-xs shrink-0 disabled:opacity-50"
                                   title={locale === 'ar' ? 'تحديث مفاتيح البث' : 'Refresh Stream Keys'}
                                 >
@@ -2133,7 +2169,7 @@ export default function Home() {
                                   <button
                                     type="button"
                                     disabled={isLocked || slotStreamKeysLoading[slot.slotIndex]}
-                                    onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!)}
+                                    onClick={() => fetchStreamKeysForSlot(slot.slotIndex, slot.youtubeChannelId!, true)}
                                     className="h-8 w-8 flex items-center justify-center rounded border bg-muted/30 hover:bg-muted transition-all text-sm shrink-0 disabled:opacity-50"
                                     title="Refresh Stream Keys"
                                   >
@@ -2725,7 +2761,7 @@ export default function Home() {
                             </label>
                             <button
                               type="button"
-                              onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId)}
+                              onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
                               disabled={ytStreamKeysLoading}
                               className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
                             >

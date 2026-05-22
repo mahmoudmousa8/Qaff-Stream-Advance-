@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
 
     try {
         const res = await fetch(`${STREAM_MANAGER_URL}/stats/ram`, {
-            cache: 'no-store'
+            cache: 'no-store',
+            signal: AbortSignal.timeout(2000)
         })
         const data = await res.json()
         return NextResponse.json(data)
