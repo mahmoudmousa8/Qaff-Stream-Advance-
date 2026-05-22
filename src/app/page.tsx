@@ -1266,6 +1266,10 @@ export default function Home() {
                   onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 5 دقائق؟' : 'Set all slots to closest 5 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 5 للكل' : 'Set 5m All'}>
                   <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 5 للكل' : 'Set 5 All'}
                 </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 hover:text-white hover:bg-red-600"
+                  onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'مسح تواريخ البدء والإيقاف' : 'Clear Times'}
+                </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
                   <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}

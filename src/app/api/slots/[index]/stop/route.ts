@@ -23,6 +23,19 @@ export async function POST(
       return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
     }
 
+    const updatedSlot = await db.streamSlot.update({
+      where: { slotIndex },
+      data: {
+        isRunning: false,
+        manuallyStopped: true,
+        isScheduled: false,
+        status: 'Stopped',
+        nextRunTime: '',
+        isSwapped: false,
+        youtubeBroadcastId: ""
+      }
+    })
+
     // Call stream-manager to stop FFmpeg
     try {
       await fetch(`${STREAM_MANAGER_URL}/stop`, {
@@ -42,19 +55,6 @@ export async function POST(
         console.error(`[Stop Route] YouTube stop failed:`, ytErr.message)
       }
     }
-
-    const updatedSlot = await db.streamSlot.update({
-      where: { slotIndex },
-      data: {
-        isRunning: false,
-        manuallyStopped: true,
-        isScheduled: false,
-        status: 'Stopped',
-        nextRunTime: '',
-        isSwapped: false,
-        youtubeBroadcastId: ""
-      }
-    })
 
     return NextResponse.json({
       success: true,

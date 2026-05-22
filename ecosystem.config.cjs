@@ -78,6 +78,8 @@ const apps = [
       // Stream Manager
       STREAM_MANAGER_URL:  process.env.STREAM_MANAGER_URL  || 'http://127.0.0.1:3002',
       STREAM_MANAGER_PORT: process.env.STREAM_MANAGER_PORT || '3002',
+      MAX_CONCURRENT_STREAMS: process.env.MAX_CONCURRENT_STREAMS || '500',
+      STAGGER_MS: process.env.STAGGER_MS || '1000',
     },
     error_file: path.join(LOGS_DIR, 'web-error.log'),
     out_file: path.join(LOGS_DIR, 'web-out.log'),

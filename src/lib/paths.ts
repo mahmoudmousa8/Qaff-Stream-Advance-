@@ -23,7 +23,7 @@ export const LOGS_DIR = resolve('LOGS_DIR', './data/logs')
 // ── Service Config ───────────────────────────────────────────────
 export const STREAM_MANAGER_URL = process.env.STREAM_MANAGER_URL || 'http://127.0.0.1:3002'
 export const STREAM_MANAGER_PORT = parseInt(process.env.STREAM_MANAGER_PORT || '3002', 10)
-export const MAX_CONCURRENT_STREAMS = parseInt(process.env.MAX_CONCURRENT_STREAMS || '10', 10)
+export const MAX_CONCURRENT_STREAMS = parseInt(process.env.MAX_CONCURRENT_STREAMS || '500', 10)
 export const STAGGER_MS = parseInt(process.env.STAGGER_MS || '1000', 10)
 
 // ── Utility ──────────────────────────────────────────────────────

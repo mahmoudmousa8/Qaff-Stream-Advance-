@@ -129,6 +129,25 @@ export async function POST(request: NextRequest) {
 
 
       case 'stopAll': {
+        const result = await db.streamSlot.updateMany({
+          where: {
+            OR: [
+              { isRunning: true },
+              { status: 'Starting' },
+              { status: 'connecting' },
+              { isScheduled: true }
+            ]
+          },
+          data: {
+            isRunning: false,
+            isScheduled: false,
+            manuallyStopped: true,
+            status: 'Stopped',
+            nextRunTime: '',
+            youtubeBroadcastId: ''
+          }
+        })
+
         // Stop all via stream manager first
         try {
           await fetch(`${BULK_STREAM_MANAGER}/stop-all`, {
@@ -160,18 +179,6 @@ export async function POST(request: NextRequest) {
             // Non-fatal — continue with DB update
           }
         }
-
-        const result = await db.streamSlot.updateMany({
-          where: { isRunning: true },
-          data: {
-            isRunning: false,
-            isScheduled: false,
-            manuallyStopped: true,
-            status: 'Stopped',
-            nextRunTime: '',
-            youtubeBroadcastId: ''
-          }
-        })
 
         return NextResponse.json({ success: true, count: result.count, message: `Stopped ${result.count} slots` })
       }
@@ -260,6 +267,17 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ success: true, count: slots.length, message: `Set alternating closest 5-min schedule for all ${slots.length} slots` })
+      }
+
+      case 'clearTimesAll': {
+        const result = await db.streamSlot.updateMany({
+          data: {
+            schedStart: '',
+            schedStop: '',
+            isScheduled: false,
+          }
+        })
+        return NextResponse.json({ success: true, count: result.count, message: `Cleared start and stop times for all slots` })
       }
 
       case 'dailyAll': {
