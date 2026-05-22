@@ -43,9 +43,21 @@ export async function PUT(
       }
     }
 
+    const extraUpdates: any = {}
+    if (!slot.isRunning && !updates.isRunning) {
+      extraUpdates.manuallyStopped = true
+      if ('schedStart' in updates || 'schedStop' in updates) {
+        extraUpdates.isScheduled = false
+        extraUpdates.nextRunTime = ''
+      }
+    }
+
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },
-      data: updates
+      data: {
+        ...updates,
+        ...extraUpdates
+      }
     })
 
     return NextResponse.json(updatedSlot)

@@ -570,7 +570,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (!slot.daily && !slot.weekly && !slot.schedStart) {
         // It's a completely manual 24/7 stream. If manuallyStopped is false, it MUST run!
         shouldRun = true;
-      } else if (slot.schedStart) {
+      } else if (slot.schedStart && slot.isScheduled) {
         if (slot.schedStop) {
           shouldRun = isWithinActiveWindow(slot.schedStart, slot.schedStop);
         } else {
