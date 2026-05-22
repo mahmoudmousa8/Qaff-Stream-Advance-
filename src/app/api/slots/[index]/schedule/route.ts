@@ -23,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'Please set start schedule time' }, { status: 400 })
     }
 
-    if (!slot.filePath) {
+    if (slot.inputType !== 'live' && !slot.filePath) {
       return NextResponse.json({ error: 'Please fill File Path' }, { status: 400 })
     }
     
