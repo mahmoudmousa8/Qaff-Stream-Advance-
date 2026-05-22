@@ -1426,14 +1426,14 @@ export default function Home() {
                       <label className="text-sm font-semibold text-foreground flex items-center justify-between">
                         <span>{locale === 'ar' ? 'الحد الأقصى للقنوات المسموحة (Slots Limit)' : 'Max Slots Limit'}</span>
                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-mono font-bold">
-                          {adminClientData.slotsLimit || 10} / 100
+                          {adminClientData.slotsLimit || 10}
                         </span>
                       </label>
                       <div className="flex items-center gap-3">
                         <input
                           type="range"
                           min="1"
-                          max="100"
+                          max="1000"
                           value={adminClientData.slotsLimit || 10}
                           onChange={(e) => setAdminClientData(p => ({ ...p, slotsLimit: parseInt(e.target.value) }))}
                           className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
@@ -1441,15 +1441,13 @@ export default function Home() {
                         <Input
                           type="number"
                           min="1"
-                          max="100"
                           value={adminClientData.slotsLimit || 10}
                           onChange={(e) => {
                             let val = parseInt(e.target.value)
                             if (isNaN(val)) val = 1
-                            if (val > 100) val = 100
                             setAdminClientData(p => ({ ...p, slotsLimit: val }))
                           }}
-                          className="w-16 h-8 text-center text-xs font-mono font-bold"
+                          className="w-20 h-8 text-center text-xs font-mono font-bold"
                         />
                       </div>
                     </div>
