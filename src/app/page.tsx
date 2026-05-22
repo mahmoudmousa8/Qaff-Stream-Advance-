@@ -937,6 +937,35 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
+  const handleClosest5MinSchedule = (index: number, ampm: 'AM' | 'PM') => {
+    const now = new Date()
+    let m = Math.floor(now.getMinutes() / 5) * 5 + 5
+    let h = now.getHours()
+    if (m >= 60) {
+      m -= 60
+      h += 1
+    }
+    let h12 = h % 12
+    if (h12 === 0) h12 = 12
+
+    const target = new Date(now)
+    target.setMinutes(m, 0, 0)
+    if (ampm === 'AM') {
+      target.setHours(h12 === 12 ? 0 : h12)
+    } else {
+      target.setHours(h12 === 12 ? 12 : h12 + 12)
+    }
+
+    if (target.getTime() <= now.getTime()) {
+      target.setDate(target.getDate() + 1)
+    }
+
+    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
+    const stopStr = buildStopByDuration(startStr, 11, 45)  // 11h45m duration
+    handleSlotChange(index, 'schedStart', startStr)
+    handleSlotChange(index, 'schedStop', stopStr)
+  }
+
   const bulkAction = async (action: string) => {
     try {
       const res = await fetch('/api/slots/bulk', {
@@ -1229,9 +1258,13 @@ export default function Home() {
                   onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
                   <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => confirmBulkAction('setTimeAll', t('confirmSetTimeAll'))}>
-                  <Clock className="w-3 h-3 mr-0.5" />{t('setTimeAll')}
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('setTimeAll', t('confirmSetTimeAll'))} title={t('setTimeAll')}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 12 للكل' : 'Set 12 All'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400"
+                  onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'هل أنت متأكد من ضبط كل القنوات الفارغة لأقرب 5 دقائق؟' : 'Set all empty slots to closest 5 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 5 للكل' : 'Set 5m All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 5 للكل' : 'Set 5 All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
@@ -2283,8 +2316,10 @@ export default function Home() {
 
                               {/* AM/PM quick */}
                               <div className={`flex bg-muted/50 rounded overflow-hidden border border-primary/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 text-xs font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r">{t('btnAM')}</button>
-                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 text-xs font-semibold hover:bg-primary/20 hover:text-primary transition-colors">{t('btnPM')}</button>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-7 px-2 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r" title="أقرب 12 صباحاً">{t('btnAM')} 12</button>
+                                <button disabled={isLocked} onClick={() => handleClosest5MinSchedule(slot.slotIndex, 'AM')} className="h-7 px-2 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title="أقرب 5 دقائق صباحاً">{t('btnAM')} 5</button>
+                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 px-2 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r" title="أقرب 12 مساءاً">{t('btnPM')} 12</button>
+                                <button disabled={isLocked} onClick={() => handleClosest5MinSchedule(slot.slotIndex, 'PM')} className="h-7 px-2 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title="أقرب 5 دقائق مساءاً">{t('btnPM')} 5</button>
                               </div>
 
                               {/* Reset dates */}

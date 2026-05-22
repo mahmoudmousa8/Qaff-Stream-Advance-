@@ -200,6 +200,57 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, count: slots.length, message: `Set alternating AM/PM schedule for ${slots.length} empty slots` })
       }
 
+      case 'setClosest5MinAll': {
+        // Set alternating AM/PM schedule starting from closest 5 minutes
+        // slotIndex % 2 === 0 → AM
+        // slotIndex % 2 === 1 → PM
+        const now = new Date()
+        let m = Math.floor(now.getMinutes() / 5) * 5 + 5
+        let h = now.getHours()
+        if (m >= 60) {
+          m -= 60
+          h += 1
+        }
+        let h12 = h % 12
+        if (h12 === 0) h12 = 12
+
+        const slots = await db.streamSlot.findMany({
+          where: { schedStart: '' },
+          orderBy: { slotIndex: 'asc' }
+        })
+
+        for (const slot of slots) {
+          const isAM = slot.slotIndex % 2 === 0
+
+          let target = new Date(now)
+          target.setMinutes(m, 0, 0)
+          
+          if (isAM) {
+            target.setHours(h12 === 12 ? 0 : h12)
+          } else {
+            target.setHours(h12 === 12 ? 12 : h12 + 12)
+          }
+
+          if (target.getTime() <= now.getTime()) {
+            target.setDate(target.getDate() + 1)
+          }
+
+          const fmt = (d: Date) =>
+            `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+
+          const startTime = fmt(target)
+          const stopDate = new Date(target.getTime() + 11 * 60 * 60 * 1000 + 45 * 60 * 1000)
+          const stopTime = fmt(stopDate)
+
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: { schedStart: startTime, schedStop: stopTime }
+          })
+        }
+
+        return NextResponse.json({ success: true, count: slots.length, message: `Set closest 5-min schedule for ${slots.length} empty slots` })
+      }
+
       case 'dailyAll': {
         // Toggle daily for all slots
         const dailyCount = await db.streamSlot.count({
