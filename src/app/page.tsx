@@ -875,7 +875,12 @@ export default function Home() {
     }
 
     try {
-      await fetch(`/api/slots/${index}/schedule`, { method: 'POST' })
+      const res = await fetch(`/api/slots/${index}/schedule`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json()
+        addLog(`Slot ${index + 1}: ${data.error || 'Error scheduling'}`)
+        return
+      }
       addLog(`Slot ${index + 1}: Scheduled`)
       fetchSlots()
     } catch { addLog(`Slot ${index + 1}: Error scheduling`) }

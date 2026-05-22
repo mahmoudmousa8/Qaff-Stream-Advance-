@@ -23,8 +23,12 @@ export async function POST(
       return NextResponse.json({ error: 'Please set start schedule time' }, { status: 400 })
     }
 
-    if (!slot.streamKey || !slot.filePath) {
-      return NextResponse.json({ error: 'Please fill Key and File Path' }, { status: 400 })
+    if (!slot.filePath) {
+      return NextResponse.json({ error: 'Please fill File Path' }, { status: 400 })
+    }
+    
+    if (!slot.youtubeChannelId && !slot.streamKey) {
+      return NextResponse.json({ error: 'Please fill Stream Key' }, { status: 400 })
     }
 
     const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
