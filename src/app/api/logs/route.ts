@@ -6,30 +6,10 @@ const LOG_LIMIT = 500
 // Internal lock prefix used by the scheduler — never shown to users
 const INTERNAL_PREFIX = '__scheduler_last_run__'
 
-// TTL cleanup function - delete logs older than 12 hours + always purge internal lock messages
-async function cleanupOldLogs() {
-  try {
-    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
-    await db.systemLog.deleteMany({
-      where: {
-        OR: [
-          { timestamp: { lt: twelveHoursAgo } },
-          { message: { startsWith: INTERNAL_PREFIX } }
-        ]
-      }
-    })
-  } catch (error) {
-    console.error('Log cleanup error:', error)
-  }
-}
 
 // GET - Fetch logs, optionally filtered by slotIndex
 export async function GET(request: NextRequest) {
   try {
-    // Run TTL cleanup periodically (10% chance per request)
-    if (Math.random() < 0.1) {
-      await cleanupOldLogs()
-    }
 
     const slotIndexParam = request.nextUrl.searchParams.get('slotIndex')
     const slotIndex = slotIndexParam !== null ? parseInt(slotIndexParam) : null
@@ -97,7 +77,15 @@ export async function DELETE(request: NextRequest) {
       await db.systemLog.deleteMany({})
       return NextResponse.json({ success: true, message: 'All logs cleared' })
     } else {
-      await cleanupOldLogs()
+      const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+      await db.systemLog.deleteMany({
+        where: {
+          OR: [
+            { timestamp: { lt: twelveHoursAgo } },
+            { message: { startsWith: INTERNAL_PREFIX } }
+          ]
+        }
+      })
       return NextResponse.json({ success: true, message: 'Old logs cleaned up' })
     }
   } catch (error) {

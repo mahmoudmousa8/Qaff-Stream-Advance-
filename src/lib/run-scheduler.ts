@@ -30,7 +30,20 @@ const recoveryStates: Map<string, SlotRecoveryState> = g.__qaffRecoveryStates
 const BACKOFF_DELAYS_MS = [5_000, 60_000, 180_000, 600_000]  // 5s, 1m, 3m, 10m
 const MAX_CRASH_COUNT = BACKOFF_DELAYS_MS.length  // after 4 crashes → failed
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+// Helper to execute fetch requests with a strict timeout to prevent thread lockup
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+    return response
+  } finally {
+    clearTimeout(id)
+  }
+}
 
 function parseScheduleTime(sched: string): { month: number; day: number; hour: number; minute: number } | null {
   try {
@@ -250,10 +263,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   let streamManagerUptimeMs = Infinity
   let isManagerInStartupGrace = false
   try {
-    const abortCtrl = new AbortController()
-    const t = setTimeout(() => abortCtrl.abort(), 3000)
-    const res = await fetch(`${STREAM_MANAGER_URL}/status`, { signal: abortCtrl.signal })
-    clearTimeout(t)
+    const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/status`, {}, 3000)
     if (res.ok) {
       streamManagerResponded = true
       const data = await res.json()
@@ -374,9 +384,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       logs.push(`Slot ${slot.slotIndex + 1}: Crash #${state.crashCount} confirmed. Recovering (backoff level ${state.backoffLevel - 1}, next wait ${Math.round(delay / 1000)}s)`)
 
       try {
-        const ctrl = new AbortController()
-        const t = setTimeout(() => ctrl.abort(), 5000)
-        const res = await fetch(`${STREAM_MANAGER_URL}/start`, {
+        const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -385,10 +393,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             rtmpServer: slot.rtmpServer,
             streamKey: slot.streamKey,
             filePath: finalInputPath
-          }),
-          signal: ctrl.signal
-        })
-        clearTimeout(t)
+          })
+        }, 5000)
         const data = await res.json()
         if (res.ok && data.success) {
           // Reset backoff on successful recovery
@@ -428,17 +434,17 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             })
 
             // Stop current broadcast
-            await fetch(`${STREAM_MANAGER_URL}/stop`, {
+            await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ slotIndex: slot.slotIndex })
-            })
+            }, 5000)
 
             // Delay for 1.5 seconds to allow clean FFmpeg processes to stop
             await new Promise(r => setTimeout(r, 1500))
 
             // Start new broadcast using the swap video path — zero-transcode, direct copy
-            const res = await fetch(`${STREAM_MANAGER_URL}/start`, {
+            const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -448,7 +454,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
                 streamKey: slot.streamKey,
                 filePath: slot.swapVideoPath
               })
-            })
+            }, 5000)
 
             const data = await res.json()
             if (res.ok && data.success) {
@@ -466,11 +472,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     // ── Auto-Stop ──────────────────────────────────────────
     if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true)) {
       try {
-        await fetch(`${STREAM_MANAGER_URL}/stop`, {
+        await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ slotIndex: slot.slotIndex })
-        })
+        }, 5000)
       } catch {
         logs.push(`Slot ${slot.slotIndex + 1}: Auto-stop failed (stream-manager unreachable) — will retry`)
         await db.systemLog.create({ data: { message: `Slot ${slot.slotIndex + 1}: Auto-stop failed, will retry next tick` } })
@@ -670,9 +676,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         }
       }
 
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 5000)
-      await fetch(`${STREAM_MANAGER_URL}/start`, {
+      await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -681,10 +685,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           rtmpServer: finalRtmpServer,
           streamKey: finalStreamKey,
           filePath: finalInputPath
-        }),
-        signal: ctrl.signal
-      })
-      clearTimeout(t)
+        })
+      }, 5000)
       startedCount++
       logs.push(`Slot ${slot.slotIndex + 1}: Auto-started`)
     } catch {
@@ -709,6 +711,23 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
   for (const log of logs) {
     await db.systemLog.create({ data: { message: log } })
+  }
+
+  // Periodically cleanup old logs in the background (10% chance) to prevent SQLite database lock contention
+  if (Math.random() < 0.1) {
+    try {
+      const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+      await db.systemLog.deleteMany({
+        where: {
+          OR: [
+            { timestamp: { lt: twelveHoursAgo } },
+            { message: { startsWith: LOCK_KEY } }
+          ]
+        }
+      })
+    } catch (error) {
+      console.error('[Scheduler] Background log cleanup error:', error)
+    }
   }
 
   return { started: startedCount, stopped: stoppedCount, logs, timestamp: now.toISOString() }

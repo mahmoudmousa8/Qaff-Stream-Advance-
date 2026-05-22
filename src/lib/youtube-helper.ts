@@ -37,6 +37,21 @@ export function getCairoMidnightISO(): string {
   return cairoMidnightInUtc.toISOString()
 }
 
+// Helper to execute fetch requests with a strict timeout to prevent thread lockup
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController()
+  const id = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    })
+    return response
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 // Refresh Google OAuth token if close to expiry (within 2 minutes)
 export async function refreshAccessToken(channelId: string): Promise<string> {
   const channel = await db.youtubeChannel.findUnique({
@@ -53,7 +68,7 @@ export async function refreshAccessToken(channelId: string): Promise<string> {
 
   console.log(`[YouTube Helper] Refreshing access token for channel: ${channel.channelTitle} (${channel.name})`)
   
-  const response = await fetch('https://oauth2.googleapis.com/token', {
+  const response = await fetchWithTimeout('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -62,7 +77,7 @@ export async function refreshAccessToken(channelId: string): Promise<string> {
       refresh_token: channel.refreshToken,
       grant_type: 'refresh_token'
     })
-  })
+  }, 10000)
 
   if (!response.ok) {
     const errorBody = await response.text()
@@ -116,9 +131,9 @@ export async function setupYoutubeLiveStream(
   let selectedStream: any = null
 
   const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true&maxResults=50'
-  const streamsResponse = await fetch(streamsListUrl, {
+  const streamsResponse = await fetchWithTimeout(streamsListUrl, {
     headers: { Authorization: `Bearer ${accessToken}` }
-  })
+  }, 10000)
 
   if (streamsResponse.ok) {
     const streamsData = await streamsResponse.json()
@@ -163,7 +178,7 @@ export async function setupYoutubeLiveStream(
   // Create one if we couldn't list or find any
   if (!streamId || !streamKey) {
     console.log('[YouTube Helper] No active stream key found. Creating a new Default stream key...')
-    const createStreamResponse = await fetch('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
+    const createStreamResponse = await fetchWithTimeout('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -177,7 +192,7 @@ export async function setupYoutubeLiveStream(
           resolution: 'variable'
         }
       })
-    })
+    }, 10000)
 
     if (!createStreamResponse.ok) {
       const errorText = await createStreamResponse.text()
@@ -204,7 +219,7 @@ export async function setupYoutubeLiveStream(
 
   console.log(`[YouTube Helper] Creating Live Broadcast: "${truncatedTitle}"`)
   const broadcastUrl = 'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails'
-  const broadcastResponse = await fetch(broadcastUrl, {
+  const broadcastResponse = await fetchWithTimeout(broadcastUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -225,7 +240,7 @@ export async function setupYoutubeLiveStream(
         enableAutoStop: false
       }
     })
-  })
+  }, 10000)
 
   if (!broadcastResponse.ok) {
     const errorText = await broadcastResponse.text()
@@ -246,13 +261,13 @@ export async function setupYoutubeLiveStream(
   // 5. Bind Broadcast to Stream Key
   console.log(`[YouTube Helper] Binding Broadcast (${broadcastId}) to Stream Key (${streamId})`)
   const bindUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcastId}&part=id,snippet,contentDetails,status&streamId=${streamId}`
-  const bindResponse = await fetch(bindUrl, {
+  const bindResponse = await fetchWithTimeout(bindUrl, {
     method: 'POST',
     headers: { 
       Authorization: `Bearer ${accessToken}`,
       'Content-Length': '0'
     }
-  })
+  }, 10000)
 
   if (!bindResponse.ok) {
     const errorText = await bindResponse.text()
@@ -277,7 +292,7 @@ export async function setupYoutubeLiveStream(
       if (thumbnailSize <= 2 * 1024 * 1024) {
         console.log(`[YouTube Helper] Uploading PNG Thumbnail (${(thumbnailSize / 1024).toFixed(1)} KB)...`)
         const setThumbnailUrl = `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`
-        const thumbnailResponse = await fetch(setThumbnailUrl, {
+        const thumbnailResponse = await fetchWithTimeout(setThumbnailUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
@@ -285,7 +300,7 @@ export async function setupYoutubeLiveStream(
             'Content-Length': thumbnailSize.toString()
           },
           body: thumbnailBuffer
-        })
+        }, 10000)
 
         if (!thumbnailResponse.ok) {
           console.error('[YouTube Helper] Thumbnail upload failed:', await thumbnailResponse.text())
@@ -309,13 +324,13 @@ export async function stopYoutubeLiveStream(channelId: string, broadcastId: stri
     const accessToken = await refreshAccessToken(channelId)
     console.log(`[YouTube Helper] Transitioning broadcast ${broadcastId} to status: complete`)
     const transitionUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=complete&id=${broadcastId}&part=id,status`
-    const response = await fetch(transitionUrl, {
+    const response = await fetchWithTimeout(transitionUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       }
-    })
+    }, 10000)
     if (!response.ok) {
       const errMsg = await response.text()
       console.error(`[YouTube Helper] Failed to transition broadcast to complete: ${errMsg}`)
