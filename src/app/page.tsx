@@ -811,6 +811,25 @@ export default function Home() {
     } catch { }
   }
 
+  const handleRestartTunnel = async () => {
+    setLoadingTunnel(true)
+    addLog(locale === 'ar' ? 'جاري إعادة تشغيل النفق...' : 'Restarting Cloudflare Tunnel...')
+    try {
+      const res = await fetch('/api/tunnel', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        addLog(locale === 'ar' ? 'تم إعادة تشغيل النفق بنجاح، جاري جلب الرابط الجديد...' : 'Tunnel restarted successfully, fetching new link...')
+        await fetchTunnelUrl()
+      } else {
+        addLog(locale === 'ar' ? 'فشل إعادة تشغيل النفق: ' + (data.error || 'خطأ غير معروف') : 'Failed to restart tunnel: ' + (data.error || 'Unknown error'))
+      }
+    } catch {
+      addLog(locale === 'ar' ? 'حدث خطأ أثناء الاتصال بالخادم لإعادة تشغيل التونل' : 'An error occurred while connecting to the server to restart the tunnel')
+    } finally {
+      setLoadingTunnel(false)
+    }
+  }
+
   const updateSlot = async (index: number, updates: Partial<StreamSlot>) => {
     try {
       await fetch(`/api/slots/${index}`, {
@@ -1266,11 +1285,30 @@ export default function Home() {
                     >
                       <Copy className="w-3 h-3" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-5 px-1.5 text-[9px] font-bold border-green-500/30 hover:bg-green-500/20 text-green-700 dark:text-green-300 shrink-0 ml-1 transition-all p-0"
+                      onClick={handleRestartTunnel}
+                      disabled={loadingTunnel}
+                      title={locale === 'ar' ? 'إعادة تشغيل النفق لتوليد رابط جديد' : 'Restart tunnel to generate a new link'}
+                    >
+                      {locale === 'ar' ? 'تغيير الرابط' : 'Change Link'}
+                    </Button>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0 animate-pulse">
+                  <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0">
                     <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
                     <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-5 px-1.5 text-[9px] font-bold border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 shrink-0 ml-1.5 transition-all p-0"
+                      onClick={handleRestartTunnel}
+                      disabled={loadingTunnel}
+                    >
+                      {locale === 'ar' ? 'تشغيل التونل' : 'Start Tunnel'}
+                    </Button>
                     <Button
                       size="icon"
                       variant="ghost"

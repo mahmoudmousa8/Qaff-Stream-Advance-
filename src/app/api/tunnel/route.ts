@@ -83,3 +83,32 @@ export async function GET() {
   });
 }
 
+// POST - Restart cloudflared quick tunnel process via PM2
+export async function POST() {
+  try {
+    const { exec } = await import("child_process");
+    
+    await new Promise<void>((resolve, reject) => {
+      exec("pm2 restart qaff-tunnel", (err) => {
+        if (err) {
+          // If restart fails (e.g. process not running/registered), try starting it using the config file
+          exec("pm2 start ecosystem.config.cjs --only qaff-tunnel", (err2) => {
+            if (err2) reject(err2);
+            else resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Wait 3 seconds for cloudflared to boot up and print the new trycloudflare URL
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    return NextResponse.json({ success: true, message: "Tunnel restarted successfully" });
+  } catch (error: any) {
+    console.error("Failed to restart tunnel:", error);
+    return NextResponse.json({ error: "Failed to restart tunnel: " + error.message }, { status: 500 });
+  }
+}
+
