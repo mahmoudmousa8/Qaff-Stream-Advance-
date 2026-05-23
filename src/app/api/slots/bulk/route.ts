@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
         // Phase 1: Schedule slots with schedStart
         for (const slot of slotsToSchedule) {
-          const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
+          const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
             data: {
@@ -469,6 +469,7 @@ export async function POST(request: NextRequest) {
           data: {
             daily: targetState,
             weekly: false,
+            hourly: false,
             isScheduled: false,
             manuallyStopped: true,
             nextRunTime: '',
@@ -478,6 +479,66 @@ export async function POST(request: NextRequest) {
 
         const actionText = targetState ? 'Enabled' : 'Disabled'
         return NextResponse.json({ success: true, count: result.count, message: `${actionText} Daily for all slots` })
+      }
+
+      case 'hourlyAll': {
+        // Toggle hourly for all slots
+        const hourlyCount = await db.streamSlot.count({
+          where: { hourly: true, ...userFilter }
+        })
+        const total = await db.streamSlot.count({
+          where: userFilter
+        })
+        const targetState = hourlyCount < total / 2
+
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            hourly: targetState,
+            daily: false,
+            weekly: false,
+            isScheduled: false,
+            manuallyStopped: true,
+            nextRunTime: '',
+            status: 'Stopped'
+          }
+        })
+
+        const actionText = targetState ? 'Enabled' : 'Disabled'
+        return NextResponse.json({ success: true, count: result.count, message: `${actionText} Hourly for all slots` })
+      }
+
+      case 'setClosestHourAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
+        const now = new Date()
+        const cairoNow = getCairoNowFields(now)
+
+        // The closest next hour is cairoNow.hour + 1, minute 0
+        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour + 1, 0, 0)
+
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
+        const startTime = formatCairoDate(targetDate)
+        // Stop time is +50 minutes
+        const stopDate = new Date(targetDate.getTime() + 50 * 60 * 1000)
+        const stopTime = formatCairoDate(stopDate)
+
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            schedStart: startTime,
+            schedStop: stopTime,
+            isScheduled: false,
+            manuallyStopped: true,
+            nextRunTime: '',
+            status: 'Stopped'
+          }
+        })
+
+        return NextResponse.json({ success: true, count: result.count, message: `Set closest hour schedule (duration 50 mins) for all ${result.count} slots` })
       }
 
       case 'resetAll': {
@@ -506,6 +567,7 @@ export async function POST(request: NextRequest) {
             schedStop: '',
             daily: false,
             weekly: false,
+            hourly: false,
             isScheduled: false,
             isRunning: false,
             manuallyStopped: true,
@@ -551,7 +613,7 @@ export async function POST(request: NextRequest) {
 
         for (const slot of slots) {
           try {
-            const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly)
+            const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
             await db.streamSlot.update({
               where: { slotIndex: slot.slotIndex },
               data: {

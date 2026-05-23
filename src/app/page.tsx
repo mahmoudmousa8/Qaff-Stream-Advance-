@@ -49,6 +49,7 @@ interface StreamSlot {
   schedStop: string
   daily: boolean
   weekly: boolean
+  hourly: boolean
   isScheduled: boolean
   nextRunTime: string
   status: string
@@ -313,7 +314,7 @@ export default function Home() {
   const [totalSlots, setTotalSlots] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-  const [stats, setStats] = useState({ streaming: 0, scheduled: 0, stopped: 0, configured: 0, dailyCount: 0, weeklyCount: 0, renewalDate: null as string | null })
+  const [stats, setStats] = useState({ streaming: 0, scheduled: 0, stopped: 0, configured: 0, dailyCount: 0, weeklyCount: 0, hourlyCount: 0, renewalDate: null as string | null })
 
   const filteredSlots = slots.filter(slot => {
     if (filterStatus === 'active') return slot.isRunning
@@ -991,6 +992,17 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
+  const handleClosestHourSchedule = (index: number) => {
+    const now = new Date()
+    const target = new Date(now)
+    target.setHours(now.getHours() + 1, 0, 0, 0)
+
+    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
+    const stopStr = buildStopByDuration(startStr, 0, 50)  // 50 minutes duration
+    handleSlotChange(index, 'schedStart', startStr)
+    handleSlotChange(index, 'schedStop', stopStr)
+  }
+
   const bulkAction = async (action: string, ampm?: 'AM' | 'PM', payload?: any) => {
     try {
       const res = await fetch('/api/slots/bulk', {
@@ -1294,6 +1306,14 @@ export default function Home() {
                 <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
                   onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
                   <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'ضبط البدء والإيقاف' : 'Clear Times'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400"
+                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وتوقف بعد 50 دقيقة؟' : 'Set all slots to closest hour?')} title={locale === 'ar' ? 'ضبط لأقرب ساعة للكل' : 'Set Hour All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط ساعة للكل' : 'Set Hour All'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                  onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
+                  <Sun className="w-3 h-3 mr-0.5" />{t('hourlyAll')}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
@@ -1909,17 +1929,41 @@ export default function Home() {
                                 )
                               })()}
 
-                              <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${slot.isRunning || slot.status !== 'Stopped' ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
-                                <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                              <div className="flex gap-1 items-center shrink-0">
+                                <div className={`flex bg-muted/50 rounded overflow-hidden border border-blue-500/20 ${slot.isRunning || slot.status !== 'Stopped' ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
+                                  <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                                </div>
+                                <button
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
+                                  className="h-6 px-2 flex items-center justify-center text-[10px] font-bold bg-orange-500/10 hover:bg-orange-500/25 border border-orange-500/20 rounded text-orange-600 dark:text-orange-400 transition-colors shrink-0 disabled:opacity-50"
+                                  title={locale === 'ar' ? 'ضبط لأقرب رأس ساعة وبث 50 دقيقة' : 'Set to nearest hour and stream for 50 mins'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest Hour'}
+                                </button>
                               </div>
 
-                              {/* Daily / Weekly */}
-                              <div className={`w-[155px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                              {/* Hourly / Daily / Weekly */}
+                              <div className={`w-[215px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'hourly', !!c)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'daily', false)
+                                      handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    }
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`hourly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
                                     handleSlotChange(slot.slotIndex, 'daily', !!c)
-                                    if (c) handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'hourly', false)
+                                      handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    }
                                     if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
                                   }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
                                   <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
@@ -1927,7 +1971,10 @@ export default function Home() {
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
                                     handleSlotChange(slot.slotIndex, 'weekly', !!c)
-                                    if (c) handleSlotChange(slot.slotIndex, 'daily', false)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'hourly', false)
+                                      handleSlotChange(slot.slotIndex, 'daily', false)
+                                    }
                                     if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
                                   }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
                                   <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
@@ -2334,17 +2381,41 @@ export default function Home() {
                                 </select>
                               </div>
 
-                              <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
-                                <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                              <div className="flex gap-1 items-center shrink-0">
+                                <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
+                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                                </div>
+                                <button
+                                  disabled={isLocked}
+                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
+                                  className="h-7 px-3 flex items-center justify-center text-[10px] font-bold bg-orange-500/10 hover:bg-orange-500/25 border border-orange-500/20 rounded text-orange-600 dark:text-orange-400 transition-colors shrink-0 disabled:opacity-50"
+                                  title={locale === 'ar' ? 'ضبط لأقرب رأس ساعة وبث 50 دقيقة' : 'Set to nearest hour and stream for 50 mins'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest Hour'}
+                                </button>
                               </div>
 
-                              {/* Daily / Weekly */}
+                              {/* Hourly / Daily / Weekly */}
                               <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                    handleSlotChange(slot.slotIndex, 'hourly', !!c)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'daily', false)
+                                      handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    }
+                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
+                                  }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-hourly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
                                     handleSlotChange(slot.slotIndex, 'daily', !!c)
-                                    if (c) handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'hourly', false)
+                                      handleSlotChange(slot.slotIndex, 'weekly', false)
+                                    }
                                     if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
                                   }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
                                   <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
@@ -2352,7 +2423,10 @@ export default function Home() {
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
                                     handleSlotChange(slot.slotIndex, 'weekly', !!c)
-                                    if (c) handleSlotChange(slot.slotIndex, 'daily', false)
+                                    if (c) {
+                                      handleSlotChange(slot.slotIndex, 'hourly', false)
+                                      handleSlotChange(slot.slotIndex, 'daily', false)
+                                    }
                                     if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
                                   }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
                                   <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>

@@ -23,7 +23,7 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   if (!baselineStop) return []
   const durationMs = baselineStop.getTime() - baselineStart.getTime()
 
-  const isRecurring = slot.daily || slot.weekly
+  const isRecurring = slot.daily || slot.weekly || slot.hourly
   if (!isRecurring) {
     // One-time occurrence
     if (baselineStart.getTime() < windowEnd.getTime() && windowStart.getTime() < baselineStop.getTime()) {
@@ -36,6 +36,29 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   const startHour = startFields.hour
   const startMinute = startFields.minute
   const startWeekday = startFields.weekday
+
+  if (slot.hourly) {
+    const nowFields = getCairoNowFields(windowStart)
+    let currentHourDate = getAbsoluteDateFromCairoFields(nowFields.year, nowFields.month, nowFields.day, nowFields.hour, startMinute, 0)
+    if (currentHourDate.getTime() < windowStart.getTime()) {
+      currentHourDate = new Date(currentHourDate.getTime() + 60 * 60 * 1000)
+    }
+    
+    const occurrences: { start: Date, end: Date }[] = []
+    let hourLoopCount = 0
+    while (currentHourDate.getTime() <= windowEnd.getTime() && hourLoopCount < 2000) {
+      hourLoopCount++
+      const occStart = currentHourDate
+      const occEnd = new Date(occStart.getTime() + durationMs)
+      
+      if (occStart.getTime() < windowEnd.getTime() && windowStart.getTime() < occEnd.getTime()) {
+        occurrences.push({ start: occStart, end: occEnd })
+      }
+      
+      currentHourDate = new Date(currentHourDate.getTime() + 60 * 60 * 1000)
+    }
+    return occurrences
+  }
 
   const startDayFields = getCairoNowFields(windowStart)
   // Start at 00:00 of the day of windowStart in Cairo
@@ -152,8 +175,8 @@ export function areSlotsOverlapping(slotA: any, slotB: any, now: Date = new Date
 
   if (!stopA || !stopB) return false
 
-  const isRecurringA = slotA.daily || slotA.weekly
-  const isRecurringB = slotB.daily || slotB.weekly
+  const isRecurringA = slotA.daily || slotA.weekly || slotA.hourly
+  const isRecurringB = slotB.daily || slotB.weekly || slotB.hourly
 
   if (isRecurringA && isRecurringB) {
     // Both are recurring. Check over an 8-day window starting now.

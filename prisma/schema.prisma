@@ -24,6 +24,7 @@ model StreamSlot {
   schedStop       String   @default("")
   daily           Boolean  @default(false)
   weekly          Boolean  @default(false)
+  hourly          Boolean  @default(false)
   isScheduled     Boolean  @default(false)
   manuallyStopped Boolean  @default(true)
   nextRunTime     String   @default("")

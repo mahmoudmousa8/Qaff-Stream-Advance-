@@ -26,6 +26,7 @@ export async function PUT(
       'schedStop',
       'daily',
       'weekly',
+      'hourly',
       'isScheduled',
       'outputType',
       'youtubeChannelId',
@@ -63,7 +64,7 @@ export async function PUT(
     const extraUpdates: any = {}
     if (!slot.isRunning && !updates.isRunning) {
       extraUpdates.manuallyStopped = true
-      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates) {
+      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates || 'hourly' in updates) {
         extraUpdates.isScheduled = false
         extraUpdates.nextRunTime = ''
         extraUpdates.status = 'Stopped'

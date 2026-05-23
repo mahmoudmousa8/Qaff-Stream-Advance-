@@ -46,6 +46,7 @@ export async function POST(
         schedStop: '',
         daily: false,
         weekly: false,
+        hourly: false,
         isScheduled: false,
         isRunning: false,
         manuallyStopped: true,

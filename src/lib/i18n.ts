@@ -87,6 +87,7 @@ const translations = {
         stopAll: 'Stop All',
         setTimeAll: 'Set Time All',
         dailyAll: 'Daily All',
+        hourlyAll: 'Hourly All',
         resetAll: 'Reset All',
         autoSave: 'Auto-Save',
 
@@ -105,6 +106,7 @@ const translations = {
         colWeekly: 'Weekly',
         lblDaily: 'Daily',
         lblWeekly: 'Weekly',
+        lblHourly: 'Hourly',
         colActions: 'Actions',
         colStatus: 'Status',
         colReset: 'Reset',
@@ -164,6 +166,7 @@ const translations = {
         confirmStopAll: 'Stop ALL running streams?',
         confirmSetTimeAll: 'Set alternating schedule for ALL empty slots?',
         confirmDailyAll: 'Toggle Daily for ALL slots?',
+        confirmHourlyAll: 'Toggle Hourly for ALL slots?',
         confirmResetAll: 'Reset schedule data for ALL slots?',
         logs: 'Logs',
 
@@ -330,6 +333,7 @@ const translations = {
         stopAll: 'إيقاف الكل',
         setTimeAll: 'ضبط الوقت للكل',
         dailyAll: 'يومي للكل',
+        hourlyAll: 'ساعة للكل',
         resetAll: 'إعادة تعيين الكل',
         autoSave: 'حفظ تلقائي',
 
@@ -348,6 +352,7 @@ const translations = {
         colWeekly: 'أسبوعي',
         lblDaily: 'يومياً',
         lblWeekly: 'إسبوعياً',
+        lblHourly: 'ساعة',
         colActions: 'الإجراءات',
         colStatus: 'الحالة',
         colReset: 'إعادة',
@@ -407,6 +412,7 @@ const translations = {
         confirmStopAll: 'هل أنت متأكد من إيقاف جميع عمليات البث الحالية المشغلة؟',
         confirmSetTimeAll: 'هل تريد ضبط أوقات تبادلية لجميع القنوات الفارغة؟',
         confirmDailyAll: 'هل تريد تفعيل/إلغاء التكرار اليومي لجميع القنوات؟',
+        confirmHourlyAll: 'هل تريد تفعيل/إلغاء التكرار بالساعة لجميع القنوات؟',
         confirmResetAll: 'تحذير: هل أنت متأكد من إعادة تعيين ومسح بيانات الجدولة لجميع القنوات؟',
         logs: 'السجلات',
 

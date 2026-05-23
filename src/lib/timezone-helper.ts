@@ -165,7 +165,7 @@ export function parseScheduleTime(sched: string): { month: number; day: number; 
   }
 }
 
-export function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean): string {
+export function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, hourly?: boolean): string {
   if (!schedStart) return ''
   const now = new Date()
   try {
@@ -173,6 +173,20 @@ export function calculateNextRun(schedStart: string, daily: boolean, weekly: boo
     if (!parsed) return ''
     const { month, day, hour, minute } = parsed
 
+    if (hourly) {
+      const cairoNow = getCairoNowFields(now)
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, minute, 0)
+      
+      if (now >= nextRun) {
+        // Shift by 1 hour
+        const nextHourDate = new Date(nextRun.getTime() + 60 * 60 * 1000)
+        const nextHourFields = getCairoNowFields(nextHourDate)
+        nextRun = getAbsoluteDateFromCairoFields(nextHourFields.year, nextHourFields.month, nextHourFields.day, nextHourFields.hour, minute, 0)
+      }
+      
+      const finalFields = getCairoNowFields(nextRun)
+      return `${String(finalFields.month + 1).padStart(2, '0')}-${String(finalFields.day).padStart(2, '0')} ${String(finalFields.hour).padStart(2, '0')}:${String(finalFields.minute).padStart(2, '0')}`
+    }
     if (daily) {
       const cairoNow = getCairoNowFields(now)
       let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, hour, minute, 0)

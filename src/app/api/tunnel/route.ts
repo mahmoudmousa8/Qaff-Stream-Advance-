@@ -1,12 +1,26 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { execSync } from "child_process";
 
 let cachedPublicIp: string | null = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes in ms
 
 export async function GET() {
+  let isRunning = false;
+  try {
+    if (process.platform === "win32") {
+      const stdout = execSync("tasklist", { encoding: "utf8" });
+      isRunning = stdout.toLowerCase().includes("cloudflared");
+    } else {
+      execSync("pgrep -x cloudflared", { stdio: "ignore" });
+      isRunning = true;
+    }
+  } catch (err) {
+    isRunning = false;
+  }
+
   const possiblePaths = [
     "/root/cloudflare.log",
     "/var/log/cloudflare.log",
@@ -23,22 +37,24 @@ export async function GET() {
   let tunnelUrl: string | null = null;
   let foundPath: string | null = null;
 
-  for (const logPath of possiblePaths) {
-    try {
-      if (fs.existsSync(logPath)) {
-        const content = fs.readFileSync(logPath, "utf8");
-        // Regex to find trycloudflare URLs
-        const matches = content.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g);
-        if (matches && matches.length > 0) {
-          // Get the last occurrence as it is the most recent session
-          tunnelUrl = matches[matches.length - 1];
-          foundPath = logPath;
-          break;
+  if (isRunning) {
+    for (const logPath of possiblePaths) {
+      try {
+        if (fs.existsSync(logPath)) {
+          const content = fs.readFileSync(logPath, "utf8");
+          // Regex to find trycloudflare URLs
+          const matches = content.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/g);
+          if (matches && matches.length > 0) {
+            // Get the last occurrence as it is the most recent session
+            tunnelUrl = matches[matches.length - 1];
+            foundPath = logPath;
+            break;
+          }
         }
+      } catch (err) {
+        // Ignore read errors for individual paths and try next
+        console.warn(`Could not read cloudflare log at ${logPath}:`, err);
       }
-    } catch (err) {
-      // Ignore read errors for individual paths and try next
-      console.warn(`Could not read cloudflare log at ${logPath}:`, err);
     }
   }
 
@@ -60,8 +76,8 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    success: !!tunnelUrl,
-    tunnelUrl: tunnelUrl || null,
+    success: !!(isRunning && tunnelUrl),
+    tunnelUrl: isRunning ? (tunnelUrl || null) : null,
     logPath: foundPath || null,
     publicIp: cachedPublicIp || null
   });

@@ -37,6 +37,10 @@ export async function GET() {
       where: { weekly: true }
     })
 
+    const hourlyCount = await db.streamSlot.count({
+      where: { hourly: true }
+    })
+
     // Fetch client renewal date dynamically from database
     const clientUser = await db.user.findUnique({
       where: { username: 'user' }
@@ -52,6 +56,7 @@ export async function GET() {
       configured,
       dailyCount,
       weeklyCount,
+      hourlyCount,
       renewalDate
     })
   } catch (error) {
