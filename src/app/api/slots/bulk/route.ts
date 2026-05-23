@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
         const cairoNow = getCairoNowFields(now)
 
         const slots = await db.streamSlot.findMany({
-          where: userFilter,
+          where: { ...userFilter, isRunning: false },
           orderBy: { slotIndex: 'asc' }
         })
 
@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
         if (h12 === 0) h12 = 12
 
         const slots = await db.streamSlot.findMany({
-          where: userFilter,
+          where: { ...userFilter, isRunning: false },
           orderBy: { slotIndex: 'asc' }
         })
 
@@ -389,7 +389,7 @@ export async function POST(request: NextRequest) {
 
       case 'clearTimesAll': {
         const result = await db.streamSlot.updateMany({
-          where: userFilter,
+          where: { ...userFilter, isRunning: false },
           data: {
             schedStart: '',
             schedStop: '',
@@ -455,17 +455,18 @@ export async function POST(request: NextRequest) {
       }
 
       case 'dailyAll': {
-        // Toggle daily for all slots
+        // Toggle daily for all slots (excluding running ones)
+        const safeFilter = { ...userFilter, isRunning: false }
         const dailyCount = await db.streamSlot.count({
-          where: { daily: true, ...userFilter }
+          where: { daily: true, ...safeFilter }
         })
         const total = await db.streamSlot.count({
-          where: userFilter
+          where: safeFilter
         })
         const targetState = dailyCount < total / 2
 
         const result = await db.streamSlot.updateMany({
-          where: userFilter,
+          where: safeFilter,
           data: {
             daily: targetState,
             weekly: false,
@@ -482,17 +483,18 @@ export async function POST(request: NextRequest) {
       }
 
       case 'hourlyAll': {
-        // Toggle hourly for all slots
+        // Toggle hourly for all slots (excluding running ones)
+        const safeFilter = { ...userFilter, isRunning: false }
         const hourlyCount = await db.streamSlot.count({
-          where: { hourly: true, ...userFilter }
+          where: { hourly: true, ...safeFilter }
         })
         const total = await db.streamSlot.count({
-          where: userFilter
+          where: safeFilter
         })
         const targetState = hourlyCount < total / 2
 
         const result = await db.streamSlot.updateMany({
-          where: userFilter,
+          where: safeFilter,
           data: {
             hourly: targetState,
             daily: false,
@@ -527,7 +529,7 @@ export async function POST(request: NextRequest) {
         const stopTime = formatCairoDate(stopDate)
 
         const result = await db.streamSlot.updateMany({
-          where: userFilter,
+          where: { ...userFilter, isRunning: false },
           data: {
             schedStart: startTime,
             schedStop: stopTime,
@@ -543,7 +545,7 @@ export async function POST(request: NextRequest) {
 
       case 'resetAll': {
         const slotsToReset = await db.streamSlot.findMany({
-          where: userFilter
+          where: { ...userFilter, isRunning: false }
         })
 
         // Stop all streams first
@@ -558,7 +560,7 @@ export async function POST(request: NextRequest) {
         )
 
         const result = await db.streamSlot.updateMany({
-          where: userFilter,
+          where: { ...userFilter, isRunning: false },
           data: {
             channelName: '',
             filePath: '',

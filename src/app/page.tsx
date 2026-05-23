@@ -1256,72 +1256,7 @@ export default function Home() {
                 </Button>
               </div>
 
-              {/* Group 2: Cloudflare Tunnel Status */}
-              <div className="flex items-center shrink-0">
-                {tunnelUrl ? (
-                  <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200">
-                    <span className="w-2 h-2 bg-green-500 rounded-full animate-ping mr-1 shrink-0" />
-                    <span className="font-mono truncate max-w-[120px] sm:max-w-[200px]" title={tunnelUrl}>
-                      {tunnelUrl.replace("https://", "")}
-                    </span>
-                    <a
-                      href={tunnelUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="hover:text-green-500 ml-1.5 shrink-0 hover:scale-110 transition-transform"
-                      title={locale === 'ar' ? 'فتح الرابط في علامة تبويب جديدة' : 'Open link in new tab'}
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                    </a>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-5 w-5 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded hover:scale-105 active:scale-95 transition-all"
-                      onClick={() => {
-                        navigator.clipboard.writeText(tunnelUrl);
-                        alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!');
-                      }}
-                      title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-5 px-1.5 text-[9px] font-bold border-green-500/30 hover:bg-green-500/20 text-green-700 dark:text-green-300 shrink-0 ml-1 transition-all p-0"
-                      onClick={handleRestartTunnel}
-                      disabled={loadingTunnel}
-                      title={locale === 'ar' ? 'إعادة تشغيل النفق لتوليد رابط جديد' : 'Restart tunnel to generate a new link'}
-                    >
-                      {locale === 'ar' ? 'تغيير الرابط' : 'Change Link'}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0">
-                    <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
-                    <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-5 px-1.5 text-[9px] font-bold border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 shrink-0 ml-1.5 transition-all p-0"
-                      onClick={handleRestartTunnel}
-                      disabled={loadingTunnel}
-                    >
-                      {locale === 'ar' ? 'تشغيل التونل' : 'Start Tunnel'}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-5 w-5 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded ml-1 hover:scale-110 active:scale-90 transition-all"
-                      onClick={fetchTunnelUrl}
-                      title={locale === 'ar' ? 'تحديث الحالة' : 'Refresh Tunnel Status'}
-                      disabled={loadingTunnel}
-                    >
-                      <RefreshCw className={`w-3 h-3 ${loadingTunnel ? 'animate-spin' : ''}`} />
-                    </Button>
-                  </div>
-                )}
-              </div>
+
 
               {/* Group 3: Bulk Actions */}
               <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
@@ -1343,11 +1278,11 @@ export default function Home() {
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
                   onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
-                  <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'ضبط البدء والإيقاف' : 'Clear Times'}
+                  <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400"
                   onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وتوقف بعد 50 دقيقة؟' : 'Set all slots to closest hour?')} title={locale === 'ar' ? 'ضبط لأقرب ساعة للكل' : 'Set Hour All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط ساعة للكل' : 'Set Hour All'}
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط لأقرب ساعة للكل' : 'Set Hour All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
@@ -1410,6 +1345,73 @@ export default function Home() {
                 </Button>
               </div>
             </div>
+          </div>
+
+          {/* Group 2: Cloudflare Tunnel Status (Moved to New Line) */}
+          <div className="flex items-center justify-start mt-2 w-full" dir="ltr">
+            {tunnelUrl ? (
+              <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2.5 py-1 text-xs font-semibold shadow-sm transition-all duration-200">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-ping mr-1 shrink-0" />
+                <span className="font-mono truncate max-w-[120px] sm:max-w-[200px]" title={tunnelUrl}>
+                  {tunnelUrl.replace("https://", "")}
+                </span>
+                <a
+                  href={tunnelUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hover:text-green-500 ml-1.5 shrink-0 hover:scale-110 transition-transform"
+                  title={locale === 'ar' ? 'فتح الرابط في علامة تبويب جديدة' : 'Open link in new tab'}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                </a>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded hover:scale-105 active:scale-95 transition-all"
+                  onClick={() => {
+                    navigator.clipboard.writeText(tunnelUrl);
+                    alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!');
+                  }}
+                  title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}
+                >
+                  <Copy className="w-3 h-3" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-5 px-1.5 text-[9px] font-bold border-green-500/30 hover:bg-green-500/20 text-green-700 dark:text-green-300 shrink-0 ml-1 transition-all p-0"
+                  onClick={handleRestartTunnel}
+                  disabled={loadingTunnel}
+                  title={locale === 'ar' ? 'إعادة تشغيل النفق لتوليد رابط جديد' : 'Restart tunnel to generate a new link'}
+                >
+                  {locale === 'ar' ? 'تغيير الرابط' : 'Change Link'}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2.5 py-1 text-xs font-semibold shrink-0">
+                <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full mr-1 animate-pulse" />
+                <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel inactive'}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-5 px-1.5 text-[9px] font-bold border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 shrink-0 ml-1.5 transition-all p-0"
+                  onClick={handleRestartTunnel}
+                  disabled={loadingTunnel}
+                >
+                  {locale === 'ar' ? 'تشغيل التونل' : 'Start Tunnel'}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-5 w-5 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded ml-1 hover:scale-110 active:scale-90 transition-all"
+                  onClick={fetchTunnelUrl}
+                  title={locale === 'ar' ? 'تحديث الحالة' : 'Refresh Tunnel Status'}
+                  disabled={loadingTunnel}
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingTunnel ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Storage bar */}
