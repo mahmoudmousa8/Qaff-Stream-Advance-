@@ -7,34 +7,16 @@ const LOG_LIMIT = 500
 const INTERNAL_PREFIX = '__scheduler_last_run__'
 
 
-// GET - Fetch logs, optionally filtered by slotIndex
+// GET - Fetch logs
 export async function GET(request: NextRequest) {
   try {
-
-    const slotIndexParam = request.nextUrl.searchParams.get('slotIndex')
-    const slotIndex = slotIndexParam !== null ? parseInt(slotIndexParam) : null
-
-    let logs
-    if (slotIndex !== null && !isNaN(slotIndex)) {
-      // Filter logs for specific slot (matches "Slot N:" prefix)
-      const slotPrefix = `Slot ${slotIndex + 1}:`
-      logs = await db.systemLog.findMany({
-        take: 100,
-        orderBy: { timestamp: 'desc' },
-        where: {
-          message: { startsWith: slotPrefix },
-          NOT: { message: { startsWith: INTERNAL_PREFIX } }
-        }
-      })
-    } else {
-      logs = await db.systemLog.findMany({
-        take: LOG_LIMIT,
-        orderBy: { timestamp: 'desc' },
-        where: {
-          NOT: { message: { startsWith: INTERNAL_PREFIX } }
-        }
-      })
-    }
+    const logs = await db.systemLog.findMany({
+      take: LOG_LIMIT,
+      orderBy: { timestamp: 'desc' },
+      where: {
+        NOT: { message: { startsWith: INTERNAL_PREFIX } }
+      }
+    })
 
     return NextResponse.json({ logs: logs.reverse() })
   } catch (error) {
@@ -77,11 +59,11 @@ export async function DELETE(request: NextRequest) {
       await db.systemLog.deleteMany({})
       return NextResponse.json({ success: true, message: 'All logs cleared' })
     } else {
-      const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+      const thirteenHoursAgo = new Date(Date.now() - 13 * 60 * 60 * 1000).toISOString()
       await db.systemLog.deleteMany({
         where: {
           OR: [
-            { timestamp: { lt: twelveHoursAgo } },
+            { timestamp: { lt: thirteenHoursAgo } },
             { message: { startsWith: INTERNAL_PREFIX } }
           ]
         }

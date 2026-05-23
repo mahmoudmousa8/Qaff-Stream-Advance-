@@ -104,7 +104,16 @@ function useCopyToClipboard() {
   return { copy, copiedKey }
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬ Copy Button component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+function getLogColor(message: string) {
+  const msg = message.toLowerCase()
+  if (msg.includes('error') || msg.includes('fail') || msg.includes('خطأ')) return 'text-red-400'
+  if (msg.includes('start') || msg.includes('success') || msg.includes('بدأ') || msg.includes('نجح')) return 'text-green-400'
+  if (msg.includes('stop') || msg.includes('end') || msg.includes('إيقاف')) return 'text-orange-400'
+  if (msg.includes('warn') || msg.includes('تحذير')) return 'text-yellow-400'
+  return 'text-slate-300'
+}
+
+// ── Copy Button component ─────────────────────────────────────────────────────
 function CopyButton({ text, id, title, className }: { text: string; id: string; title?: string; className?: string }) {
   const { copy, copiedKey } = useCopyToClipboard()
   const isCopied = copiedKey === id
@@ -1031,7 +1040,7 @@ export default function Home() {
       const sig = newController.signal
 
       // 1. Fetch system logs (primary display)
-      fetch(`/api/logs?slotIndex=${slotIndex}`, { signal: sig })
+      fetch(`/api/logs`, { signal: sig })
         .then(res => res.json())
         .then(logsData => {
           setChannelLogs(prev => prev?.slotIndex === slotIndex ? {
@@ -2461,7 +2470,7 @@ export default function Home() {
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
-              {t('channelLogs')} #{channelLogs ? channelLogs.slotIndex + 1 : ''}
+              {t('logs')}
             </DialogTitle>
           </DialogHeader>
 
@@ -2484,9 +2493,9 @@ export default function Home() {
               <div className="text-muted-foreground text-center py-8">{t('noLogs')}</div>
             ) : (
               channelLogs?.logs.map((log) => (
-                <div key={log.id} className="text-green-400 py-0.5 leading-relaxed">
+                <div key={log.id} className="py-0.5 leading-relaxed">
                   <span className="text-slate-500">{new Date(log.timestamp).toLocaleTimeString('en-GB', { hour12: false })} </span>
-                  {log.message}
+                  <span className={getLogColor(log.message)}>{log.message}</span>
                 </div>
               ))
             )}

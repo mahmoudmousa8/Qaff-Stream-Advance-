@@ -735,11 +735,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   // Periodically cleanup old logs in the background (10% chance) to prevent SQLite database lock contention
   if (Math.random() < 0.1) {
     try {
-      const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+      const thirteenHoursAgo = new Date(Date.now() - 13 * 60 * 60 * 1000).toISOString()
       await db.systemLog.deleteMany({
         where: {
           OR: [
-            { timestamp: { lt: twelveHoursAgo } },
+            { timestamp: { lt: thirteenHoursAgo } },
             { message: { startsWith: LOCK_KEY } }
           ]
         }
