@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
-            data: { status: 'Starting', isRunning: false, manuallyStopped: false, schedStart: updatedSchedStart, schedStop: updatedSchedStop }
+            data: { status: 'Starting', isRunning: false, manuallyStopped: false, isSwapped: false, schedStart: updatedSchedStart, schedStop: updatedSchedStop }
           })
         }))
 
@@ -252,6 +252,7 @@ export async function POST(request: NextRequest) {
             isRunning: false,
             isScheduled: false,
             manuallyStopped: true,
+            isSwapped: false,
             status: 'Stopped',
             nextRunTime: '',
             youtubeBroadcastId: ''

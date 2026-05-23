@@ -1909,6 +1909,11 @@ export default function Home() {
                                 )
                               })()}
 
+                              <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${slot.isRunning || slot.status !== 'Stopped' ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
+                                <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                              </div>
+
                               {/* Daily / Weekly */}
                               <div className={`w-[155px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
@@ -2329,6 +2334,11 @@ export default function Home() {
                                 </select>
                               </div>
 
+                              <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
+                                <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
+                              </div>
+
                               {/* Daily / Weekly */}
                               <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
@@ -2355,10 +2365,7 @@ export default function Home() {
                                   <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r" title="أقرب 12 صباحاً">{t('btnAM')} 12</button>
                                   <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors" title="أقرب 12 مساءاً">{t('btnPM')} 12</button>
                                 </div>
-                                <div className="flex bg-muted/50 rounded overflow-hidden border border-blue-500/20">
-                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title="بعد 10 دقائق صباحاً">{t('btnAM')} 10</button>
-                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title="بعد 10 دقائق مساءاً">{t('btnPM')} 10</button>
-                                </div>
+
                               </div>
 
                               {/* Reset dates */}
