@@ -240,9 +240,9 @@ const translations = {
         settingsSaved: 'Settings saved successfully',
         // Pre-Stop Swap Video
         preStopSwap: 'Pre-Stop Swap Video',
-        preStopSwapDesc: 'Select a video to automatically switch to 20 minutes before the scheduled stop time.',
+        preStopSwapDesc: 'Select a video to automatically switch to 10 minutes before the scheduled stop time.',
         enablePreStopSwap: 'Enable Pre-Stop Swap',
-        enablePreStopSwapDesc: 'Automatically switch to a pre-recorded video 20 minutes before the broadcast ends, replacing the live source and overlays.',
+        enablePreStopSwapDesc: 'Automatically switch to a pre-recorded video 10 minutes before the broadcast ends, replacing the live source and overlays.',
         swapVideoFile: 'Swap Video File',
         noSwapVideoSelected: 'No Swap Video Selected',
         selectSwapVideo: 'Select Swap Video File',
@@ -486,9 +486,9 @@ const translations = {
         settingsSaved: 'تم حفظ الإعدادات بنجاح',
         // Pre-Stop Swap Video
         preStopSwap: 'فيديو التبديل قبل الإيقاف',
-        preStopSwapDesc: 'اختر فيديو للتبديل إليه تلقائياً قبل 20 دقيقة من موعد الإيقاف المجدول.',
+        preStopSwapDesc: 'اختر فيديو للتبديل إليه تلقائياً قبل 10 دقائق من موعد الإيقاف المجدول.',
         enablePreStopSwap: 'تفعيل التبديل قبل الإيقاف',
-        enablePreStopSwapDesc: 'يتم التبديل تلقائياً إلى فيديو مسجل قبل 20 دقيقة من انتهاء البث، مع إلغاء المصدر المباشر والإعدادات الحالية.',
+        enablePreStopSwapDesc: 'يتم التبديل تلقائياً إلى فيديو مسجل قبل 10 دقائق من انتهاء البث، مع إلغاء المصدر المباشر والإعدادات الحالية.',
         swapVideoFile: 'ملف فيديو التبديل',
         noSwapVideoSelected: 'لم يتم اختيار فيديو تبديل',
         selectSwapVideo: 'اختر ملف فيديو التبديل',
