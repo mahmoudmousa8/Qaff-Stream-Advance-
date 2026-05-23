@@ -78,6 +78,18 @@ export async function PUT(
       }
     })
 
+    // If slot is running and thumbnail changed, upload to YouTube immediately
+    if (updates.youtubeThumbnailPath && updates.youtubeThumbnailPath !== slot.youtubeThumbnailPath) {
+      if (slot.isRunning && slot.outputType === 'youtube' && slot.youtubeChannelId && slot.youtubeBroadcastId) {
+        try {
+          const { uploadYoutubeThumbnail } = await import('@/lib/youtube-helper')
+          uploadYoutubeThumbnail(slot.youtubeChannelId, slot.youtubeBroadcastId, updates.youtubeThumbnailPath)
+        } catch (err) {
+          console.error('[Individual Slot Update] Failed to trigger thumbnail upload for active slot:', err)
+        }
+      }
+    }
+
     return NextResponse.json(updatedSlot)
   } catch (error) {
     console.error('Error updating slot:', error)

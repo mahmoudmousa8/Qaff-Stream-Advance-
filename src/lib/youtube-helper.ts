@@ -341,3 +341,48 @@ export async function stopYoutubeLiveStream(channelId: string, broadcastId: stri
     console.error(`[YouTube Helper] Error in stopYoutubeLiveStream:`, err?.message || err)
   }
 }
+
+export async function uploadYoutubeThumbnail(
+  channelId: string,
+  broadcastId: string,
+  thumbnailPath: string
+): Promise<boolean> {
+  if (!broadcastId || !thumbnailPath || !existsSync(thumbnailPath)) {
+    console.warn(`[YouTube Helper] Thumbnail upload skipped: broadcastId=${broadcastId}, path=${thumbnailPath}`)
+    return false
+  }
+
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    const thumbnailBuffer = readFileSync(thumbnailPath)
+    const thumbnailSize = thumbnailBuffer.length
+
+    if (thumbnailSize <= 2 * 1024 * 1024) {
+      console.log(`[YouTube Helper] Uploading PNG Thumbnail to active broadcast ${broadcastId}...`)
+      const setThumbnailUrl = `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`
+      const thumbnailResponse = await fetchWithTimeout(setThumbnailUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'image/png',
+          'Content-Length': thumbnailSize.toString()
+        },
+        body: thumbnailBuffer
+      }, 10000)
+
+      if (!thumbnailResponse.ok) {
+        console.error('[YouTube Helper] Thumbnail upload failed:', await thumbnailResponse.text())
+        return false
+      } else {
+        console.log('[YouTube Helper] PNG Thumbnail successfully set on active broadcast!')
+        return true
+      }
+    } else {
+      console.warn(`[YouTube Helper] Thumbnail file is too large (${(thumbnailSize / 1024 / 1024).toFixed(2)}MB). Must be under 2MB. Skipping upload.`)
+      return false
+    }
+  } catch (err: any) {
+    console.error('[YouTube Helper] Error during thumbnail upload:', err?.message || err)
+    return false
+  }
+}

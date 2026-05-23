@@ -406,6 +406,17 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'صورة غلاف غير صالحة' }, { status: 400 })
         }
 
+        // Find currently running YouTube slots that match userFilter and have a broadcast ID
+        const activeYoutubeSlots = await db.streamSlot.findMany({
+          where: {
+            isRunning: true,
+            outputType: 'youtube',
+            youtubeChannelId: { not: null },
+            youtubeBroadcastId: { not: '' },
+            ...userFilter
+          }
+        })
+
         const result = await db.streamSlot.updateMany({
           where: userFilter,
           data: {
@@ -413,8 +424,21 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        const msg = `تم تعيين الصورة المصغرة الموحدة لـ ${result.count} قناة بنجاح`
+        // Upload to active YouTube streams in the background
+        if (activeYoutubeSlots.length > 0) {
+          try {
+            const { uploadYoutubeThumbnail } = await import('@/lib/youtube-helper')
+            Promise.allSettled(
+              activeYoutubeSlots.map(s =>
+                uploadYoutubeThumbnail(s.youtubeChannelId!, s.youtubeBroadcastId, thumbnailPath)
+              )
+            )
+          } catch (err) {
+            console.error('[setThumbnailAll] Failed to trigger thumbnail upload for active slots:', err)
+          }
+        }
 
+        const msg = `تم تعيين الصورة المصغرة الموحدة لـ ${result.count} قناة بنجاح`
         return NextResponse.json({ success: true, count: result.count, message: msg })
       }
 
