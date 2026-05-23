@@ -815,20 +815,6 @@ export default function Home() {
   const handleSlotChange = (index: number, field: keyof StreamSlot, value: string | boolean) => {
     let updates: Partial<StreamSlot> = { [field]: value }
 
-    if (field === 'schedStart') {
-      const slot = slots.find(s => s.slotIndex === index)
-      if (slot) {
-        if (value === '') {
-          updates.schedStop = ''
-        } else if (slot.schedStop && typeof value === 'string' && /^\d{2}-\d{2} \d{2}:\d{2}$/.test(value)) {
-          const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
-          if (durH >= 0 && durM >= 0) {
-            updates.schedStop = buildStopByDuration(value, durH, durM)
-          }
-        }
-      }
-    }
-
     setSlots(prev => prev.map(slot =>
       slot.slotIndex === index ? { ...slot, ...updates } : slot
     ))
@@ -967,9 +953,9 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const handleClosest5MinSchedule = (index: number, ampm: 'AM' | 'PM') => {
+  const handleClosest10MinSchedule = (index: number, ampm: 'AM' | 'PM') => {
     const now = new Date()
-    let m = Math.floor(now.getMinutes() / 5) * 5 + 5
+    let m = Math.floor(now.getMinutes() / 10) * 10 + 10
     let h = now.getHours()
     if (m >= 60) {
       m -= 60
@@ -1293,8 +1279,8 @@ export default function Home() {
                   <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 12 للكل' : 'Set 12 All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400"
-                  onClick={() => confirmBulkAction('setClosest5MinAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 5 دقائق؟' : 'Set all slots to closest 5 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 5 للكل' : 'Set 5m All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 5 للكل' : 'Set 5 All'}
+                  onClick={() => confirmBulkAction('setClosest10MinAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق؟' : 'Set all slots to closest 10 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 10 للكل' : 'Set 10m All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 10 للكل' : 'Set 10 All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
                   onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
@@ -1658,12 +1644,12 @@ export default function Home() {
             <CardContent className="flex-1 p-0 overflow-y-auto xl:overflow-hidden min-h-0">
               {/* ── Desktop Table (xl+) ── */}
               <div className="hidden xl:block h-full overflow-auto">
-                <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
+                <table className="w-full border-collapse" style={{ minWidth: 1265, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 28 }}>#</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 170 }}>{t('colDetails')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 200 }}>{t('colFilePath')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 130 }}>{t('colDetails')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 160 }}>{t('colStreamKey')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
                       <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 440 }}>
@@ -2357,8 +2343,8 @@ export default function Home() {
                                   <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors" title="أقرب 12 مساءاً">{t('btnPM')} 12</button>
                                 </div>
                                 <div className="flex bg-muted/50 rounded overflow-hidden border border-blue-500/20">
-                                  <button disabled={isLocked} onClick={() => handleClosest5MinSchedule(slot.slotIndex, 'AM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title="بعد 5 دقائق صباحاً">{t('btnAM')} 5</button>
-                                  <button disabled={isLocked} onClick={() => handleClosest5MinSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title="بعد 5 دقائق مساءاً">{t('btnPM')} 5</button>
+                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title="بعد 10 دقائق صباحاً">{t('btnAM')} 10</button>
+                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title="بعد 10 دقائق مساءاً">{t('btnPM')} 10</button>
                                 </div>
                               </div>
 

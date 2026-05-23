@@ -326,12 +326,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, count: slots.length, message: `Set alternating 12 AM/PM schedule for all ${slots.length} slots` })
       }
 
-      case 'setClosest5MinAll': {
+      case 'setClosest10MinAll': {
         const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
         const now = new Date()
         const cairoNow = getCairoNowFields(now)
 
-        let m = Math.floor(cairoNow.minute / 5) * 5 + 5
+        let m = Math.floor(cairoNow.minute / 10) * 10 + 10
         let h = cairoNow.hour
         if (m >= 60) {
           m -= 60
@@ -383,7 +383,7 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating closest 5-min schedule for all ${slots.length} slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating closest 10-min schedule for all ${slots.length} slots` })
       }
 
       case 'clearTimesAll': {
