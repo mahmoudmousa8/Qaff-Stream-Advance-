@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
+import { getAuthUser } from '@/lib/auth-helper'
 
 const BULK_STREAM_MANAGER = STREAM_MANAGER_URL
 
 // POST - Bulk operations
 export async function POST(request: NextRequest) {
+  const user = await getAuthUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const userFilter: any = {}
+  if (user.role === 'user') {
+    userFilter.slotIndex = { lt: user.slotsLimit }
+  }
+
   try {
     const { action } = await request.json()
 
@@ -15,7 +26,8 @@ export async function POST(request: NextRequest) {
 
         const allSlots = await db.streamSlot.findMany({
           where: {
-            isRunning: false
+            isRunning: false,
+            ...userFilter
           }
         })
 
@@ -194,14 +206,46 @@ export async function POST(request: NextRequest) {
 
 
       case 'stopAll': {
-        const result = await db.streamSlot.updateMany({
+        // 1. Fetch active YouTube slots first BEFORE updating the DB and clearing fields
+        const activeYoutubeSlots = await db.streamSlot.findMany({
+          where: {
+            isRunning: true,
+            outputType: 'youtube',
+            youtubeChannelId: { not: null },
+            youtubeBroadcastId: { not: '' },
+            ...userFilter
+          }
+        })
+
+        // 2. Fetch all slots that are either running, starting, connecting, scheduled, or not manually stopped
+        const slotsToStop = await db.streamSlot.findMany({
           where: {
             OR: [
               { isRunning: true },
               { status: 'Starting' },
               { status: 'connecting' },
-              { isScheduled: true }
-            ]
+              { isScheduled: true },
+              { manuallyStopped: false }
+            ],
+            ...userFilter
+          }
+        })
+
+        // 3. Call stop on stream-manager for each slot to ensure they are killed/dequeued
+        await Promise.allSettled(
+          slotsToStop.map(s =>
+            fetch(`${BULK_STREAM_MANAGER}/stop`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotIndex: s.slotIndex })
+            })
+          )
+        )
+
+        // 4. Update the DB status for those slots to Stopped and manuallyStopped = true
+        const result = await db.streamSlot.updateMany({
+          where: {
+            slotIndex: { in: slotsToStop.map(s => s.slotIndex) }
           },
           data: {
             isRunning: false,
@@ -213,25 +257,7 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // Stop all via stream manager first
-        try {
-          await fetch(`${BULK_STREAM_MANAGER}/stop-all`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          })
-        } catch {
-          // Continue even if stream manager is down
-        }
-
-        // Terminate any active YouTube live broadcasts cleanly
-        const activeYoutubeSlots = await db.streamSlot.findMany({
-          where: {
-            isRunning: true,
-            outputType: 'youtube',
-            youtubeChannelId: { not: null },
-            youtubeBroadcastId: { not: '' }
-          }
-        })
+        // 5. Terminate any active YouTube live broadcasts cleanly
         if (activeYoutubeSlots.length > 0) {
           try {
             const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
@@ -241,7 +267,7 @@ export async function POST(request: NextRequest) {
               )
             )
           } catch {
-            // Non-fatal — continue with DB update
+            // Non-fatal — continue
           }
         }
 
@@ -254,6 +280,7 @@ export async function POST(request: NextRequest) {
         const cairoNow = getCairoNowFields(now)
 
         const slots = await db.streamSlot.findMany({
+          where: userFilter,
           orderBy: { slotIndex: 'asc' }
         })
 
@@ -313,6 +340,7 @@ export async function POST(request: NextRequest) {
         if (h12 === 0) h12 = 12
 
         const slots = await db.streamSlot.findMany({
+          where: userFilter,
           orderBy: { slotIndex: 'asc' }
         })
 
@@ -359,6 +387,7 @@ export async function POST(request: NextRequest) {
 
       case 'clearTimesAll': {
         const result = await db.streamSlot.updateMany({
+          where: userFilter,
           data: {
             schedStart: '',
             schedStop: '',
@@ -374,12 +403,15 @@ export async function POST(request: NextRequest) {
       case 'dailyAll': {
         // Toggle daily for all slots
         const dailyCount = await db.streamSlot.count({
-          where: { daily: true }
+          where: { daily: true, ...userFilter }
         })
-        const total = await db.streamSlot.count()
+        const total = await db.streamSlot.count({
+          where: userFilter
+        })
         const targetState = dailyCount < total / 2
 
         const result = await db.streamSlot.updateMany({
+          where: userFilter,
           data: {
             daily: targetState,
             weekly: false,
@@ -395,17 +427,23 @@ export async function POST(request: NextRequest) {
       }
 
       case 'resetAll': {
+        const slotsToReset = await db.streamSlot.findMany({
+          where: userFilter
+        })
+
         // Stop all streams first
-        try {
-          await fetch(`${BULK_STREAM_MANAGER}/stop-all`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          })
-        } catch {
-          // Continue even if stream manager is down
-        }
+        await Promise.allSettled(
+          slotsToReset.map(s =>
+            fetch(`${BULK_STREAM_MANAGER}/stop`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotIndex: s.slotIndex })
+            })
+          )
+        )
 
         const result = await db.streamSlot.updateMany({
+          where: userFilter,
           data: {
             channelName: '',
             filePath: '',
@@ -436,6 +474,7 @@ export async function POST(request: NextRequest) {
             schedStart: { not: '' },
             isRunning: false,
             isScheduled: false,
+            ...userFilter
           }
         })
 
