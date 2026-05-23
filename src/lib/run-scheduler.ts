@@ -602,8 +602,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   for (let i = 0; i < slotsToStart.length; i++) {
     const slot = slotsToStart[i]
 
-    let finalInputPath = slot.filePath
-    if (slot.inputType === 'live') {
+    let finalInputPath = (slot.isSwapped && slot.swapVideoPath) ? slot.swapVideoPath : slot.filePath
+    if (!slot.isSwapped && slot.inputType === 'live') {
       finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
     }
 
