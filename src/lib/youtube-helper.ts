@@ -420,19 +420,7 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
   try {
     const accessToken = await refreshAccessToken(channelId)
     
-    // 1. Fetch all active broadcast IDs in our DB to avoid stopping/deleting them!
-    const activeSlots = await db.streamSlot.findMany({
-      where: {
-        isRunning: true,
-        youtubeBroadcastId: { not: '' }
-      },
-      select: {
-        youtubeBroadcastId: true
-      }
-    })
-    const activeBroadcastIdsInDb = new Set(activeSlots.map(s => s.youtubeBroadcastId).filter(Boolean))
-
-    // 2. Fetch upcoming broadcasts and delete them
+    // Fetch upcoming broadcasts
     console.log(`[YouTube Helper] Fetching upcoming broadcasts for channel ${channelId}...`)
     const listUrlUpcoming = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=upcoming&part=id,snippet&maxResults=50`
     const listResponseUpcoming = await fetchWithTimeout(listUrlUpcoming, {
@@ -458,46 +446,6 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
       }
     } else {
       errors.push(`فشل جلب البثوث القادمة: ${await listResponseUpcoming.text()}`)
-    }
-
-    // 3. Fetch active (currently live or stuck in live state) broadcasts and clean them up if orphaned
-    console.log(`[YouTube Helper] Fetching active broadcasts for channel ${channelId}...`)
-    const listUrlActive = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=active&part=id,snippet&maxResults=50`
-    const listResponseActive = await fetchWithTimeout(listUrlActive, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    }, 10000)
-
-    if (listResponseActive.ok) {
-      const dataActive = await listResponseActive.json()
-      const itemsActive = dataActive.items || []
-      console.log(`[YouTube Helper] Found ${itemsActive.length} active broadcasts. Checking for orphans...`)
-      
-      for (const item of itemsActive) {
-        const broadcastId = item.id
-        const title = item.snippet?.title || 'Untitled'
-        
-        // If this broadcast is NOT currently running in our database, it is an orphan!
-        if (!activeBroadcastIdsInDb.has(broadcastId)) {
-          console.log(`[YouTube Helper] Found orphaned active broadcast: ${title} (${broadcastId}). Ending and deleting...`)
-          
-          // Step A: End the broadcast first
-          await stopYoutubeLiveStream(channelId, broadcastId)
-          
-          // Step B: Delete the broadcast
-          const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
-          if (deleted) {
-            deletedCount++
-          } else {
-            errors.push(`فشل حذف البث النشط المعلق "${title}"`)
-          }
-        } else {
-          console.log(`[YouTube Helper] Skipping active broadcast: ${title} (${broadcastId}) because it is currently running in the dashboard.`)
-        }
-      }
-    } else {
-      errors.push(`فشل جلب البثوث النشطة المعلقة: ${await listResponseActive.text()}`)
     }
 
   } catch (err: any) {
