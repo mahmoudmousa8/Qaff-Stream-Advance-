@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    const msg = `تم بنجاح تنظيف وحذف عدد ${result.deletedCount} من البثوث المعلقة والقادمة على القناة.`
+    const msg = `تم بنجاح تنظيف وحذف عدد ${result.deletedCount} من البثوث المجدولة والنشطة على القناة.`
     return NextResponse.json({
       success: true,
       deletedCount: result.deletedCount,

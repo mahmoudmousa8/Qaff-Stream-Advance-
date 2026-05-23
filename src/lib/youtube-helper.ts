@@ -420,7 +420,9 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
   try {
     const accessToken = await refreshAccessToken(channelId)
     
-    // Fetch upcoming broadcasts
+    const itemsToDelete: any[] = []
+
+    // 1. Fetch upcoming broadcasts
     console.log(`[YouTube Helper] Fetching upcoming broadcasts for channel ${channelId}...`)
     const listUrlUpcoming = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=upcoming&part=id,snippet&maxResults=50`
     const listResponseUpcoming = await fetchWithTimeout(listUrlUpcoming, {
@@ -431,21 +433,39 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
 
     if (listResponseUpcoming.ok) {
       const dataUpcoming = await listResponseUpcoming.json()
-      const itemsUpcoming = dataUpcoming.items || []
-      console.log(`[YouTube Helper] Found ${itemsUpcoming.length} upcoming broadcasts. Deleting...`)
-      for (const item of itemsUpcoming) {
-        const broadcastId = item.id
-        const title = item.snippet?.title || 'Untitled'
-        console.log(`[YouTube Helper] Deleting upcoming broadcast: ${title} (${broadcastId})`)
-        const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
-        if (deleted) {
-          deletedCount++
-        } else {
-          errors.push(`فشل حذف البث القادم "${title}"`)
-        }
-      }
+      itemsToDelete.push(...(dataUpcoming.items || []))
     } else {
       errors.push(`فشل جلب البثوث القادمة: ${await listResponseUpcoming.text()}`)
+    }
+
+    // 2. Fetch active broadcasts
+    console.log(`[YouTube Helper] Fetching active broadcasts for channel ${channelId}...`)
+    const listUrlActive = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=active&part=id,snippet&maxResults=50`
+    const listResponseActive = await fetchWithTimeout(listUrlActive, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }, 10000)
+
+    if (listResponseActive.ok) {
+      const dataActive = await listResponseActive.json()
+      itemsToDelete.push(...(dataActive.items || []))
+    } else {
+      errors.push(`فشل جلب البثوث النشطة: ${await listResponseActive.text()}`)
+    }
+
+    // 3. Delete all fetched broadcasts
+    console.log(`[YouTube Helper] Found ${itemsToDelete.length} total broadcasts to delete. Deleting...`)
+    for (const item of itemsToDelete) {
+      const broadcastId = item.id
+      const title = item.snippet?.title || 'Untitled'
+      console.log(`[YouTube Helper] Deleting broadcast: ${title} (${broadcastId})`)
+      const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
+      if (deleted) {
+        deletedCount++
+      } else {
+        errors.push(`فشل حذف البث "${title}"`)
+      }
     }
 
   } catch (err: any) {

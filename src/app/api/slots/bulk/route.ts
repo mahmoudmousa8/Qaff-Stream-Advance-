@@ -442,6 +442,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, count: result.count, message: msg })
       }
 
+      case 'clearThumbnailAll': {
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            youtubeThumbnailPath: ""
+          }
+        })
+        const msg = `تم حذف الصورة المصغرة لـ ${result.count} قناة بنجاح`
+        return NextResponse.json({ success: true, count: result.count, message: msg })
+      }
+
       case 'dailyAll': {
         // Toggle daily for all slots
         const dailyCount = await db.streamSlot.count({
