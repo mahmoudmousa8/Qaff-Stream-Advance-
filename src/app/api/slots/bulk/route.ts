@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { action } = await request.json()
+    const body = await request.json()
+    const { action, thumbnailPath } = body
 
     switch (action) {
       case 'startAll': {
@@ -398,6 +399,23 @@ export async function POST(request: NextRequest) {
           }
         })
         return NextResponse.json({ success: true, count: result.count, message: `Cleared start and stop times for all slots` })
+      }
+
+      case 'setThumbnailAll': {
+        if (!thumbnailPath || typeof thumbnailPath !== 'string') {
+          return NextResponse.json({ error: 'صورة غلاف غير صالحة' }, { status: 400 })
+        }
+
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            youtubeThumbnailPath: thumbnailPath
+          }
+        })
+
+        const msg = `تم تعيين الصورة المصغرة الموحدة لـ ${result.count} قناة بنجاح`
+
+        return NextResponse.json({ success: true, count: result.count, message: msg })
       }
 
       case 'dailyAll': {

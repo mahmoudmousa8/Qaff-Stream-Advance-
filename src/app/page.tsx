@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -366,6 +366,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
+  const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
 
   // YouTube stream keys state (for dropdown in settings dialog)
   const [ytStreamKeys, setYtStreamKeys] = useState<{ id: string; title: string; streamKey: string; rtmpServer: string; status: string }[]>([])
@@ -966,12 +967,12 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const bulkAction = async (action: string, ampm?: 'AM' | 'PM') => {
+  const bulkAction = async (action: string, ampm?: 'AM' | 'PM', payload?: any) => {
     try {
       const res = await fetch('/api/slots/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ampm })
+        body: JSON.stringify({ action, ampm, ...payload })
       })
       const data = await res.json()
       addLog(data.message)
@@ -1277,6 +1278,10 @@ export default function Home() {
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
                   <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
+                  onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة لكافة القنوات' : 'Set unified thumbnail for all slots'}>
+                  <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف للكل' : 'Thumbnail All'}
                 </Button>
               </div>
 
@@ -3033,6 +3038,41 @@ export default function Home() {
                   setThumbnailSelectorOpen(false)
                 }}
                 onClose={() => setThumbnailSelectorOpen(false)}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Thumbnail Selector Helper Dialog ── */}
+      <Dialog open={bulkThumbnailSelectorOpen} onOpenChange={(open) => !open && setBulkThumbnailSelectorOpen(false)}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col bg-card border shadow-2xl rounded-xl">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              {locale === 'ar' ? 'اختر صورة غلاف موحدة لكافة البثوث' : 'Select Unified Thumbnail Image for All Streams'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar' 
+                ? 'تصفح واختر ملف صورة PNG ليتم تطبيقه على كافة القنوات المسموحة لك.' 
+                : 'Browse and select a PNG image file to apply to all your slots.'}
+            </DialogDescription>
+          </DialogHeader>
+          {bulkThumbnailSelectorOpen && (
+            <div className="flex-1 overflow-hidden min-h-0 px-4">
+              <VideoManager
+                mode="select"
+                onVideoSelect={(path) => {
+                  if (!path.toLowerCase().endsWith('.png')) {
+                    alert(locale === 'ar' 
+                      ? 'عذراً، يجب اختيار ملف بصيغة PNG فقط لصورة الغلاف!' 
+                      : 'Please select a strictly PNG file format for the thumbnail!')
+                    return
+                  }
+                  bulkAction('setThumbnailAll', undefined, { thumbnailPath: path })
+                  setBulkThumbnailSelectorOpen(false)
+                }}
+                onClose={() => setBulkThumbnailSelectorOpen(false)}
               />
             </div>
           )}
