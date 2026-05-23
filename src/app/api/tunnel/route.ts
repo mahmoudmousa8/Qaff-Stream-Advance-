@@ -89,16 +89,19 @@ export async function POST() {
     const { exec } = await import("child_process");
     
     await new Promise<void>((resolve, reject) => {
-      exec("pm2 restart qaff-tunnel", (err) => {
-        if (err) {
-          // If restart fails (e.g. process not running/registered), try starting it using the config file
-          exec("pm2 start ecosystem.config.cjs --only qaff-tunnel", (err2) => {
-            if (err2) reject(err2);
-            else resolve();
-          });
-        } else {
-          resolve();
-        }
+      // Clear the PM2 logs for the tunnel first so we don't read the old URL
+      exec("pm2 flush qaff-tunnel", () => {
+        exec("pm2 restart qaff-tunnel", (err) => {
+          if (err) {
+            // If restart fails (e.g. process not running/registered), try starting it using the config file
+            exec("pm2 start ecosystem.config.cjs --only qaff-tunnel", (err2) => {
+              if (err2) reject(err2);
+              else resolve();
+            });
+          } else {
+            resolve();
+          }
+        });
       });
     });
 

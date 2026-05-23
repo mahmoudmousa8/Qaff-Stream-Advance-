@@ -1,9 +1,12 @@
-import fs from 'fs';
+const fs = require('fs');
+const path = require('path');
 
-const content = fs.readFileSync('src/app/page.tsx', 'utf8');
+const pagePath = path.join(__dirname, '..', 'src', 'app', 'page.tsx');
+const content = fs.readFileSync(pagePath, 'utf8');
+
 const lines = content.split('\n');
 lines.forEach((line, index) => {
-  if (line.includes('fetch(') || line.includes('/api/')) {
+  if (line.includes('bulk') || line.includes('Start All') || line.includes('الكل') || line.includes('startAll')) {
     console.log(`${index + 1}: ${line.trim()}`);
   }
 });

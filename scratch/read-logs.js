@@ -1,22 +1,16 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const Database = require('better-sqlite3');
+const path = require('path');
+const dbPath = path.join(__dirname, '..', 'prisma', 'data', 'app.db');
+const db = new Database(dbPath);
 
-async function main() {
-  console.log("Fetching latest system logs...");
-  const logs = await prisma.systemLog.findMany({
-    orderBy: { timestamp: 'desc' },
-    take: 30
-  });
-  console.log("LOGS count:", logs.length);
+console.log('=== SYSTEM LOGS (LAST 100) ===');
+try {
+  const logs = db.prepare("SELECT id, datetime(timestamp/1000, 'unixepoch', 'localtime') as time, message FROM SystemLog ORDER BY id DESC LIMIT 100").all();
   logs.forEach(log => {
-    console.log(`[${log.timestamp.toISOString()}] ${log.message}`);
+    console.log(`[${log.time}] ${log.message}`);
   });
+} catch (e) {
+  console.error('Error fetching logs:', e.message);
 }
 
-main()
-  .catch(e => {
-    console.error(e);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+db.close();

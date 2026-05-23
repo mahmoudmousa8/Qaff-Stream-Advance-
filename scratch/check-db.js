@@ -1,54 +1,18 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
-// Try standard locations
-const PROJECT_DIR = path.join(__dirname, '..');
-const pathsToTry = [
-  path.join(PROJECT_DIR, 'data', 'app.db'),
-  path.join(PROJECT_DIR, 'prisma', 'data', 'app.db'),
-  path.join(PROJECT_DIR, 'app.db'),
-];
-
-let dbPath = null;
-for (const p of pathsToTry) {
-  if (fs.existsSync(p)) {
-    dbPath = p;
-    break;
-  }
+async function main() {
+  const count = await prisma.streamSlot.count();
+  console.log(`Total slots: ${count}`);
+  const first5 = await prisma.streamSlot.findMany({
+    take: 5,
+    orderBy: { slotIndex: 'asc' }
+  });
+  first5.forEach(s => {
+    console.log(`Slot ${s.slotIndex + 1}: name="${s.channelName}" status="${s.status}" running=${s.isRunning} scheduled=${s.isScheduled} manuallyStopped=${s.manuallyStopped} start="${s.schedStart}" stop="${s.schedStop}" nextRun="${s.nextRunTime}" channelId="${s.youtubeChannelId}" key="${s.streamKey ? s.streamKey.substring(0, 8) + '...' : ''}" filePath="${s.filePath}"`);
+  });
 }
 
-if (!dbPath) {
-  console.error("❌ Could not find database file in standard locations:", pathsToTry);
-  process.exit(1);
-}
-
-console.log(`📂 Using database at: ${dbPath}`);
-const db = new Database(dbPath);
-
-try {
-  // 1. Get Users info
-  const users = db.prepare("SELECT id, username, role, slotsLimit, renewalDate FROM User").all();
-  console.log("\n👤 Users in database:");
-  console.table(users);
-
-  // 2. Get Slots stats
-  const totalSlots = db.prepare("SELECT COUNT(*) as count FROM StreamSlot").get().count;
-  const runningSlots = db.prepare("SELECT COUNT(*) as count FROM StreamSlot WHERE isRunning = 1").get().count;
-  const scheduledSlots = db.prepare("SELECT COUNT(*) as count FROM StreamSlot WHERE isScheduled = 1").get().count;
-
-  console.log("\n📊 Slots Stats:");
-  console.log(`- Total slots in DB: ${totalSlots}`);
-  console.log(`- Running slots: ${runningSlots}`);
-  console.log(`- Scheduled slots: ${scheduledSlots}`);
-
-  // 3. Get running slots info
-  if (runningSlots > 0) {
-    const running = db.prepare("SELECT slotIndex, channelName, isRunning, status FROM StreamSlot WHERE isRunning = 1").all();
-    console.log("\n🟢 Running Slots:");
-    console.table(running);
-  }
-
-} catch (err) {
-  console.error("❌ Database query error:", err.message);
-}
+main()
+  .catch(e => console.error(e))
+  .finally(() => prisma.$disconnect());
