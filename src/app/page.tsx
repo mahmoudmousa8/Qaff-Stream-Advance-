@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -384,6 +384,7 @@ export default function Home() {
   const [ytLinkName, setYtLinkName] = useState('')
   const [ytSlotLinkName, setYtSlotLinkName] = useState('')
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
+  const [ytCleanupLoading, setYtCleanupLoading] = useState<string | null>(null)
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -489,6 +490,34 @@ export default function Home() {
       setYtLoading(false)
     }
   }, [])
+
+  // Cleanup upcoming/scheduled broadcasts on YouTube channel
+  const handleCleanupUpcoming = async (channelDbId: string) => {
+    if (!confirm(locale === 'ar' 
+      ? 'هل أنت متأكد من رغبتك في حذف وإلغاء جميع البثوث المجدولة والقادمة المعلقة على هذه القناة في يوتيوب؟ لا يمكن التراجع عن هذا الإجراء.' 
+      : 'Are you sure you want to delete and cancel all scheduled/upcoming pending broadcasts on this YouTube channel? This action cannot be undone.')) {
+      return
+    }
+    setYtCleanupLoading(channelDbId)
+    try {
+      const res = await fetch('/api/youtube/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelDbId })
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(data.message)
+        addLog(data.message)
+      } else {
+        alert(data.error || data.message || 'حدث خطأ أثناء تنظيف البثوث')
+      }
+    } catch (err: any) {
+      alert(locale === 'ar' ? 'فشل الاتصال بالخادم' : 'Network error')
+    } finally {
+      setYtCleanupLoading(null)
+    }
+  }
 
   // Fetch YouTube stream keys for a given channel (used in settings dialog dropdown)
   const fetchYtStreamKeys = useCallback(async (channelId: string, force = false) => {
@@ -3253,6 +3282,23 @@ export default function Home() {
                                   title={locale === 'ar' ? 'تجديد الترخيص / إعادة ربط القناة' : 'Renew License / Re-link Channel'}
                                 >
                                   <RefreshCw className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+
+                              {ytUnlinkConfirm !== ch.id && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-md shrink-0 transition-colors"
+                                  onClick={() => handleCleanupUpcoming(ch.id)}
+                                  disabled={ytCleanupLoading === ch.id}
+                                  title={locale === 'ar' ? 'حذف البثوث المجدولة/المعلقة بالخطأ' : 'Clean up upcoming/scheduled broadcasts'}
+                                >
+                                  {ytCleanupLoading === ch.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <CalendarX className="w-3.5 h-3.5" />
+                                  )}
                                 </Button>
                               )}
 

@@ -386,3 +386,74 @@ export async function uploadYoutubeThumbnail(
     return false
   }
 }
+
+export async function deleteYoutubeBroadcast(channelId: string, broadcastId: string): Promise<boolean> {
+  if (!broadcastId) return false
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    console.log(`[YouTube Helper] Deleting broadcast ${broadcastId}...`)
+    const deleteUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts?id=${broadcastId}`
+    const response = await fetchWithTimeout(deleteUrl, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }, 10000)
+
+    if (!response.ok) {
+      const errMsg = await response.text()
+      console.error(`[YouTube Helper] Failed to delete broadcast: ${errMsg}`)
+      return false
+    } else {
+      console.log(`[YouTube Helper] Broadcast ${broadcastId} successfully deleted`)
+      return true
+    }
+  } catch (err: any) {
+    console.error(`[YouTube Helper] Error in deleteYoutubeBroadcast:`, err?.message || err)
+    return false
+  }
+}
+
+export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ deletedCount: number; errors: string[] }> {
+  const errors: string[] = []
+  let deletedCount = 0
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    console.log(`[YouTube Helper] Fetching upcoming broadcasts for channel ${channelId}...`)
+    
+    // Fetch upcoming broadcasts
+    const listUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=upcoming&part=id,snippet&maxResults=50`
+    const listResponse = await fetchWithTimeout(listUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    }, 10000)
+
+    if (!listResponse.ok) {
+      throw new Error(`Failed to list broadcasts: ${await listResponse.text()}`)
+    }
+
+    const data = await listResponse.json()
+    const items = data.items || []
+
+    console.log(`[YouTube Helper] Found ${items.length} upcoming broadcasts. Deleting...`)
+
+    for (const item of items) {
+      const broadcastId = item.id
+      const title = item.snippet?.title || 'Untitled'
+      console.log(`[YouTube Helper] Deleting upcoming broadcast: ${title} (${broadcastId})`)
+      
+      const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
+      if (deleted) {
+        deletedCount++
+      } else {
+        errors.push(`فشل حذف البث "${title}"`)
+      }
+    }
+  } catch (err: any) {
+    console.error(`[YouTube Helper] Error in cleanupUpcomingBroadcasts:`, err?.message || err)
+    errors.push(err?.message || String(err))
+  }
+
+  return { deletedCount, errors }
+}
