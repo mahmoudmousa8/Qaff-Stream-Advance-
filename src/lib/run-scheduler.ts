@@ -607,6 +607,66 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   for (const slot of slots) {
     if (!slot.isRunning) {
       activeSwapVideos.delete(slot.slotIndex)
+
+      // ── Reschedule finished/stopped recurring slots ──
+      const isRecurring = slot.daily || slot.weekly || slot.hourly
+      if (!slot.isScheduled && isRecurring && slot.schedStart) {
+        const parsedStart = parseScheduleTime(slot.schedStart)
+        let shouldReschedule = !slot.manuallyStopped
+        if (parsedStart) {
+          const startDate = getCairoTargetDate(parsedStart, now)
+          if (now >= startDate) {
+            shouldReschedule = true
+          }
+        }
+        
+        if (shouldReschedule) {
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Rescheduling stopped recurring slot for the next occurrence.`)
+          let nextStartTime = slot.schedStart
+          let nextStopTime = slot.schedStop
+          const oldStart = parseScheduleTime(slot.schedStart)
+          const oldStop = parseScheduleTime(slot.schedStop)
+          if (oldStart && oldStop) {
+            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+            if (durMins < 0) durMins += 1440
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+            const nParsed = parseScheduleTime(nextStartTime)
+            if (nParsed) {
+              const nDate = getCairoTargetDate(nParsed, now)
+              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+              const stopFields = getCairoNowFields(stopDate)
+              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+            }
+          }
+
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              isScheduled: true,
+              status: 'Scheduled',
+              schedStart: nextStartTime,
+              schedStop: nextStopTime,
+              nextRunTime: nextStartTime,
+              manuallyStopped: false,
+              isSwapped: false,
+              youtubeBroadcastId: ''
+            }
+          })
+
+          await db.systemLog.create({
+            data: { message: `Slot ${slot.slotIndex + 1}: Rescheduled recurring slot to start=${nextStartTime}, stop=${nextStopTime}` }
+          })
+
+          // Update local loop variable state so subsequent checks in this tick see it as scheduled
+          slot.isScheduled = true
+          slot.schedStart = nextStartTime
+          slot.schedStop = nextStopTime
+          slot.nextRunTime = nextStartTime
+          slot.manuallyStopped = false
+          slot.isSwapped = false
+          slot.status = 'Scheduled'
+        }
+      }
     }
 
     let finalInputPath = slot.filePath
