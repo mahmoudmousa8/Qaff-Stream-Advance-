@@ -87,7 +87,7 @@ const translations = {
         stopAll: 'Stop All',
         setTimeAll: 'Set Time All',
         dailyAll: 'Daily All',
-        hourlyAll: '30-Min All',
+        hourlyAll: '15-Min Repeat All',
         resetAll: 'Reset All',
         autoSave: 'Auto-Save',
 
@@ -106,7 +106,7 @@ const translations = {
         colWeekly: 'Weekly',
         lblDaily: 'Daily',
         lblWeekly: 'Weekly',
-        lblHourly: '30-Min',
+        lblHourly: '15-Min Repeat',
         colActions: 'Actions',
         colStatus: 'Status',
         colReset: 'Reset',
@@ -166,7 +166,7 @@ const translations = {
         confirmStopAll: 'Stop ALL running streams?',
         confirmSetTimeAll: 'Set alternating schedule for ALL empty slots?',
         confirmDailyAll: 'Toggle Daily for ALL slots?',
-        confirmHourlyAll: 'Toggle 30-Min for ALL slots?',
+        confirmHourlyAll: 'Toggle 15-minute automatic repetition for all slots?',
         confirmResetAll: 'Reset schedule data for ALL slots?',
         logs: 'Logs',
 
@@ -333,7 +333,7 @@ const translations = {
         stopAll: 'إيقاف الكل',
         setTimeAll: 'ضبط الوقت للكل',
         dailyAll: 'يومي للكل',
-        hourlyAll: 'نصف ساعة للكل',
+        hourlyAll: 'تكرار 15 دقيقة للكل',
         resetAll: 'إعادة تعيين الكل',
         autoSave: 'حفظ تلقائي',
 
@@ -352,7 +352,7 @@ const translations = {
         colWeekly: 'أسبوعي',
         lblDaily: 'يومياً',
         lblWeekly: 'إسبوعياً',
-        lblHourly: 'نصف ساعة',
+        lblHourly: 'تكرار 15 دقيقة',
         colActions: 'الإجراءات',
         colStatus: 'الحالة',
         colReset: 'إعادة',
@@ -412,7 +412,7 @@ const translations = {
         confirmStopAll: 'هل أنت متأكد من إيقاف جميع عمليات البث الحالية المشغلة؟',
         confirmSetTimeAll: 'هل تريد ضبط أوقات تبادلية لجميع القنوات الفارغة؟',
         confirmDailyAll: 'هل تريد تفعيل/إلغاء التكرار اليومي لجميع القنوات؟',
-        confirmHourlyAll: 'هل تريد تفعيل/إلغاء التكرار كل نصف ساعة لجميع القنوات؟',
+        confirmHourlyAll: 'هل تريد تفعيل/إلغاء التكرار كل ربع ساعة لجميع القنوات؟',
         confirmResetAll: 'تحذير: هل أنت متأكد من إعادة تعيين ومسح بيانات الجدولة لجميع القنوات؟',
         logs: 'السجلات',
 

@@ -12,6 +12,8 @@ import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
 import { setupYoutubeLiveStream, stopYoutubeLiveStream } from '@/lib/youtube-helper'
 import { getCairoNowFields, getCairoTargetDate, getAbsoluteDateFromCairoFields } from '@/lib/timezone-helper'
+import fs from 'fs'
+import path from 'path'
 
 // Tracks consecutive missed ticks per slot
 const missCounters = new Map<string, number>()
@@ -26,6 +28,52 @@ interface SlotRecoveryState {
 const g = globalThis as any
 if (!g.__qaffRecoveryStates) g.__qaffRecoveryStates = new Map<string, SlotRecoveryState>()
 const recoveryStates: Map<string, SlotRecoveryState> = g.__qaffRecoveryStates
+
+if (!g.__qaffActiveSwapVideos) g.__qaffActiveSwapVideos = new Map<number, string>()
+const activeSwapVideos: Map<number, string> = g.__qaffActiveSwapVideos
+
+if (!g.__qaffLastSelectedSwapVideos) g.__qaffLastSelectedSwapVideos = new Map<number, string>()
+const lastSelectedSwapVideos: Map<number, string> = g.__qaffLastSelectedSwapVideos
+
+function resolveSwapVideoFile(filePathOrDir: string, slotIndex: number): string {
+  try {
+    const stats = fs.statSync(filePathOrDir)
+    if (!stats.isDirectory()) {
+      return filePathOrDir
+    }
+
+    const files = fs.readdirSync(filePathOrDir)
+    const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.webm', '.m4v']
+    const videoFiles = files
+      .filter(file => {
+        const ext = path.extname(file).toLowerCase()
+        return videoExtensions.includes(ext)
+      })
+      .map(file => path.join(filePathOrDir, file))
+
+    if (videoFiles.length === 0) {
+      console.warn(`[Scheduler] Swap directory ${filePathOrDir} contains no video files. Using directory path directly.`)
+      return filePathOrDir
+    }
+
+    // Pick a random video file, avoiding the last selected one if possible
+    const lastFile = lastSelectedSwapVideos.get(slotIndex)
+    let availableFiles = videoFiles
+    if (videoFiles.length > 1 && lastFile) {
+      availableFiles = videoFiles.filter(f => f !== lastFile)
+    }
+
+    const randomIndex = Math.floor(Math.random() * availableFiles.length)
+    const selectedFile = availableFiles[randomIndex]
+    
+    // Update the last selected map
+    lastSelectedSwapVideos.set(slotIndex, selectedFile)
+    return selectedFile
+  } catch (e: any) {
+    console.error(`[Scheduler] Error resolving swap video file from ${filePathOrDir}:`, e)
+    return filePathOrDir
+  }
+}
 
 const BACKOFF_DELAYS_MS = [5_000, 60_000, 180_000, 600_000]  // 5s, 1m, 3m, 10m
 const MAX_CRASH_COUNT = BACKOFF_DELAYS_MS.length  // after 4 crashes → failed
@@ -119,11 +167,11 @@ function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, h
 
     if (hourly) {
       const cairoNow = getCairoNowFields(now)
-      const baseMinute = minute >= 30 ? minute - 30 : minute
+      const baseMinute = minute % 15
       let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
       
       while (now >= nextRun) {
-        const nextDate = new Date(nextRun.getTime() + 30 * 60 * 1000)
+        const nextDate = new Date(nextRun.getTime() + 15 * 60 * 1000)
         const nextFields = getCairoNowFields(nextDate)
         nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
       }
@@ -332,6 +380,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   const slotsToStart: typeof slots = []
 
   for (const slot of slots) {
+    if (!slot.isRunning) {
+      activeSwapVideos.delete(slot.slotIndex)
+    }
+
     let finalInputPath = slot.filePath
     if (slot.inputType === 'live') {
       finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
@@ -506,7 +558,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
       try {
         // Use swapVideoPath for recovery if the stream was swapped — preserves original filePath in DB
-        const recoveryFilePath = (slot.isSwapped && slot.swapVideoPath) ? slot.swapVideoPath : finalInputPath
+        const recoveryFilePath = (slot.isSwapped && slot.swapVideoPath)
+          ? (activeSwapVideos.get(slot.slotIndex) || resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex))
+          : finalInputPath
+        if (slot.isSwapped && slot.swapVideoPath) {
+          activeSwapVideos.set(slot.slotIndex, recoveryFilePath)
+        }
         const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -548,8 +605,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         const swapThresholdMins = 2
         console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=2m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${slot.swapVideoPath}`)
+          const resolvedPath = resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex)
+          activeSwapVideos.set(slot.slotIndex, resolvedPath)
+
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${resolvedPath}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${resolvedPath}`)
 
           try {
             // Step 1: Stop current broadcast FIRST (before marking swapped to allow retry on failure)
@@ -571,7 +631,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
                 outputType: slot.outputType,
                 rtmpServer: slot.rtmpServer,
                 streamKey: slot.streamKey,
-                filePath: slot.swapVideoPath
+                filePath: resolvedPath
               })
             }, 5000)
 

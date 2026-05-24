@@ -377,6 +377,7 @@ export default function Home() {
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
+  const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
 
   // YouTube stream keys state (for dropdown in settings dialog)
   const [ytStreamKeys, setYtStreamKeys] = useState<{ id: string; title: string; streamKey: string; rtmpServer: string; status: string }[]>([])
@@ -526,6 +527,34 @@ export default function Home() {
       alert(locale === 'ar' ? 'فشل الاتصال بالخادم' : 'Network error')
     } finally {
       setYtCleanupLoading(null)
+    }
+  }
+
+  const handleCleanupAllChannels = async () => {
+    if (!confirm(locale === 'ar' 
+      ? 'هل أنت متأكد من رغبتك في تنظيف وحذف جميع البثوث المجدولة والقادمة المعلقة لكافة القنوات النشطة (التي تم ربطها خلال 7 أيام)؟ لا يمكن التراجع عن هذا الإجراء وسيتم تخطي أي قناة ترجع خطأ.' 
+      : 'Are you sure you want to cleanup and delete all scheduled/pending broadcasts on all active channels (linked within 7 days)? This cannot be undone and any channel returning an error will be skipped.')) {
+      return
+    }
+    setCleanupBusy(true)
+    try {
+      const res = await fetch('/api/youtube/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true })
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(data.message)
+        addLog(data.message)
+        fetchYtChannels()
+      } else {
+        alert(data.error || data.message || 'حدث خطأ أثناء تنظيف البثوث')
+      }
+    } catch (err: any) {
+      alert(locale === 'ar' ? 'فشل الاتصال بالخادم' : 'Network error')
+    } finally {
+      setCleanupBusy(false)
     }
   }
 
@@ -982,42 +1011,28 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const handleClosest10MinSchedule = (index: number, ampm: 'AM' | 'PM') => {
+  const handleClosest15Schedule = (index: number) => {
     const now = new Date()
-    let m = Math.floor(now.getMinutes() / 10) * 10 + 10
-    let h = now.getHours()
-    if (m >= 60) {
-      m -= 60
-      h += 1
-    }
-    let h12 = h % 12
-    if (h12 === 0) h12 = 12
-
     const target = new Date(now)
-    target.setMinutes(m, 0, 0)
-    if (ampm === 'AM') {
-      target.setHours(h12 === 12 ? 0 : h12)
+    const minutes = now.getMinutes()
+    let targetMin = 0
+    let targetHour = now.getHours()
+
+    if (minutes < 15) {
+      targetMin = 15
+    } else if (minutes < 30) {
+      targetMin = 30
+    } else if (minutes < 45) {
+      targetMin = 45
     } else {
-      target.setHours(h12 === 12 ? 12 : h12 + 12)
+      targetMin = 0
+      targetHour += 1
     }
 
-    if (target.getTime() <= now.getTime()) {
-      target.setDate(target.getDate() + 1)
-    }
+    target.setHours(targetHour, targetMin, 0, 0)
 
     const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
-    const stopStr = buildStopByDuration(startStr, 11, 45)  // 11h45m duration
-    handleSlotChange(index, 'schedStart', startStr)
-    handleSlotChange(index, 'schedStop', stopStr)
-  }
-
-  const handleClosestHourSchedule = (index: number) => {
-    const now = new Date()
-    const target = new Date(now)
-    target.setHours(now.getHours() + 1, 0, 0, 0)
-
-    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
-    const stopStr = buildStopByDuration(startStr, 0, 50)  // 50 minutes duration
+    const stopStr = buildStopByDuration(startStr, 0, 11)  // 11 minutes duration
     handleSlotChange(index, 'schedStart', startStr)
     handleSlotChange(index, 'schedStop', stopStr)
   }
@@ -1268,23 +1283,15 @@ export default function Home() {
                   onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
                   <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => confirmBulkAction('setTimeAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 12؟' : 'Set all slots to nearest 12?')} title={t('setTimeAll')}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 12 للكل' : 'Set 12 All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400"
-                  onClick={() => confirmBulkAction('setClosest10MinAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق؟' : 'Set all slots to closest 10 minutes?')} title={locale === 'ar' ? 'ضبط لأقرب 10 للكل' : 'Set 10m All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط 10 للكل' : 'Set 10 All'}
-                </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
                   onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
                   <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400"
-                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وتوقف بعد 20 دقيقة؟' : 'Set all slots to closest half-hour?')} title={locale === 'ar' ? 'ضبط لأقرب نصف ساعة للكل' : 'Set Half-Hour All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط لأقرب نصف ساعة للكل' : 'Set Half-Hour All'}
+                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 11 دقيقة؟' : 'Set all slots to nearest 15 minutes (stream 11 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}
                 </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
                   onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
                   <Sun className="w-3 h-3 mr-0.5" />{t('hourlyAll')}
                 </Button>
@@ -1303,6 +1310,14 @@ export default function Home() {
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
                   onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
                   <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف للكل' : 'Clear Thumbnail'}
+                </Button>
+                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                  onClick={() => setBulkSwapSelectorOpen(true)} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
+                  <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مجلد تبديل للكل' : 'Swap Folder All'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
+                  onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap'}
                 </Button>
               </div>
 
@@ -1969,20 +1984,14 @@ export default function Home() {
                                 )
                               })()}
 
-                              <div className="flex gap-1 items-center shrink-0">
-                                <div className={`flex bg-muted/50 rounded overflow-hidden border border-blue-500/20 ${slot.isRunning || slot.status !== 'Stopped' ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
-                                  <button disabled={slot.isRunning || slot.status !== 'Stopped'} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
-                                </div>
-                                <button
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
-                                  className="h-6 px-2 flex items-center justify-center text-[10px] font-bold bg-orange-500/10 hover:bg-orange-500/25 border border-orange-500/20 rounded text-orange-600 dark:text-orange-400 transition-colors shrink-0 disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ضبط لأقرب رأس ساعة وبث 50 دقيقة' : 'Set to nearest hour and stream for 50 mins'}
-                                >
-                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest Hour'}
-                                </button>
-                              </div>
+                              <button
+                                disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                onClick={() => handleClosest15Schedule(slot.slotIndex)}
+                                className="h-6 px-2 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
+                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 11 دقيقة' : 'Set to nearest 15 mins and stream for 11 mins'}
+                              >
+                                {locale === 'ar' ? 'أقرب 15' : 'Closest 15'}
+                              </button>
 
                               {/* Hourly / Daily / Weekly */}
                               <div className={`w-[215px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
@@ -2021,11 +2030,6 @@ export default function Home() {
                                 </div>
                               </div>
 
-                              {/* Quick AM/PM Targets */}
-                              <div className={`w-[66px] flex bg-muted/50 rounded overflow-hidden border shrink-0 border-primary/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors border-r" title={t('lblNext12')}>{t('btnAM')}</button>
-                                <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-6 w-[32px] flex items-center justify-center text-[10px] font-semibold text-foreground/80 hover:bg-primary/20 hover:text-primary transition-colors" title={t('lblNext12')}>{t('btnPM')}</button>
-                              </div>
                               {slot.nextRunTime && (
                                 <div className="text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
                               )}
@@ -2421,20 +2425,14 @@ export default function Home() {
                                 </select>
                               </div>
 
-                              <div className="flex gap-1 items-center shrink-0">
-                                <div className={`flex bg-muted/50 rounded overflow-hidden border shrink-0 border-blue-500/20 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'AM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors border-r text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق صباحاً' : '10 mins AM'}>{t('btnAM')} 10</button>
-                                  <button disabled={isLocked} onClick={() => handleClosest10MinSchedule(slot.slotIndex, 'PM')} className="h-7 px-2.5 flex items-center justify-center text-[10px] font-semibold hover:bg-blue-500/20 hover:text-blue-500 transition-colors text-blue-600 dark:text-blue-400" title={locale === 'ar' ? 'بعد 10 دقائق مساءاً' : '10 mins PM'}>{t('btnPM')} 10</button>
-                                </div>
-                                <button
-                                  disabled={isLocked}
-                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
-                                  className="h-7 px-3 flex items-center justify-center text-[10px] font-bold bg-orange-500/10 hover:bg-orange-500/25 border border-orange-500/20 rounded text-orange-600 dark:text-orange-400 transition-colors shrink-0 disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ضبط لأقرب رأس ساعة وبث 50 دقيقة' : 'Set to nearest hour and stream for 50 mins'}
-                                >
-                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest Hour'}
-                                </button>
-                              </div>
+                              <button
+                                disabled={isLocked}
+                                onClick={() => handleClosest15Schedule(slot.slotIndex)}
+                                className="h-7 px-3 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
+                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 11 دقيقة' : 'Set to nearest 15 mins and stream for 11 mins'}
+                              >
+                                {locale === 'ar' ? 'أقرب 15' : 'Closest 15'}
+                              </button>
 
                               {/* Hourly / Daily / Weekly */}
                               <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
@@ -2473,14 +2471,7 @@ export default function Home() {
                                 </div>
                               </div>
 
-                              {/* AM/PM quick */}
-                              <div className={`flex flex-col gap-1 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                                <div className="flex bg-muted/50 rounded overflow-hidden border border-primary/20">
-                                  <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'AM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors border-r" title="أقرب 12 صباحاً">{t('btnAM')} 12</button>
-                                  <button disabled={isLocked} onClick={() => handleQuickSchedule(slot.slotIndex, 'PM')} className="h-7 flex-1 px-2.5 text-[10px] font-semibold hover:bg-primary/20 hover:text-primary transition-colors" title="أقرب 12 مساءاً">{t('btnPM')} 12</button>
-                                </div>
 
-                              </div>
 
                               {/* Reset dates */}
                               <button
@@ -3222,6 +3213,33 @@ export default function Home() {
                   setBulkThumbnailSelectorOpen(false)
                 }}
                 onClose={() => setBulkThumbnailSelectorOpen(false)}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Swap Video/Folder Selector Helper Dialog ── */}
+      <Dialog open={bulkSwapSelectorOpen} onOpenChange={(open) => !open && setBulkSwapSelectorOpen(false)}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col bg-card border shadow-2xl rounded-xl">
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <FolderOpen className="w-5 h-5 text-primary" />
+              {locale === 'ar' ? 'اختر فيديو/مجلد التبديل الموحد لكافة البثوث' : 'Select Unified Swap Video/Folder for All Slots'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar' ? 'تصفح واختر ملف فيديو أو مجلداً كاملاً ليتم التبديل إليه تلقائياً قبل دقيقتين من نهاية البث لكافة القنوات.' : 'Browse and select a video file or a folder to be set as the pre-stop swap for all slots.'}
+            </DialogDescription>
+          </DialogHeader>
+          {bulkSwapSelectorOpen && (
+            <div className="flex-1 overflow-hidden min-h-0 px-4">
+              <VideoManager
+                mode="select"
+                onVideoSelect={(path) => {
+                  bulkAction('setSwapVideoAll', undefined, { swapVideoPath: path })
+                  setBulkSwapSelectorOpen(false)
+                }}
+                onClose={() => setBulkSwapSelectorOpen(false)}
               />
             </div>
           )}

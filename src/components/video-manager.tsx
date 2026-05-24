@@ -78,6 +78,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
   const [videos, setVideos] = useState<VideoFile[]>([])
   const [allFolders, setAllFolders] = useState<AllFolderItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [currentAbsolutePath, setCurrentAbsolutePath] = useState('')
 
   // Upload state
   const [uploading, setUploading] = useState(false)
@@ -216,6 +217,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
       setFolders(data.folders || [])
       setVideos(data.videos || [])
       setCurrentFolder(folder)
+      setCurrentAbsolutePath(data.currentPath || '')
       setSelectedFiles(new Set())
     } catch {
       toast({ title: t('error'), description: 'Failed to load files', variant: 'destructive' })
@@ -827,6 +829,18 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
           {currentFolder && (
             <Button size="sm" variant="ghost" onClick={navigateUp} title={t('back')}>
               <ArrowLeft className="w-4 h-4" />
+            </Button>
+          )}
+          {mode === 'select' && (
+            <Button
+              size="sm"
+              variant="default"
+              className="bg-green-600 hover:bg-green-700 text-white font-medium ml-2 text-xs h-8"
+              onClick={() => onVideoSelect && onVideoSelect(currentAbsolutePath)}
+              title={getLocale() === 'en' ? 'Select current directory' : 'اختيار المجلد الحالي'}
+            >
+              <Check className="w-3.5 h-3.5 mr-1" />
+              {getLocale() === 'en' ? 'Select Current Folder' : 'اختيار المجلد الحالي'}
             </Button>
           )}
         </div>

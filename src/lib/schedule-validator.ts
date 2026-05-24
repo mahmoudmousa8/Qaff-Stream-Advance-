@@ -39,11 +39,11 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
 
   if (slot.hourly) {
     const nowFields = getCairoNowFields(windowStart)
-    const baseMinute = startMinute >= 30 ? startMinute - 30 : startMinute
+    const baseMinute = startMinute % 15
     let currentHourDate = getAbsoluteDateFromCairoFields(nowFields.year, nowFields.month, nowFields.day, nowFields.hour, baseMinute, 0)
     
     while (currentHourDate.getTime() < windowStart.getTime()) {
-      const nextDate = new Date(currentHourDate.getTime() + 30 * 60 * 1000)
+      const nextDate = new Date(currentHourDate.getTime() + 15 * 60 * 1000)
       const nextFields = getCairoNowFields(nextDate)
       currentHourDate = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
     }
@@ -59,7 +59,7 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
         occurrences.push({ start: occStart, end: occEnd })
       }
       
-      const nextDate = new Date(currentHourDate.getTime() + 30 * 60 * 1000)
+      const nextDate = new Date(currentHourDate.getTime() + 15 * 60 * 1000)
       const nextFields = getCairoNowFields(nextDate)
       currentHourDate = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
     }

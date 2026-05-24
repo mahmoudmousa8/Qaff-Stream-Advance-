@@ -515,10 +515,16 @@ export async function POST(request: NextRequest) {
         const now = new Date()
         const cairoNow = getCairoNowFields(now)
 
-        // The closest next half-hour
+        // The closest next 15-minute boundary
         let targetHour = cairoNow.hour
-        let targetMinute = 30
-        if (cairoNow.minute >= 30) {
+        let targetMinute = 0
+        if (cairoNow.minute < 15) {
+          targetMinute = 15
+        } else if (cairoNow.minute < 30) {
+          targetMinute = 30
+        } else if (cairoNow.minute < 45) {
+          targetMinute = 45
+        } else {
           targetMinute = 0
           targetHour += 1
         }
@@ -530,8 +536,8 @@ export async function POST(request: NextRequest) {
         }
 
         const startTime = formatCairoDate(targetDate)
-        // Stop time is +20 minutes
-        const stopDate = new Date(targetDate.getTime() + 20 * 60 * 1000)
+        // Stop time is +11 minutes
+        const stopDate = new Date(targetDate.getTime() + 11 * 60 * 1000)
         const stopTime = formatCairoDate(stopDate)
 
         const result = await db.streamSlot.updateMany({
@@ -546,7 +552,7 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        return NextResponse.json({ success: true, count: result.count, message: `Set closest half-hour schedule (duration 20 mins) for all ${result.count} slots` })
+        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 11 mins) for all ${result.count} slots` })
       }
 
       case 'resetAll': {
@@ -641,6 +647,36 @@ export async function POST(request: NextRequest) {
           success: true, count, errors: errors.length > 0 ? errors : undefined,
           message: `Scheduled ${count} slots`
         })
+      }
+
+      case 'setSwapVideoAll': {
+        const { swapVideoPath } = body
+        if (!swapVideoPath) {
+          return NextResponse.json({ error: 'Missing swapVideoPath' }, { status: 400 })
+        }
+
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            swapVideoPath,
+            swapVideoEnabled: true
+          }
+        })
+
+        return NextResponse.json({ success: true, count: result.count, message: `Set unified swap path for all ${result.count} slots` })
+      }
+
+      case 'clearSwapVideoAll': {
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            swapVideoPath: '',
+            swapVideoEnabled: false,
+            isSwapped: false
+          }
+        })
+
+        return NextResponse.json({ success: true, count: result.count, message: `Cleared swap path from all ${result.count} slots` })
       }
 
       default:
