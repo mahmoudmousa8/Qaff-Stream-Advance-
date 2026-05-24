@@ -119,12 +119,13 @@ function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, h
 
     if (hourly) {
       const cairoNow = getCairoNowFields(now)
-      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, minute, 0)
+      const baseMinute = minute >= 30 ? minute - 30 : minute
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
       
-      if (now >= nextRun) {
-        const nextHourDate = new Date(nextRun.getTime() + 60 * 60 * 1000)
-        const nextHourFields = getCairoNowFields(nextHourDate)
-        nextRun = getAbsoluteDateFromCairoFields(nextHourFields.year, nextHourFields.month, nextHourFields.day, nextHourFields.hour, minute, 0)
+      while (now >= nextRun) {
+        const nextDate = new Date(nextRun.getTime() + 30 * 60 * 1000)
+        const nextFields = getCairoNowFields(nextDate)
+        nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
       }
       
       const finalFields = getCairoNowFields(nextRun)
@@ -365,9 +366,63 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         continue
       }
 
-      // Too many crashes → mark permanently failed
+      // Too many crashes → mark permanently failed or reschedule if recurring
       if (state.crashCount >= MAX_CRASH_COUNT) {
-        logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Manual intervention required.`)
+        const isRecurring = slot.daily || slot.weekly || slot.hourly
+        if (isRecurring) {
+          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Rescheduling for the next occurrence.`)
+          
+          let nextStartTime = slot.schedStart || ''
+          let nextStopTime = slot.schedStop || ''
+          const oldStart = parseScheduleTime(slot.schedStart)
+          const oldStop = parseScheduleTime(slot.schedStop)
+          if (oldStart && oldStop) {
+            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+            if (durMins < 0) durMins += 1440
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+            const nParsed = parseScheduleTime(nextStartTime)
+            if (nParsed) {
+              const nDate = getCairoTargetDate(nParsed, now)
+              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+              const stopFields = getCairoNowFields(stopDate)
+              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+            }
+          }
+
+          // Reset recovery state and miss counters for the next run
+          recoveryStates.delete(stateKey)
+          missCounters.set(missKey, 0)
+
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              isRunning: false,
+              isScheduled: true,
+              status: 'Scheduled',
+              schedStart: nextStartTime,
+              schedStop: nextStopTime,
+              nextRunTime: nextStartTime,
+              isSwapped: false,
+              youtubeBroadcastId: ''
+            }
+          })
+        } else {
+          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Stopping.`)
+          recoveryStates.delete(stateKey)
+          missCounters.set(missKey, 0)
+
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              isRunning: false,
+              isScheduled: false,
+              status: 'Failed',
+              manuallyStopped: true,
+              isSwapped: false,
+              youtubeBroadcastId: ''
+            }
+          })
+        }
         continue
       }
 
@@ -385,7 +440,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         if (parsedStop) {
           const stopDate = getCairoTargetDate(parsedStop, now)
           const msSinceStop = now.getTime() - stopDate.getTime()
-          if (msSinceStop >= 0 && msSinceStop < 10 * 60 * 1000) {
+          if (msSinceStop >= -2 * 60 * 1000 && msSinceStop < 2 * 60 * 1000) {
             skipRecovery = true
             console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — ended naturally near/after schedStop`)
           }
@@ -489,9 +544,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (stopDate) {
         const msRemaining = stopDate.getTime() - now.getTime()
         const minsRemaining = msRemaining / (1000 * 60)
-        // Fixed 10-minute swap threshold: always trigger 10 minutes before stop
-        const swapThresholdMins = 10
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=10m`)
+        // Fixed 2-minute swap threshold: always trigger 2 minutes before stop
+        const swapThresholdMins = 2
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=2m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${slot.swapVideoPath}`)
           logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${slot.swapVideoPath}`)

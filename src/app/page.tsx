@@ -1281,8 +1281,8 @@ export default function Home() {
                   <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400"
-                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وتوقف بعد 50 دقيقة؟' : 'Set all slots to closest hour?')} title={locale === 'ar' ? 'ضبط لأقرب ساعة للكل' : 'Set Hour All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط لأقرب ساعة للكل' : 'Set Hour All'}
+                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وتوقف بعد 20 دقيقة؟' : 'Set all slots to closest half-hour?')} title={locale === 'ar' ? 'ضبط لأقرب نصف ساعة للكل' : 'Set Half-Hour All'}>
+                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط لأقرب نصف ساعة للكل' : 'Set Half-Hour All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>

@@ -515,8 +515,14 @@ export async function POST(request: NextRequest) {
         const now = new Date()
         const cairoNow = getCairoNowFields(now)
 
-        // The closest next hour is cairoNow.hour + 1, minute 0
-        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour + 1, 0, 0)
+        // The closest next half-hour
+        let targetHour = cairoNow.hour
+        let targetMinute = 30
+        if (cairoNow.minute >= 30) {
+          targetMinute = 0
+          targetHour += 1
+        }
+        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, targetMinute, 0)
 
         const formatCairoDate = (date: Date) => {
           const fields = getCairoNowFields(date)
@@ -524,8 +530,8 @@ export async function POST(request: NextRequest) {
         }
 
         const startTime = formatCairoDate(targetDate)
-        // Stop time is +50 minutes
-        const stopDate = new Date(targetDate.getTime() + 50 * 60 * 1000)
+        // Stop time is +20 minutes
+        const stopDate = new Date(targetDate.getTime() + 20 * 60 * 1000)
         const stopTime = formatCairoDate(stopDate)
 
         const result = await db.streamSlot.updateMany({
@@ -540,7 +546,7 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        return NextResponse.json({ success: true, count: result.count, message: `Set closest hour schedule (duration 50 mins) for all ${result.count} slots` })
+        return NextResponse.json({ success: true, count: result.count, message: `Set closest half-hour schedule (duration 20 mins) for all ${result.count} slots` })
       }
 
       case 'resetAll': {

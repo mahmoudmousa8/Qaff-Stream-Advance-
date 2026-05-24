@@ -229,7 +229,9 @@ export async function setupYoutubeLiveStream(
       snippet: {
         title: truncatedTitle,
         description: truncatedDesc,
-        scheduledStartTime: scheduledStartTime
+        scheduledStartTime: scheduledStartTime,
+        defaultLanguage: 'en',
+        defaultAudioLanguage: 'ar'
       },
       status: {
         privacyStatus: 'public',

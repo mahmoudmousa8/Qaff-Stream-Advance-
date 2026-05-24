@@ -175,13 +175,13 @@ export function calculateNextRun(schedStart: string, daily: boolean, weekly: boo
 
     if (hourly) {
       const cairoNow = getCairoNowFields(now)
-      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, minute, 0)
+      const baseMinute = minute >= 30 ? minute - 30 : minute
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
       
-      if (now >= nextRun) {
-        // Shift by 1 hour
-        const nextHourDate = new Date(nextRun.getTime() + 60 * 60 * 1000)
-        const nextHourFields = getCairoNowFields(nextHourDate)
-        nextRun = getAbsoluteDateFromCairoFields(nextHourFields.year, nextHourFields.month, nextHourFields.day, nextHourFields.hour, minute, 0)
+      while (now >= nextRun) {
+        const nextDate = new Date(nextRun.getTime() + 30 * 60 * 1000)
+        const nextFields = getCairoNowFields(nextDate)
+        nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
       }
       
       const finalFields = getCairoNowFields(nextRun)
