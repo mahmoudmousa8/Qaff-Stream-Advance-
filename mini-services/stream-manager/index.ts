@@ -588,7 +588,8 @@ function getStreamStatus(slotIndex: number): object {
     bitrateMbps: stream.bitrateMbps,
     lastProgressAt: stream.lastProgressAt.toISOString(),
     msSinceProgress,
-    isProgressStale: msSinceProgress > 20_000
+    isProgressStale: msSinceProgress > 20_000,
+    filePath: stream.filePath
   }
 }
 

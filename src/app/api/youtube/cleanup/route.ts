@@ -14,7 +14,47 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { channelDbId } = await request.json()
+    const body = await request.json()
+    const { channelDbId, all } = body
+
+    if (all) {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+      const channels = await db.youtubeChannel.findMany({
+        where: {
+          createdAt: {
+            gte: sevenDaysAgo
+          }
+        }
+      })
+
+      let totalDeletedCount = 0
+      const errorsList: string[] = []
+      const detailMsg: string[] = []
+
+      for (const channel of channels) {
+        try {
+          const res = await cleanupUpcomingBroadcasts(channel.id)
+          totalDeletedCount += res.deletedCount
+          if (res.errors && res.errors.length > 0) {
+            errorsList.push(`${channel.name}: ${res.errors.join(', ')}`)
+          }
+          detailMsg.push(`${channel.name} (${res.deletedCount} deleted)`)
+        } catch (err: any) {
+          errorsList.push(`${channel.name}: ${err.message || String(err)}`)
+        }
+      }
+
+      const msg = `تم بنجاح تنظيف وحذف إجمالي ${totalDeletedCount} من البثوث المجدولة على القنوات النشطة.`
+      return NextResponse.json({
+        success: true,
+        deletedCount: totalDeletedCount,
+        errors: errorsList.length > 0 ? errorsList : undefined,
+        message: msg
+      })
+    }
+
     if (!channelDbId) {
       return NextResponse.json({ error: 'Missing channel ID parameter' }, { status: 400 })
     }

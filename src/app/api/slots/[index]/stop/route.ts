@@ -56,6 +56,18 @@ export async function POST(
       }
     }
 
+    // Clear folder randomizer active state and trigger 10s verification
+    try {
+      const { activeMainVideos, activeSwapVideos, lastActionTokens, verifyStreamStatusAfterDelay } = await import('@/lib/run-scheduler')
+      activeMainVideos.delete(slotIndex)
+      activeSwapVideos.delete(slotIndex)
+      const token = Math.random().toString(36).substring(7)
+      lastActionTokens.set(slotIndex, token)
+      verifyStreamStatusAfterDelay(slotIndex, 'stop', token)
+    } catch (err: any) {
+      console.error('Verification trigger error:', err.message)
+    }
+
     return NextResponse.json({
       success: true,
       slot: updatedSlot,

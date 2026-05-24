@@ -109,6 +109,10 @@ export async function POST(request: NextRequest) {
             let finalInputPath = slot.filePath
             if (slot.inputType === 'live') {
               finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+            } else if (slot.filePath) {
+              const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
+              finalInputPath = resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+              activeMainVideos.set(slot.slotIndex, finalInputPath)
             }
 
             const outputType = slot.outputType || 'youtube'
@@ -134,7 +138,7 @@ export async function POST(request: NextRequest) {
                 console.error(`[Bulk Start] Slot ${slot.slotIndex}: YouTube setup failed:`, ytErr.message)
                 await db.streamSlot.update({
                   where: { slotIndex: slot.slotIndex },
-                  data: { status: 'Failed', isRunning: false }
+                  data: { status: 'Failed', isRunning: false, manuallyStopped: true }
                 })
                 await db.systemLog.create({
                   data: { message: `Slot ${slot.slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
@@ -169,15 +173,23 @@ export async function POST(request: NextRequest) {
                   youtubeBroadcastId
                 }
               })
+              const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+              const token = Math.random().toString(36).substring(7)
+              lastActionTokens.set(slot.slotIndex, token)
+              verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
               results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
             } else {
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
-                data: { status: 'Failed', isRunning: false }
+                data: { status: 'Failed', isRunning: false, manuallyStopped: true }
               })
               results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
             }
           } catch (error: any) {
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+            })
             results.push({ status: 'rejected', reason: error })
           }
 
@@ -258,6 +270,20 @@ export async function POST(request: NextRequest) {
             youtubeBroadcastId: ''
           }
         })
+
+        // Clear maps and trigger verification for stopped slots
+        try {
+          const { activeMainVideos, activeSwapVideos, verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+          for (const s of slotsToStop) {
+            activeMainVideos.delete(s.slotIndex)
+            activeSwapVideos.delete(s.slotIndex)
+            const token = Math.random().toString(36).substring(7)
+            lastActionTokens.set(s.slotIndex, token)
+            verifyStreamStatusAfterDelay(s.slotIndex, 'stop', token)
+          }
+        } catch (err: any) {
+          console.error('[bulk stop] Verification error:', err.message)
+        }
 
         // 5. Terminate any active YouTube live broadcasts cleanly
         if (activeYoutubeSlots.length > 0) {
@@ -393,6 +419,9 @@ export async function POST(request: NextRequest) {
           data: {
             schedStart: '',
             schedStop: '',
+            daily: false,
+            weekly: false,
+            hourly: false,
             isScheduled: false,
             manuallyStopped: true,
             nextRunTime: '',
@@ -455,7 +484,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'dailyAll': {
-        // Toggle daily for all slots (excluding running ones)
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
         const safeFilter = { ...userFilter, isRunning: false }
         const dailyCount = await db.streamSlot.count({
           where: { daily: true, ...safeFilter }
@@ -465,25 +494,60 @@ export async function POST(request: NextRequest) {
         })
         const targetState = dailyCount < total / 2
 
-        const result = await db.streamSlot.updateMany({
-          where: safeFilter,
-          data: {
-            daily: targetState,
-            weekly: false,
-            hourly: false,
-            isScheduled: false,
-            manuallyStopped: true,
-            nextRunTime: '',
-            status: 'Stopped'
+        let count = 0
+        if (targetState) {
+          const slots = await db.streamSlot.findMany({ where: safeFilter })
+          for (const slot of slots) {
+            if (slot.schedStart) {
+              const nextRunTime = calculateNextRun(slot.schedStart, true, false, false)
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  daily: true,
+                  weekly: false,
+                  hourly: false,
+                  isScheduled: true,
+                  manuallyStopped: false,
+                  nextRunTime,
+                  status: 'Scheduled'
+                }
+              })
+            } else {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  daily: true,
+                  weekly: false,
+                  hourly: false,
+                  isScheduled: false,
+                  manuallyStopped: true,
+                  nextRunTime: '',
+                  status: 'Stopped'
+                }
+              })
+            }
+            count++
           }
-        })
+        } else {
+          const res = await db.streamSlot.updateMany({
+            where: safeFilter,
+            data: {
+              daily: false,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
+          })
+          count = res.count
+        }
 
         const actionText = targetState ? 'Enabled' : 'Disabled'
-        return NextResponse.json({ success: true, count: result.count, message: `${actionText} Daily for all slots` })
+        return NextResponse.json({ success: true, count, message: `${actionText} Daily and updated schedules for all slots` })
       }
 
       case 'hourlyAll': {
-        // Toggle hourly for all slots (excluding running ones)
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
         const safeFilter = { ...userFilter, isRunning: false }
         const hourlyCount = await db.streamSlot.count({
           where: { hourly: true, ...safeFilter }
@@ -493,21 +557,56 @@ export async function POST(request: NextRequest) {
         })
         const targetState = hourlyCount < total / 2
 
-        const result = await db.streamSlot.updateMany({
-          where: safeFilter,
-          data: {
-            hourly: targetState,
-            daily: false,
-            weekly: false,
-            isScheduled: false,
-            manuallyStopped: true,
-            nextRunTime: '',
-            status: 'Stopped'
+        let count = 0
+        if (targetState) {
+          const slots = await db.streamSlot.findMany({ where: safeFilter })
+          for (const slot of slots) {
+            if (slot.schedStart) {
+              const nextRunTime = calculateNextRun(slot.schedStart, false, false, true)
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: true,
+                  daily: false,
+                  weekly: false,
+                  isScheduled: true,
+                  manuallyStopped: false,
+                  nextRunTime,
+                  status: 'Scheduled'
+                }
+              })
+            } else {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: true,
+                  daily: false,
+                  weekly: false,
+                  isScheduled: false,
+                  manuallyStopped: true,
+                  nextRunTime: '',
+                  status: 'Stopped'
+                }
+              })
+            }
+            count++
           }
-        })
+        } else {
+          const res = await db.streamSlot.updateMany({
+            where: safeFilter,
+            data: {
+              hourly: false,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
+          })
+          count = res.count
+        }
 
         const actionText = targetState ? 'Enabled' : 'Disabled'
-        return NextResponse.json({ success: true, count: result.count, message: `${actionText} Hourly for all slots` })
+        return NextResponse.json({ success: true, count, message: `${actionText} Hourly and updated schedules for all slots` })
       }
 
       case 'setClosestHourAll': {
@@ -515,7 +614,6 @@ export async function POST(request: NextRequest) {
         const now = new Date()
         const cairoNow = getCairoNowFields(now)
 
-        // The closest next 15-minute boundary
         let targetHour = cairoNow.hour
         let targetMinute = 0
         if (cairoNow.minute < 15) {
@@ -536,7 +634,6 @@ export async function POST(request: NextRequest) {
         }
 
         const startTime = formatCairoDate(targetDate)
-        // Stop time is +11 minutes
         const stopDate = new Date(targetDate.getTime() + 11 * 60 * 1000)
         const stopTime = formatCairoDate(stopDate)
 
@@ -545,14 +642,17 @@ export async function POST(request: NextRequest) {
           data: {
             schedStart: startTime,
             schedStop: stopTime,
-            isScheduled: false,
-            manuallyStopped: true,
-            nextRunTime: '',
-            status: 'Stopped'
+            isScheduled: true,
+            manuallyStopped: false,
+            nextRunTime: startTime,
+            status: 'Scheduled',
+            hourly: true,
+            daily: false,
+            weekly: false
           }
         })
 
-        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 11 mins) for all ${result.count} slots` })
+        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 11 mins) and scheduled all ${result.count} slots` })
       }
 
       case 'resetAll': {
@@ -592,6 +692,20 @@ export async function POST(request: NextRequest) {
             isSwapped: false
           }
         })
+
+        // Clear maps and trigger verification for reset slots
+        try {
+          const { activeMainVideos, activeSwapVideos, verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+          for (const s of slotsToReset) {
+            activeMainVideos.delete(s.slotIndex)
+            activeSwapVideos.delete(s.slotIndex)
+            const token = Math.random().toString(36).substring(7)
+            lastActionTokens.set(s.slotIndex, token)
+            verifyStreamStatusAfterDelay(s.slotIndex, 'stop', token)
+          }
+        } catch (err: any) {
+          console.error('[bulk reset] Verification error:', err.message)
+        }
 
         return NextResponse.json({ success: true, count: result.count, message: `Reset ${result.count} slots` })
       }

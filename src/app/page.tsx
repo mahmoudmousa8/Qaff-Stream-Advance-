@@ -396,6 +396,7 @@ export default function Home() {
   const [ytSlotLinkName, setYtSlotLinkName] = useState('')
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
   const [ytCleanupLoading, setYtCleanupLoading] = useState<string | null>(null)
+  const [cleanupBusy, setCleanupBusy] = useState(false)
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -3333,16 +3334,32 @@ export default function Home() {
                 <h4 className="text-sm font-bold text-foreground">
                   🔑 {locale === 'ar' ? 'القنوات المرتبطة حالياً' : 'Currently Linked Channels'}
                 </h4>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={fetchYtChannels} 
-                  disabled={ytLoading}
-                  className="h-8 text-xs flex items-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${ytLoading ? 'animate-spin' : ''}`} />
-                  {locale === 'ar' ? 'تحديث القائمة' : 'Refresh List'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleCleanupAllChannels}
+                    disabled={cleanupBusy || ytLoading || ytChannels.length === 0}
+                    className="h-8 text-xs flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white border-none"
+                  >
+                    {cleanupBusy ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <CalendarX className="w-3.5 h-3.5" />
+                    )}
+                    {locale === 'ar' ? 'تنظيف كافة القنوات' : 'Cleanup All Channels'}
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={fetchYtChannels} 
+                    disabled={ytLoading}
+                    className="h-8 text-xs flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${ytLoading ? 'animate-spin' : ''}`} />
+                    {locale === 'ar' ? 'تحديث القائمة' : 'Refresh List'}
+                  </Button>
+                </div>
               </div>
 
               {ytLoading && ytChannels.length === 0 ? (

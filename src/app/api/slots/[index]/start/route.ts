@@ -139,7 +139,7 @@ export async function POST(
         // Reset the slot status to Failed and save
         await db.streamSlot.update({
           where: { slotIndex },
-          data: { status: 'Failed', isRunning: false }
+          data: { status: 'Failed', isRunning: false, manuallyStopped: true }
         })
         // Write the error into the System Logs database
         await db.systemLog.create({
@@ -151,6 +151,13 @@ export async function POST(
 
     // Call stream manager — zero-transcode, direct copy only
     try {
+      let resolvedInputPath = finalInputPath
+      if (slot.inputType !== 'live' && slot.filePath) {
+        const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
+        resolvedInputPath = resolveVideoFileFromFolder(slot.filePath, slotIndex, 'main')
+        activeMainVideos.set(slotIndex, resolvedInputPath)
+      }
+
       const response = await fetch(`${STREAM_MANAGER_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,7 +166,7 @@ export async function POST(
           outputType,
           rtmpServer: finalRtmpServer,
           streamKey: finalStreamKey,
-          filePath: finalInputPath
+          filePath: resolvedInputPath
         })
       })
 
@@ -168,7 +175,7 @@ export async function POST(
       if (!result.success) {
         await db.streamSlot.update({
           where: { slotIndex },
-          data: { status: 'Failed', isRunning: false }
+          data: { status: 'Failed', isRunning: false, manuallyStopped: true }
         })
         return NextResponse.json({ error: result.message }, { status: 400 })
       }
@@ -185,6 +192,11 @@ export async function POST(
         }
       })
 
+      const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+      const token = Math.random().toString(36).substring(7)
+      lastActionTokens.set(slotIndex, token)
+      verifyStreamStatusAfterDelay(slotIndex, 'start', token)
+
       return NextResponse.json({
         success: true,
         slot: updatedSlot,
@@ -194,7 +206,7 @@ export async function POST(
       console.error('Failed to connect to stream manager:', error)
       await db.streamSlot.update({
         where: { slotIndex },
-        data: { status: 'Failed', isRunning: false }
+        data: { status: 'Failed', isRunning: false, manuallyStopped: true }
       })
       return NextResponse.json({ error: 'Stream manager not available' }, { status: 503 })
     }
