@@ -1033,7 +1033,7 @@ export default function Home() {
     target.setHours(targetHour, targetMin, 0, 0)
 
     const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
-    const stopStr = buildStopByDuration(startStr, 0, 11)  // 11 minutes duration
+    const stopStr = buildStopByDuration(startStr, 0, 10)  // 10 minutes duration
     handleSlotChange(index, 'schedStart', startStr)
     handleSlotChange(index, 'schedStop', stopStr)
   }
@@ -1289,7 +1289,7 @@ export default function Home() {
                   <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 11 دقيقة؟' : 'Set all slots to nearest 15 minutes (stream 11 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
+                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
                   <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
@@ -1989,7 +1989,7 @@ export default function Home() {
                                 disabled={slot.isRunning || slot.status !== 'Stopped'}
                                 onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                 className="h-6 px-2 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
-                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 11 دقيقة' : 'Set to nearest 15 mins and stream for 11 mins'}
+                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 10 دقائق' : 'Set to nearest 15 mins and stream for 10 mins'}
                               >
                                 {locale === 'ar' ? 'أقرب 15' : 'Closest 15'}
                               </button>
@@ -2430,7 +2430,7 @@ export default function Home() {
                                 disabled={isLocked}
                                 onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                 className="h-7 px-3 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
-                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 11 دقيقة' : 'Set to nearest 15 mins and stream for 11 mins'}
+                                title={locale === 'ar' ? 'ضبط لأقرب 15 دقيقة وبث 10 دقائق' : 'Set to nearest 15 mins and stream for 10 mins'}
                               >
                                 {locale === 'ar' ? 'أقرب 15' : 'Closest 15'}
                               </button>

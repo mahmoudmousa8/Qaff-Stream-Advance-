@@ -634,7 +634,7 @@ export async function POST(request: NextRequest) {
         }
 
         const startTime = formatCairoDate(targetDate)
-        const stopDate = new Date(targetDate.getTime() + 11 * 60 * 1000)
+        const stopDate = new Date(targetDate.getTime() + 10 * 60 * 1000)
         const stopTime = formatCairoDate(stopDate)
 
         const result = await db.streamSlot.updateMany({
@@ -652,7 +652,7 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 11 mins) and scheduled all ${result.count} slots` })
+        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 10 mins) and scheduled all ${result.count} slots` })
       }
 
       case 'resetAll': {
