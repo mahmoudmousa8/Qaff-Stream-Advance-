@@ -770,7 +770,7 @@ export async function POST(request: NextRequest) {
         }
 
         const result = await db.streamSlot.updateMany({
-          where: { ...userFilter, isRunning: false },
+          where: userFilter,
           data: {
             swapVideoPath,
             swapVideoEnabled: true
@@ -782,7 +782,7 @@ export async function POST(request: NextRequest) {
 
       case 'clearSwapVideoAll': {
         const result = await db.streamSlot.updateMany({
-          where: { ...userFilter, isRunning: false },
+          where: userFilter,
           data: {
             swapVideoPath: '',
             swapVideoEnabled: false,
