@@ -104,97 +104,103 @@ export async function POST(request: NextRequest) {
           | { status: 'fulfilled'; value: { success: boolean; slotIndex: number; message?: string } }
           | { status: 'rejected'; reason: any }
         > = []
-        for (const slot of slotsToStart) {
-          try {
-            let finalInputPath = slot.filePath
-            if (slot.inputType === 'live') {
-              finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
-            } else if (slot.filePath) {
-              const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
-              finalInputPath = resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
-              activeMainVideos.set(slot.slotIndex, finalInputPath)
-            }
+        const BATCH_SIZE = 10
+        for (let i = 0; i < slotsToStart.length; i += BATCH_SIZE) {
+          const batch = slotsToStart.slice(i, i + BATCH_SIZE)
 
-            const outputType = slot.outputType || 'youtube'
-            let finalStreamKey = slot.streamKey
-            let finalRtmpServer = slot.rtmpServer
-            let youtubeBroadcastId = ""
+          await Promise.all(batch.map(async (slot) => {
+            try {
+              let finalInputPath = slot.filePath
+              if (slot.inputType === 'live') {
+                finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
+              } else if (slot.filePath) {
+                const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
+                finalInputPath = resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+                activeMainVideos.set(slot.slotIndex, finalInputPath)
+              }
 
-            if (slot.youtubeChannelId && outputType === 'youtube') {
-              try {
-                console.log(`[Bulk Start] Slot ${slot.slotIndex}: Setting up YouTube Live broadcast...`)
-                const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
-                const yt = await setupYoutubeLiveStream(
-                  slot.youtubeChannelId,
-                  slot.youtubeTitle || 'Live Stream',
-                  slot.youtubeDescription || '',
-                  slot.youtubeThumbnailPath || undefined,
-                  slot.streamKey
-                )
-                finalStreamKey = yt.streamKey || finalStreamKey
-                finalRtmpServer = yt.rtmpServer || finalRtmpServer
-                youtubeBroadcastId = yt.broadcastId || ""
-              } catch (ytErr: any) {
-                console.error(`[Bulk Start] Slot ${slot.slotIndex}: YouTube setup failed:`, ytErr.message)
+              const outputType = slot.outputType || 'youtube'
+              let finalStreamKey = slot.streamKey
+              let finalRtmpServer = slot.rtmpServer
+              let youtubeBroadcastId = ""
+
+              if (slot.youtubeChannelId && outputType === 'youtube') {
+                try {
+                  console.log(`[Bulk Start] Slot ${slot.slotIndex}: Setting up YouTube Live broadcast...`)
+                  const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+                  const yt = await setupYoutubeLiveStream(
+                    slot.youtubeChannelId,
+                    slot.youtubeTitle || 'Live Stream',
+                    slot.youtubeDescription || '',
+                    slot.youtubeThumbnailPath || undefined,
+                    slot.streamKey
+                  )
+                  finalStreamKey = yt.streamKey || finalStreamKey
+                  finalRtmpServer = yt.rtmpServer || finalRtmpServer
+                  youtubeBroadcastId = yt.broadcastId || ""
+                } catch (ytErr: any) {
+                  console.error(`[Bulk Start] Slot ${slot.slotIndex}: YouTube setup failed:`, ytErr.message)
+                  await db.streamSlot.update({
+                    where: { slotIndex: slot.slotIndex },
+                    data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+                  })
+                  await db.systemLog.create({
+                    data: { message: `Slot ${slot.slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
+                  })
+                  results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: `YouTube API Error: ${ytErr.message}` } })
+                  return
+                }
+              }
+
+              const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  slotIndex: slot.slotIndex,
+                  outputType,
+                  rtmpServer: finalRtmpServer,
+                  streamKey: finalStreamKey,
+                  filePath: finalInputPath
+                })
+              })
+              const result = await response.json()
+
+              if (result.success) {
+                await db.streamSlot.update({
+                  where: { slotIndex: slot.slotIndex },
+                  data: {
+                    isRunning: true,
+                    isScheduled: false,
+                    status: 'Streaming',
+                    streamKey: finalStreamKey,
+                    rtmpServer: finalRtmpServer,
+                    youtubeBroadcastId
+                  }
+                })
+                const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+                const token = Math.random().toString(36).substring(7)
+                lastActionTokens.set(slot.slotIndex, token)
+                verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
+                results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
+              } else {
                 await db.streamSlot.update({
                   where: { slotIndex: slot.slotIndex },
                   data: { status: 'Failed', isRunning: false, manuallyStopped: true }
                 })
-                await db.systemLog.create({
-                  data: { message: `Slot ${slot.slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
-                })
-                results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: `YouTube API Error: ${ytErr.message}` } })
-                continue
+                results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
               }
-            }
-
-            const response = await fetch(`${BULK_STREAM_MANAGER}/start`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                slotIndex: slot.slotIndex,
-                outputType,
-                rtmpServer: finalRtmpServer,
-                streamKey: finalStreamKey,
-                filePath: finalInputPath
-              })
-            })
-            const result = await response.json()
-
-            if (result.success) {
-              await db.streamSlot.update({
-                where: { slotIndex: slot.slotIndex },
-                data: {
-                  isRunning: true,
-                  isScheduled: false,
-                  status: 'Streaming',
-                  streamKey: finalStreamKey,
-                  rtmpServer: finalRtmpServer,
-                  youtubeBroadcastId
-                }
-              })
-              const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
-              const token = Math.random().toString(36).substring(7)
-              lastActionTokens.set(slot.slotIndex, token)
-              verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
-              results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
-            } else {
+            } catch (error: any) {
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
                 data: { status: 'Failed', isRunning: false, manuallyStopped: true }
               })
-              results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
+              results.push({ status: 'rejected', reason: error })
             }
-          } catch (error: any) {
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: { status: 'Failed', isRunning: false, manuallyStopped: true }
-            })
-            results.push({ status: 'rejected', reason: error })
-          }
+          }))
 
-          // Delay to prevent thundering herd
-          await new Promise(resolve => setTimeout(resolve, 3000))
+          if (i + BATCH_SIZE < slotsToStart.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
         }
 
         let count = 0

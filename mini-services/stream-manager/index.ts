@@ -296,19 +296,20 @@ async function processStaggerQueue() {
   isProcessingQueue = true
 
   while (staggerQueue.length > 0) {
-    const item = staggerQueue.shift()
-    if (!item) continue
+    const batch = staggerQueue.splice(0, 10)
 
-    if (activeStreams.size >= MAX_CONCURRENT) {
-      item.resolve({ success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` })
-      continue
-    }
+    batch.forEach(item => {
+      if (activeStreams.size >= MAX_CONCURRENT) {
+        item.resolve({ success: false, message: `Concurrency limit (${MAX_CONCURRENT}) reached` })
+        return
+      }
 
-    const result = startStreamImmediate(item.slotIndex, item.rtmpUrl, item.streamKey, item.filePath, item.options)
-    item.resolve(result)
+      const result = startStreamImmediate(item.slotIndex, item.rtmpUrl, item.streamKey, item.filePath, item.options)
+      item.resolve(result)
+    })
 
     if (staggerQueue.length > 0) {
-      log(`Waiting ${STAGGER_DELAY_MS}ms before starting next stream in queue...`)
+      log(`Waiting ${STAGGER_DELAY_MS}ms before starting next batch of up to 10 streams...`)
       await new Promise(resolve => setTimeout(resolve, STAGGER_DELAY_MS))
     }
   }

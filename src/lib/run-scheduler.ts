@@ -139,7 +139,7 @@ export function verifyStreamStatusAfterDelay(
         const res = await fetch(`${STREAM_MANAGER_URL}/status?slotIndex=${slotIndex}`)
         if (res.ok) {
           const data = await res.json()
-          activeInManager = data.isRunning && (data.status === 'running' || data.status === 'connecting')
+          activeInManager = data.isRunning && (data.status === 'running' || data.status === 'connecting' || data.status === 'queued')
           currentFilePath = data.filePath || ''
         }
       } catch (err: any) {
@@ -300,7 +300,7 @@ export function verifyStreamStatusAfterDelay(
   }, 10000)
 }
 
-const BACKOFF_DELAYS_MS = [5_000, 60_000, 180_000, 600_000]  // 5s, 1m, 3m, 10m
+const BACKOFF_DELAYS_MS = [0, 10_000, 60_000, 300_000]  // 0s, 10s, 1m, 5m
 const MAX_CRASH_COUNT = BACKOFF_DELAYS_MS.length  // after 4 crashes → failed
 
 // Helper to execute fetch requests with a strict timeout to prevent thread lockup
@@ -1098,273 +1098,275 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   // ── Sequential Start: 1s delay between each slot ───────────────────────
   // stream-manager itself staggers by STAGGER_DELAY_MS=3000ms internally,
   // so combined delay between consecutive stream starts is ~4 seconds.
-  for (let i = 0; i < slotsToStart.length; i++) {
-    const slot = slotsToStart[i]
+  // ── Batch Start: 10 slots concurrently, 1s delay between batches ───────────
+  const BATCH_SIZE = 10
+  for (let i = 0; i < slotsToStart.length; i += BATCH_SIZE) {
+    const batch = slotsToStart.slice(i, i + BATCH_SIZE)
 
-    let finalInputPath = slot.filePath
-    if (slot.inputType === 'live') {
-      finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
-    }
-
-    // Convert DUR format to real datetime — anchored to schedStart (not now!)
-    // This ensures stop time = original_scheduled_start + duration, regardless of late start
-    let actualSchedStop = slot.schedStop
-    if (slot.schedStop && slot.schedStop.startsWith('DUR ') && slot.schedStart) {
-      const parsedStart = parseScheduleTime(slot.schedStart)
-      if (parsedStart) {
-        const schedStartDate = getCairoTargetDate(parsedStart, now)
-        actualSchedStop = durToActualStop(slot.schedStop, schedStartDate)
-      } else {
-        actualSchedStop = durToActualStop(slot.schedStop, now)
+    await Promise.all(batch.map(async (slot) => {
+      let finalInputPath = slot.filePath
+      if (slot.inputType === 'live') {
+        finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
       }
-    }
 
-    // Atomic claim: accept slots that are either scheduled OR should auto-recover (manuallyStopped=false)
-    const claimed = await db.streamSlot.updateMany({
-      where: {
-        slotIndex: slot.slotIndex,
-        isRunning: false,
-        OR: [
-          { isScheduled: true },
-          { manuallyStopped: false }
-        ]
-      },
-      data: {
-        isRunning: true,
-        isScheduled: false,
-        manuallyStopped: false,
-        isSwapped: false,
-        status: 'Streaming',
-        ...(actualSchedStop !== slot.schedStop ? { schedStop: actualSchedStop } : {})
+      // Convert DUR format to real datetime — anchored to schedStart (not now!)
+      // This ensures stop time = original_scheduled_start + duration, regardless of late start
+      let actualSchedStop = slot.schedStop
+      if (slot.schedStop && slot.schedStop.startsWith('DUR ') && slot.schedStart) {
+        const parsedStart = parseScheduleTime(slot.schedStart)
+        if (parsedStart) {
+          const schedStartDate = getCairoTargetDate(parsedStart, now)
+          actualSchedStop = durToActualStop(slot.schedStop, schedStartDate)
+        } else {
+          actualSchedStop = durToActualStop(slot.schedStop, now)
+        }
       }
-    })
-    if (claimed.count === 0) {
-      console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipped — already claimed by another worker`)
-      continue
-    }
 
-    try {
-      // If a YouTube channel is bound to this slot, run the YouTube Live broadcast setup
-      let finalStreamKey = slot.streamKey
-      let finalRtmpServer = slot.rtmpServer
-      let youtubeBroadcastId = slot.youtubeBroadcastId || ''
-      if (slot.youtubeChannelId && slot.outputType === 'youtube') {
-        try {
-          let finalScheduledStartTime: string | undefined = undefined
-          if (slot.schedStart) {
-            const parsedStart = parseScheduleTime(slot.schedStart)
-            if (parsedStart) {
-              const startDate = getCairoTargetDate(parsedStart, now)
-              finalScheduledStartTime = startDate.toISOString()
-            }
-          }
+      // Atomic claim: accept slots that are either scheduled OR should auto-recover (manuallyStopped=false)
+      const claimed = await db.streamSlot.updateMany({
+        where: {
+          slotIndex: slot.slotIndex,
+          isRunning: false,
+          OR: [
+            { isScheduled: true },
+            { manuallyStopped: false }
+          ]
+        },
+        data: {
+          isRunning: true,
+          isScheduled: false,
+          manuallyStopped: false,
+          isSwapped: false,
+          status: 'Streaming',
+          ...(actualSchedStop !== slot.schedStop ? { schedStop: actualSchedStop } : {})
+        }
+      })
+      if (claimed.count === 0) {
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipped — already claimed by another worker`)
+        return
+      }
 
-          const yt = await setupYoutubeLiveStream(
-            slot.youtubeChannelId,
-            slot.youtubeTitle || 'Live Stream',
-            slot.youtubeDescription || '',
-            slot.youtubeThumbnailPath || undefined,
-            slot.streamKey,
-            finalScheduledStartTime
-          )
-          finalStreamKey = yt.streamKey || finalStreamKey
-          finalRtmpServer = yt.rtmpServer || finalRtmpServer
-          youtubeBroadcastId = yt.broadcastId || ''
-          // Persist the fresh stream key, rtmp server, and broadcastId so the swap uses the same session
-          await db.streamSlot.update({
-            where: { slotIndex: slot.slotIndex },
-            data: {
-              streamKey: finalStreamKey,
-              rtmpServer: finalRtmpServer,
-              youtubeBroadcastId: youtubeBroadcastId
-            }
-          })
-          logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
-        } catch (ytErr: any) {
-          logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed: ${ytErr.message}`)
-          
-          const stateKey = `state_${slot.slotIndex}`
-          const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
-          state.crashCount++
-          
-          const isRecurring = slot.daily || slot.weekly || slot.hourly
-          if (state.crashCount >= MAX_CRASH_COUNT) {
-            recoveryStates.delete(stateKey)
-            
-            if (isRecurring) {
-              let nextStartTime = slot.schedStart || ''
-              let nextStopTime = slot.schedStop || ''
-              const oldStart = parseScheduleTime(slot.schedStart)
-              const oldStop = parseScheduleTime(slot.schedStop)
-              if (oldStart && oldStop) {
-                let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
-                if (durMins < 0) durMins += 1440
-                nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
-                const nParsed = parseScheduleTime(nextStartTime)
-                if (nParsed) {
-                  const nDate = getCairoTargetDate(nParsed, now)
-                  const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
-                  const stopFields = getCairoNowFields(stopDate)
-                  nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
-                }
+      try {
+        // If a YouTube channel is bound to this slot, run the YouTube Live broadcast setup
+        let finalStreamKey = slot.streamKey
+        let finalRtmpServer = slot.rtmpServer
+        let youtubeBroadcastId = slot.youtubeBroadcastId || ''
+        if (slot.youtubeChannelId && slot.outputType === 'youtube') {
+          try {
+            let finalScheduledStartTime: string | undefined = undefined
+            if (slot.schedStart) {
+              const parsedStart = parseScheduleTime(slot.schedStart)
+              if (parsedStart) {
+                const startDate = getCairoTargetDate(parsedStart, now)
+                finalScheduledStartTime = startDate.toISOString()
               }
+            }
+
+            const yt = await setupYoutubeLiveStream(
+              slot.youtubeChannelId,
+              slot.youtubeTitle || 'Live Stream',
+              slot.youtubeDescription || '',
+              slot.youtubeThumbnailPath || undefined,
+              slot.streamKey,
+              finalScheduledStartTime
+            )
+            finalStreamKey = yt.streamKey || finalStreamKey
+            finalRtmpServer = yt.rtmpServer || finalRtmpServer
+            youtubeBroadcastId = yt.broadcastId || ''
+            // Persist the fresh stream key, rtmp server, and broadcastId so the swap uses the same session
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                streamKey: finalStreamKey,
+                rtmpServer: finalRtmpServer,
+                youtubeBroadcastId: youtubeBroadcastId
+              }
+            })
+            logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
+          } catch (ytErr: any) {
+            logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed: ${ytErr.message}`)
+            
+            const stateKey = `state_${slot.slotIndex}`
+            const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
+            state.crashCount++
+            
+            const isRecurring = slot.daily || slot.weekly || slot.hourly
+            if (state.crashCount >= MAX_CRASH_COUNT) {
+              recoveryStates.delete(stateKey)
+              
+              if (isRecurring) {
+                let nextStartTime = slot.schedStart || ''
+                let nextStopTime = slot.schedStop || ''
+                const oldStart = parseScheduleTime(slot.schedStart)
+                const oldStop = parseScheduleTime(slot.schedStop)
+                if (oldStart && oldStop) {
+                  let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+                  if (durMins < 0) durMins += 1440
+                  nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+                  const nParsed = parseScheduleTime(nextStartTime)
+                  if (nParsed) {
+                    const nDate = getCairoTargetDate(nParsed, now)
+                    const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+                    const stopFields = getCairoNowFields(stopDate)
+                    nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+                  }
+                }
+                await db.streamSlot.update({
+                  where: { slotIndex: slot.slotIndex },
+                  data: {
+                    isRunning: false,
+                    isScheduled: true,
+                    status: 'Scheduled',
+                    schedStart: nextStartTime,
+                    schedStop: nextStopTime,
+                    nextRunTime: nextStartTime,
+                    isSwapped: false,
+                    youtubeBroadcastId: '',
+                    manuallyStopped: false
+                  }
+                })
+                logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting due to YouTube error. Rescheduling for the next occurrence.`)
+              } else {
+                await db.streamSlot.update({
+                  where: { slotIndex: slot.slotIndex },
+                  data: {
+                    isRunning: false,
+                    isScheduled: false,
+                    status: 'Failed',
+                    manuallyStopped: true,
+                    isSwapped: false,
+                    youtubeBroadcastId: ''
+                  }
+                })
+                logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting due to YouTube error. Stopping.`)
+              }
+            } else {
+              const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
+              state.backoffLevel++
+              state.pendingUntil = Date.now() + delay
+              recoveryStates.set(stateKey, state)
+              
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
                 data: {
                   isRunning: false,
-                  isScheduled: true,
+                  isScheduled: isRecurring ? true : false,
                   status: 'Scheduled',
-                  schedStart: nextStartTime,
-                  schedStop: nextStopTime,
-                  nextRunTime: nextStartTime,
-                  isSwapped: false,
-                  youtubeBroadcastId: '',
+                  schedStop: slot.schedStop,
                   manuallyStopped: false
                 }
               })
-              logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting due to YouTube error. Rescheduling for the next occurrence.`)
-            } else {
-              await db.streamSlot.update({
-                where: { slotIndex: slot.slotIndex },
-                data: {
-                  isRunning: false,
-                  isScheduled: false,
-                  status: 'Failed',
-                  manuallyStopped: true,
-                  isSwapped: false,
-                  youtubeBroadcastId: ''
-                }
-              })
-              logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting due to YouTube error. Stopping.`)
+              logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed. Retrying in ${Math.round(delay/1000)}s (Crash ${state.crashCount}/${MAX_CRASH_COUNT})`)
             }
-          } else {
-            const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
-            state.backoffLevel++
-            state.pendingUntil = Date.now() + delay
-            recoveryStates.set(stateKey, state)
-            
+            return
+          }
+        }
+
+        let resolvedInputPath = finalInputPath
+        if (slot.inputType !== 'live' && slot.filePath) {
+          resolvedInputPath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+          activeMainVideos.set(slot.slotIndex, resolvedInputPath)
+        }
+
+        const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slotIndex: slot.slotIndex,
+            outputType: slot.outputType,
+            rtmpServer: finalRtmpServer,
+            streamKey: finalStreamKey,
+            filePath: resolvedInputPath
+          })
+        }, 5000)
+        const data = await res.json()
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || data.message || 'Stream manager rejected start')
+        }
+        startedCount++
+        logs.push(`Slot ${slot.slotIndex + 1}: Auto-started`)
+        const token = Math.random().toString(36).substring(7)
+        lastActionTokens.set(slot.slotIndex, token)
+        verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
+      } catch (e: any) {
+        // Increment recovery state crash count because starting failed
+        const stateKey = `state_${slot.slotIndex}`
+        const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
+        state.crashCount++
+        
+        const isRecurring = slot.daily || slot.weekly || slot.hourly
+        if (state.crashCount >= MAX_CRASH_COUNT) {
+          recoveryStates.delete(stateKey)
+          
+          if (isRecurring) {
+            let nextStartTime = slot.schedStart || ''
+            let nextStopTime = slot.schedStop || ''
+            const oldStart = parseScheduleTime(slot.schedStart)
+            const oldStop = parseScheduleTime(slot.schedStop)
+            if (oldStart && oldStop) {
+              let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+              if (durMins < 0) durMins += 1440
+              nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+              const nParsed = parseScheduleTime(nextStartTime)
+              if (nParsed) {
+                const nDate = getCairoTargetDate(nParsed, now)
+                const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+                const stopFields = getCairoNowFields(stopDate)
+                nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+              }
+            }
             await db.streamSlot.update({
               where: { slotIndex: slot.slotIndex },
               data: {
                 isRunning: false,
-                isScheduled: isRecurring ? true : false,
+                isScheduled: true,
                 status: 'Scheduled',
-                schedStop: slot.schedStop,
+                schedStart: nextStartTime,
+                schedStop: nextStopTime,
+                nextRunTime: nextStartTime,
+                isSwapped: false,
+                youtubeBroadcastId: '',
                 manuallyStopped: false
               }
             })
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed. Retrying in ${Math.round(delay/1000)}s (Crash ${state.crashCount}/${MAX_CRASH_COUNT})`)
+            logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting. Rescheduling for the next occurrence.`)
+          } else {
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                isRunning: false,
+                isScheduled: false,
+                status: 'Failed',
+                manuallyStopped: true,
+                isSwapped: false,
+                youtubeBroadcastId: ''
+              }
+            })
+            logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting: ${e.message || 'Stream manager error'}. Stopping.`)
           }
-          continue
-        }
-      }
-
-      let resolvedInputPath = finalInputPath
-      if (slot.inputType !== 'live' && slot.filePath) {
-        resolvedInputPath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
-        activeMainVideos.set(slot.slotIndex, resolvedInputPath)
-      }
-
-      const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slotIndex: slot.slotIndex,
-          outputType: slot.outputType,
-          rtmpServer: finalRtmpServer,
-          streamKey: finalStreamKey,
-          filePath: resolvedInputPath
-        })
-      }, 5000)
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Stream manager rejected start')
-      }
-      startedCount++
-      logs.push(`Slot ${slot.slotIndex + 1}: Auto-started`)
-      const token = Math.random().toString(36).substring(7)
-      lastActionTokens.set(slot.slotIndex, token)
-      verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
-    } catch (e: any) {
-      // Increment recovery state crash count because starting failed
-      const stateKey = `state_${slot.slotIndex}`
-      const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
-      state.crashCount++
-      
-      const isRecurring = slot.daily || slot.weekly || slot.hourly
-      if (state.crashCount >= MAX_CRASH_COUNT) {
-        recoveryStates.delete(stateKey)
-        
-        if (isRecurring) {
-          let nextStartTime = slot.schedStart || ''
-          let nextStopTime = slot.schedStop || ''
-          const oldStart = parseScheduleTime(slot.schedStart)
-          const oldStop = parseScheduleTime(slot.schedStop)
-          if (oldStart && oldStop) {
-            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
-            if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
-            const nParsed = parseScheduleTime(nextStartTime)
-            if (nParsed) {
-              const nDate = getCairoTargetDate(nParsed, now)
-              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
-              const stopFields = getCairoNowFields(stopDate)
-              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
-            }
-          }
+        } else {
+          const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
+          state.backoffLevel++
+          state.pendingUntil = Date.now() + delay
+          recoveryStates.set(stateKey, state)
+          
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
             data: {
               isRunning: false,
-              isScheduled: true,
+              isScheduled: isRecurring ? true : false,
               status: 'Scheduled',
-              schedStart: nextStartTime,
-              schedStop: nextStopTime,
-              nextRunTime: nextStartTime,
-              isSwapped: false,
-              youtubeBroadcastId: '',
+              schedStop: slot.schedStop,
               manuallyStopped: false
             }
           })
-          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting. Rescheduling for the next occurrence.`)
-        } else {
-          await db.streamSlot.update({
-            where: { slotIndex: slot.slotIndex },
-            data: {
-              isRunning: false,
-              isScheduled: false,
-              status: 'Failed',
-              manuallyStopped: true,
-              isSwapped: false,
-              youtubeBroadcastId: ''
-            }
-          })
-          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed starting: ${e.message || 'Stream manager error'}. Stopping.`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Failed to auto-start: ${e.message || 'Stream manager error'}. Retrying in ${Math.round(delay/1000)}s (Crash ${state.crashCount}/${MAX_CRASH_COUNT})`)
         }
-      } else {
-        const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
-        state.backoffLevel++
-        state.pendingUntil = Date.now() + delay
-        recoveryStates.set(stateKey, state)
-        
-        await db.streamSlot.update({
-          where: { slotIndex: slot.slotIndex },
-          data: {
-            isRunning: false,
-            isScheduled: isRecurring ? true : false,
-            status: 'Scheduled',
-            schedStop: slot.schedStop,
-            manuallyStopped: false
-          }
-        })
-        logs.push(`Slot ${slot.slotIndex + 1}: Failed to auto-start: ${e.message || 'Stream manager error'}. Retrying in ${Math.round(delay/1000)}s (Crash ${state.crashCount}/${MAX_CRASH_COUNT})`)
       }
-    }
+    }))
 
-    // 5-second gap between sends to prevent simultaneous streams from interfering.
-    // The stream-manager's internal stagger adds additional delay on top of this.
-    if (i < slotsToStart.length - 1) {
-      await new Promise(r => setTimeout(r, 5000))
+    if (i + BATCH_SIZE < slotsToStart.length) {
+      await new Promise(r => setTimeout(r, 1000))
     }
   }
 
