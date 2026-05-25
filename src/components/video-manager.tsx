@@ -32,7 +32,7 @@ import { t, getLocale, type TranslationKey } from '@/lib/i18n'
 const isImageFile = (fileName: string) => {
   if (!fileName) return false;
   const ext = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
-  return ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext);
+  return ['png', 'jpg', 'jpeg'].includes(ext);
 };
 
 interface VideoFile {

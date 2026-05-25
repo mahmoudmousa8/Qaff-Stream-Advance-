@@ -1212,19 +1212,17 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const handleClosest15Schedule = (index: number) => {
+  const handleClosest20Schedule = (index: number) => {
     const now = new Date()
     const target = new Date(now)
     const minutes = now.getMinutes()
     let targetMin = 0
     let targetHour = now.getHours()
 
-    if (minutes < 15) {
-      targetMin = 15
-    } else if (minutes < 30) {
-      targetMin = 30
-    } else if (minutes < 45) {
-      targetMin = 45
+    if (minutes < 20) {
+      targetMin = 20
+    } else if (minutes < 40) {
+      targetMin = 40
     } else {
       targetMin = 0
       targetHour += 1
@@ -1472,8 +1470,8 @@ export default function Home() {
                 <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}
+                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 20 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 20 للكل' : 'Set 20m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 20 للكل' : 'Set 20m All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
                 onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
@@ -4506,10 +4504,10 @@ export default function Home() {
               size="sm"
               variant="outline"
               className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs btn-premium"
-              onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set selected slots to nearest 15 mins?', undefined, selectedSlots)}
+              onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب 20 دقيقة وبث 10 دقائق؟' : 'Set selected slots to nearest 20 mins?', undefined, selectedSlots)}
             >
               <Clock className="w-3.5 h-3.5" />
-              {locale === 'ar' ? 'أقرب 15' : 'Closest 15m'}
+              {locale === 'ar' ? 'أقرب 20' : 'Closest 20m'}
             </Button>
 
             {/* Repeat 15m / Hourly */}
@@ -4517,10 +4515,10 @@ export default function Home() {
               size="sm"
               variant="outline"
               className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs btn-premium"
-              onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 15 دقيقة للقنوات المحددة؟' : 'Enable 15m hourly for selected slots?', undefined, selectedSlots)}
+              onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للقنوات المحددة؟' : 'Enable 20m hourly for selected slots?', undefined, selectedSlots)}
             >
               <Sun className="w-3 h-3" />
-              {locale === 'ar' ? '15 دقيقة' : '15 Mins'}
+              {locale === 'ar' ? '20 دقيقة' : '20 Mins'}
             </Button>
 
             {/* Daily */}

@@ -666,12 +666,10 @@ export async function POST(request: NextRequest) {
 
         let targetHour = cairoNow.hour
         let targetMinute = 0
-        if (cairoNow.minute < 15) {
-          targetMinute = 15
-        } else if (cairoNow.minute < 30) {
-          targetMinute = 30
-        } else if (cairoNow.minute < 45) {
-          targetMinute = 45
+        if (cairoNow.minute < 20) {
+          targetMinute = 20
+        } else if (cairoNow.minute < 40) {
+          targetMinute = 40
         } else {
           targetMinute = 0
           targetHour += 1
