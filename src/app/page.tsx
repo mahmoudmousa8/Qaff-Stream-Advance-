@@ -1169,12 +1169,19 @@ export default function Home() {
     } catch { addLog(`Slot ${index + 1}: Error scheduling`) }
   }
 
-  const resetSlot = async (index: number) => {
-    try {
-      await fetch(`/api/slots/${index}/reset`, { method: 'POST' })
-      addLog(`Slot ${index + 1}: Reset`)
-      fetchSlots()
-    } catch { addLog(`Slot ${index + 1}: Error resetting`) }
+  const resetSlot = (index: number) => {
+    setConfirmDialog({
+      open: true,
+      action: locale === 'ar' ? `إعادة تعيين القناة #${index + 1}` : `Reset Channel #${index + 1}`,
+      onConfirm: async () => {
+        try {
+          await fetch(`/api/slots/${index}/reset`, { method: 'POST' })
+          addLog(`Slot ${index + 1}: Reset`)
+          fetchSlots()
+        } catch { addLog(`Slot ${index + 1}: Error resetting`) }
+        setConfirmDialog(null)
+      }
+    })
   }
 
   // Smart Play: immediate start if no schedStart, else schedule
@@ -1445,132 +1452,126 @@ export default function Home() {
               </Badge>
             )}
 
-            <div className="flex items-center gap-2.5 flex-wrap justify-end">
-              {/* Group 1: Files, Logs, and Channels */}
-              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setVideosManagerOpen(true)}>
-                  <FolderOpen className="w-3.5 h-3.5 mr-1" />
-                  {t('videos')}
-                </Button>
-
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => router.push('/logs')}>
-                  <Activity className="w-3.5 h-3.5 mr-1" />
-                  {t('logs')}
-                </Button>
-
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setYtManagerOpen(true)}>
-                  <Youtube className="w-3.5 h-3.5 mr-1 text-red-500" />
-                  {locale === 'ar' ? 'القنوات' : 'YouTube'}
-                </Button>
-              </div>
-
-
-
-              {/* Group 3: Bulk Actions */}
-              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-                  onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
-                  <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-                  onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
-                  <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
-                  onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
-                  <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                  onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
-                  <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
-                  onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
-                  <Sun className="w-3 h-3 mr-0.5" />{t('hourlyAll')}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
-                  <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-                  <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
-                  onClick={() => {
-                    setTargetSlotsForAction(undefined)
-                    setBulkTitle('')
-                    setBulkDesc('')
-                    setBulkTitleDescOpen(true)
-                  }}
-                  title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
-                  <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Description for All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
-                  onClick={() => {
-                    setTargetSlotsForAction(undefined)
-                    setBulkRandomTitleDescOpen(true)
-                  }}
-                  title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
-                  <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية للكل' : 'Random Title/Desc All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
-                  onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة لكافة القنوات' : 'Set unified thumbnail for all slots'}>
-                  <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف للكل' : 'Thumbnail All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
-                  onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف للكل' : 'Clear Thumbnail'}
-                </Button>
-                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                  onClick={() => setBulkSwapSelectorOpen(true)} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
-                  <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مجلد تبديل للكل' : 'Swap Folder All'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
-                  onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
-                  <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap'}
-                </Button>
-              </div>
-
-              {/* Group 4: Server Config, Timezone & AutoSave */}
-              <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-lg border border-border/50 shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => setTzDialogOpen(true)} title={t('timezoneServer')}>
-                  <Globe className="w-3.5 h-3.5 mr-0.5" />{t('timezoneBtn')}
-                </Button>
-                <Button size="sm" variant={autoSave ? "secondary" : "ghost"} className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                  onClick={() => setAutoSave(!autoSave)}>
-                  <Save className="w-3.5 h-3.5 mr-0.5" />{t('autoSave')}: {autoSave ? 'ON' : 'OFF'}
-                </Button>
-                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 font-medium" onClick={async () => {
-                  setPwDialogOpen(true); setPwError(''); setPwSuccess(false); setPwResetAnswer(''); setPwNewPassword(''); setPwConfirmPassword('')
-                  try {
-                    const r = await fetch('/api/settings/reset-question')
-                    const d = await r.json()
-                    setPwResetQuestion(d.question || '')
-                  } catch { setPwResetQuestion('') }
-                }}>
-                  🔑 {locale === 'ar' ? 'كلمة المرور' : 'Password'}
-                </Button>
-              </div>
-
-              {/* Group 5: Appearance/Locale and Logout */}
-              <div className="flex items-center gap-1 shrink-0">
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={switchLocale} title={t('language')}>
-                  <Globe className="w-3.5 h-3.5" />
-                </Button>
-
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={toggleTheme} title={t('theme')}>
-                  {isDarkMode ? <Sun className="w-3.5 h-3.5 text-orange-400" /> : <Moon className="w-3.5 h-3.5" />}
-                </Button>
-
-                <Button size="sm" variant="ghost" className="text-red-500 hover:text-white hover:bg-red-600 h-7 w-7 p-0 rounded-lg hover:scale-110 active:scale-90 transition-all"
-                  title={t('logout')}
-                  onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }}>
-                  <LogOut className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+          <div className="flex flex-col items-center justify-center gap-3 w-full mt-3">
+            {/* Top Bar 1: Bulk Actions */}
+            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
+                <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
+                <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
+                onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
+                <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 15 للكل' : 'Set 15m All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
+                onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
+                <Sun className="w-3 h-3 mr-0.5" />{t('hourlyAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
+                <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
+                onClick={() => {
+                  setTargetSlotsForAction(undefined)
+                  setBulkTitle('')
+                  setBulkDesc('')
+                  setBulkTitleDescOpen(true)
+                }}
+                title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
+                <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Description for All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
+                onClick={() => {
+                  setTargetSlotsForAction(undefined)
+                  setBulkRandomTitleDescOpen(true)
+                }}
+                title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية للكل' : 'Random Title/Desc All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
+                onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
+                <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف/مجلد للكل' : 'Thumbnail Folder All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
+                onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف للكل' : 'Clear Thumbnail'}
+              </Button>
+               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                onClick={() => setBulkSwapSelectorOpen(true)} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
+                <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مجلد تبديل للكل' : 'Swap Folder All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
+                onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap'}
+              </Button>
             </div>
+
+            {/* Top Bar 2: Navigation & Settings */}
+            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setVideosManagerOpen(true)}>
+                <FolderOpen className="w-3.5 h-3.5 mr-1" />
+                {t('videos')}
+              </Button>
+
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setYtManagerOpen(true)}>
+                <Youtube className="w-3.5 h-3.5 mr-1 text-red-500" />
+                {locale === 'ar' ? 'القنوات' : 'YouTube'}
+              </Button>
+
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => setTzDialogOpen(true)} title={t('timezoneServer')}>
+                <Globe className="w-3.5 h-3.5 mr-0.5" />{t('timezoneBtn')}
+              </Button>
+              
+              <Button size="sm" variant={autoSave ? "secondary" : "ghost"} className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => setAutoSave(!autoSave)}>
+                <Save className="w-3.5 h-3.5 mr-0.5" />{t('autoSave')}: {autoSave ? 'ON' : 'OFF'}
+              </Button>
+              
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 font-medium" onClick={async () => {
+                setPwDialogOpen(true); setPwError(''); setPwSuccess(false); setPwResetAnswer(''); setPwNewPassword(''); setPwConfirmPassword('')
+                try {
+                  const r = await fetch('/api/settings/reset-question')
+                  const d = await r.json()
+                  setPwResetQuestion(d.question || '')
+                } catch { setPwResetQuestion('') }
+              }}>
+                🔑 {locale === 'ar' ? 'كلمة المرور' : 'Password'}
+              </Button>
+
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={switchLocale} title={t('language')}>
+                <Globe className="w-3.5 h-3.5" />
+              </Button>
+
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg hover:bg-muted hover:scale-110 active:scale-90 transition-all" onClick={toggleTheme} title={t('theme')}>
+                {isDarkMode ? <Sun className="w-3.5 h-3.5 text-orange-400" /> : <Moon className="w-3.5 h-3.5" />}
+              </Button>
+
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => router.push('/logs')}>
+                <Activity className="w-3.5 h-3.5 mr-1" />
+                {t('logs')}
+              </Button>
+
+              <Button size="sm" variant="ghost" className="text-red-500 hover:text-white hover:bg-red-600 h-7 w-7 p-0 rounded-lg hover:scale-110 active:scale-90 transition-all"
+                title={t('logout')}
+                onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.href = '/login' }}>
+                <LogOut className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
           </div>
 
           {/* Group 2: Cloudflare Tunnel Status (Moved to New Line) */}
@@ -3293,7 +3294,7 @@ export default function Home() {
                         </div>
 
                         {/* Title character counter & validation */}
-                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                        <div className={`space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl transition-opacity ${settingsData.titleDescListId ? 'opacity-50' : ''}`}>
                           <div className="flex justify-between items-center">
                             <label className="text-sm font-bold text-foreground">
                               {locale === 'ar' ? 'عنوان البث المباشر' : 'Live Stream Title'}
@@ -3304,6 +3305,7 @@ export default function Home() {
                           </div>
                           <Input
                             maxLength={100}
+                            disabled={!!settingsData.titleDescListId}
                             value={settingsData.youtubeTitle}
                             onChange={(e) => setSettingsData(p => p ? { ...p, youtubeTitle: e.target.value } : p)}
                             placeholder={locale === 'ar' ? 'العنوان الافتراضي: Live Stream' : 'Default: Live Stream'}
@@ -3312,7 +3314,7 @@ export default function Home() {
                         </div>
 
                         {/* Description character counter & validation */}
-                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                        <div className={`space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl transition-opacity ${settingsData.titleDescListId ? 'opacity-50' : ''}`}>
                           <div className="flex justify-between items-center">
                             <label className="text-sm font-bold text-foreground">
                               {locale === 'ar' ? 'وصف البث المباشر' : 'Live Stream Description'}
@@ -3324,6 +3326,7 @@ export default function Home() {
                           <textarea
                             maxLength={4500}
                             rows={4}
+                            disabled={!!settingsData.titleDescListId}
                             value={settingsData.youtubeDescription}
                             onChange={(e) => setSettingsData(p => p ? { ...p, youtubeDescription: e.target.value } : p)}
                             placeholder={locale === 'ar' ? 'أدخل تفاصيل البث ووسومه...' : 'Enter stream description, tags, etc...'}
@@ -3335,18 +3338,18 @@ export default function Home() {
                         {/* PNG Thumbnail Picker */}
                         <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <label className="text-sm font-bold text-foreground block">
-                            {locale === 'ar' ? 'صورة مصغرة مخصصة (Thumbnail)' : 'Custom Thumbnail Image'}
+                            {locale === 'ar' ? 'صورة مصغرة مخصصة أو مجلد (Thumbnail)' : 'Custom Thumbnail or Folder'}
                           </label>
                           <p className="text-xs text-muted-foreground mb-2">
                             {locale === 'ar'
-                              ? 'صورة PNG حصرياً وحجمها أقل من 2 ميجابايت.'
-                              : 'Strictly PNG format and under 2MB limit.'}
+                              ? 'اختر صورة واحدة (ثابتة) أو مجلد صور (يتم التبديل عشوائياً).'
+                              : 'Select a single image (static) or an image folder (random rotation).'}
                           </p>
 
                           {settingsData.youtubeThumbnailPath ? (
                             <div className="flex items-center justify-between bg-card border border-border px-3 py-2 rounded-lg text-xs font-mono">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="shrink-0 text-base">🖼️</span>
+                                <span className="shrink-0 text-base">{settingsData.youtubeThumbnailPath.match(/\.(png|jpg|jpeg)$/i) ? '🖼️' : '📁'}</span>
                                 <span className="truncate text-foreground/95" title={settingsData.youtubeThumbnailPath}>
                                   {settingsData.youtubeThumbnailPath.split(/[/\\]/).pop()}
                                 </span>
@@ -3369,7 +3372,7 @@ export default function Home() {
                               onClick={() => setThumbnailSelectorOpen(true)}
                             >
                               <FolderOpen className="w-4 h-4 text-muted-foreground" />
-                              {locale === 'ar' ? 'اختر صورة غلاف PNG' : 'Select PNG Thumbnail Image'}
+                              {locale === 'ar' ? 'اختر صورة أو مجلد صور' : 'Select Image or Folder'}
                             </Button>
                           )}
                         </div>
@@ -4173,21 +4176,32 @@ export default function Home() {
                         <span className="font-bold text-foreground tabular-nums">{editingList.pairs.length}</span>
                         {' '}{locale === 'ar' ? 'عنوان/وصف' : 'pairs'}
                       </span>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-7 text-xs gap-1.5 hover:bg-pink-500/10 hover:text-pink-600 transition-colors"
-                        onClick={() => setEditingList({
-                          ...editingList,
-                          pairs: [{ id: Math.random().toString(36).substring(7), title: '', description: '' }, ...editingList.pairs]
-                        })}
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 text-xs gap-1.5 hover:bg-pink-500/10 hover:text-pink-600 transition-colors"
+                          onClick={() => {
+                            setEditingList({
+                              ...editingList,
+                              pairs: [...editingList.pairs, { id: Math.random().toString(36).substring(7), title: '', description: '' }]
+                            });
+                            setTimeout(() => {
+                              const container = document.getElementById('title-desc-pairs-container');
+                              if (container) {
+                                container.parentElement?.parentElement?.scrollTo({
+                                  top: container.scrollHeight,
+                                  behavior: 'smooth'
+                                });
+                              }
+                            }, 50);
+                          }}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
                       </Button>
                     </div>
                     <ScrollArea className="flex-1 p-4">
-                      <div className="space-y-3">
+                      <div id="title-desc-pairs-container" className="space-y-3 pb-4">
                         {editingList.pairs.map((pair, index) => (
                           <div key={pair.id} className="relative p-3 bg-card border border-border/80 rounded-lg space-y-2 hover:border-border transition-colors">
                             <div className="flex items-center justify-between mb-1">
@@ -4222,17 +4236,22 @@ export default function Home() {
                                   {pair.title.length}/100
                                 </span>
                               </div>
-                              <textarea
-                                maxLength={4500}
-                                value={pair.description}
-                                onChange={(e) => setEditingList({
-                                  ...editingList,
-                                  pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, description: e.target.value } : p)
-                                })}
-                                placeholder={locale === 'ar' ? 'الوصف...' : 'Description...'}
-                                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                dir="auto"
-                              />
+                              <div className="relative">
+                                <textarea
+                                  maxLength={4500}
+                                  value={pair.description}
+                                  onChange={(e) => setEditingList({
+                                    ...editingList,
+                                    pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, description: e.target.value } : p)
+                                  })}
+                                  placeholder={locale === 'ar' ? 'الوصف (حتى 4500 حرف)...' : 'Description (up to 4500 chars)...'}
+                                  className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pr-14"
+                                  dir="auto"
+                                />
+                                <span className="absolute right-2 bottom-2 text-[10px] font-mono text-muted-foreground/50 pointer-events-none bg-background px-1 rounded">
+                                  {pair.description.length}/4500
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -4437,7 +4456,7 @@ export default function Home() {
               }}
             >
               <ImageIcon className="w-3 h-3" />
-              {locale === 'ar' ? 'غلاف' : 'Thumbnail'}
+              {locale === 'ar' ? 'غلاف/مجلد' : 'Thumbnail/Folder'}
             </Button>
 
             {/* Clear Thumbnail */}
