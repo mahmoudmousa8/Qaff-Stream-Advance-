@@ -13,8 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
-  Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3
+  Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
+  Shuffle, Plus, List, BookOpen, Dices
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -328,6 +329,8 @@ export default function Home() {
   const [bulkTitleDescOpen, setBulkTitleDescOpen] = useState(false)
   const [titleDescManagerOpen, setTitleDescManagerOpen] = useState(false)
   const [editingList, setEditingList] = useState<{ id?: string, name: string, pairs: { id: string, title: string, description: string }[] } | null>(null)
+  const [editingListError, setEditingListError] = useState('')
+  const [isSavingList, setIsSavingList] = useState(false)
   const [bulkRandomTitleDescOpen, setBulkRandomTitleDescOpen] = useState(false)
   const [titleDescLists, setTitleDescLists] = useState<TitleDescList[]>([])
   const [isFetchingLists, setIsFetchingLists] = useState(false)
@@ -353,6 +356,8 @@ export default function Home() {
 
   const handleSaveList = async () => {
     if (!editingList || !editingList.name.trim()) return
+    setEditingListError('')
+    setIsSavingList(true)
     try {
       const payload = {
         name: editingList.name.trim(),
@@ -370,30 +375,39 @@ export default function Home() {
       if (data.success) {
         addLog(locale === 'ar' ? 'تم حفظ القائمة بنجاح' : 'List saved successfully')
         setEditingList(null)
+        setEditingListError('')
         fetchTitleDescLists()
       } else {
-        alert(data.error)
+        setEditingListError(data.error || (locale === 'ar' ? 'حدث خطأ أثناء الحفظ' : 'Error saving list'))
       }
     } catch (e) {
       console.error(e)
-      alert('Error saving list')
+      setEditingListError(locale === 'ar' ? 'تعذّر الاتصال بالخادم' : 'Could not connect to server')
+    } finally {
+      setIsSavingList(false)
     }
   }
 
   const handleDeleteList = async (id: string) => {
-    if (!confirm(locale === 'ar' ? 'هل أنت متأكد من حذف هذه القائمة؟' : 'Are you sure you want to delete this list?')) return
-    try {
-      const res = await fetch(`/api/title-desc-lists/${id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (data.success) {
-        addLog(locale === 'ar' ? 'تم حذف القائمة' : 'List deleted')
-        fetchTitleDescLists()
-        // If it was assigned to any slots, refresh slots
-        fetchSlots()
+    const listName = titleDescLists.find(l => l.id === id)?.name || ''
+    setConfirmDialog({
+      open: true,
+      action: locale === 'ar' ? `حذف قائمة "${listName}"؟` : `Delete list "${listName}"?`,
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          const res = await fetch(`/api/title-desc-lists/${id}`, { method: 'DELETE' })
+          const data = await res.json()
+          if (data.success) {
+            addLog(locale === 'ar' ? 'تم حذف القائمة' : 'List deleted')
+            fetchTitleDescLists()
+            fetchSlots()
+          }
+        } catch (e) {
+          console.error(e)
+        }
       }
-    } catch (e) {
-      console.error(e)
-    }
+    })
   }
 
   const [bulkTitle, setBulkTitle] = useState('')
@@ -3244,15 +3258,15 @@ export default function Home() {
                         </div>
 
                         {/* Title & Description List Selection */}
-                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                        <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                            <RotateCcw className="w-4 h-4 text-pink-500" />
+                            <Shuffle className="w-4 h-4 text-pink-500" />
                             {locale === 'ar' ? 'قائمة عناوين وأوصاف عشوائية' : 'Random Title & Description List'}
                           </label>
-                          <p className="text-xs text-muted-foreground mb-2">
+                          <p className="text-xs text-muted-foreground">
                             {locale === 'ar'
                               ? 'اختر قائمة من القوائم المنشأة مسبقاً لاختيار عنوان ووصف عشوائي منها في كل مرة يبدأ فيها البث.'
-                              : 'Select a list from previously created ones to randomly pick a title and description each time the stream starts.'}
+                              : 'Select a list to randomly pick a title & description each time the stream starts.'}
                           </p>
                           <select
                             value={settingsData.titleDescListId || ''}
@@ -3260,13 +3274,22 @@ export default function Home() {
                             className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             dir={dir}
                           >
-                            <option value="">{locale === 'ar' ? '-- لا يوجد قائمة (استخدم الثابت) --' : '-- No List (Use Static) --'}</option>
-                            {titleDescLists.map(list => (
-                              <option key={list.id} value={list.id}>
-                                {list.name} ({(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'})
-                              </option>
-                            ))}
+                            <option value="">{locale === 'ar' ? '— بدون قائمة (استخدام الثابت) —' : '— No List (use static title/desc) —'}</option>
+                            {titleDescLists.map(list => {
+                              const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
+                              return (
+                                <option key={list.id} value={list.id}>
+                                  {list.name} · {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
+                                </option>
+                              )
+                            })}
                           </select>
+                          {settingsData.titleDescListId && (
+                            <div className="flex items-center gap-1.5 text-[11px] text-pink-500 font-medium">
+                              <Shuffle className="w-3 h-3" />
+                              {locale === 'ar' ? 'سيتم اختيار عنوان ووصف عشوائي عند بدء البث' : 'A random title & desc will be picked at stream start'}
+                            </div>
+                          )}
                         </div>
 
                         {/* Title character counter & validation */}
@@ -4050,13 +4073,13 @@ export default function Home() {
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
           <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <RotateCcw className="w-5 h-5 text-pink-500" />
-              {locale === 'ar' ? 'مدير قوائم العناوين والأوصاف العشوائية' : 'Random Title/Desc Lists Manager'}
+              <Shuffle className="w-5 h-5 text-pink-500" />
+              {locale === 'ar' ? 'مدير قوائم العناوين والأوصاف العشوائية' : 'Random Title & Desc Lists'}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {locale === 'ar'
-                ? 'قم بإنشاء قوائم تحتوي على عناوين وأوصاف. عند تعيين قائمة لقناة، سيتم اختيار عنوان ووصف عشوائياً في كل مرة يبدأ فيها البث.'
-                : 'Create lists containing titles and descriptions. When assigned to a channel, a random title and desc will be picked every time it streams.'}
+                ? 'أنشئ قوائم تحتوي على عناوين وأوصاف. عند تعيين قائمة لقناة، يُختار عنوان ووصف عشوائياً في كل مرة يبدأ فيها البث.'
+                : 'Build lists of titles & descriptions. When a list is assigned to a channel, a random pair is picked every time the stream starts.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -4065,21 +4088,43 @@ export default function Home() {
             <div className="w-1/3 flex flex-col gap-3 border-r border-border/50 pr-4">
               <Button
                 variant="outline"
-                className="w-full border-dashed border-2 hover:border-primary/50 text-muted-foreground hover:text-foreground"
-                onClick={() => setEditingList({ name: '', pairs: [] })}
+                className="w-full border-dashed border-2 hover:border-pink-500/50 text-muted-foreground hover:text-pink-600 hover:bg-pink-500/5 transition-colors"
+                onClick={() => { setEditingList({ name: '', pairs: [] }); setEditingListError('') }}
               >
-                <Activity className="w-4 h-4 mr-2" />
-                {locale === 'ar' ? 'إنشاء قائمة جديدة' : 'Create New List'}
+                <Plus className="w-4 h-4 mr-2" />
+                {locale === 'ar' ? 'إنشاء قائمة جديدة' : 'New List'}
               </Button>
               <ScrollArea className="flex-1 h-full pr-2">
                 <div className="space-y-2">
-                  {titleDescLists.map(list => (
-                    <div key={list.id} className="flex flex-col gap-2 p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors">
-                      <div className="font-bold text-sm truncate">{list.name}</div>
-                      <div className="text-xs text-muted-foreground flex items-center justify-between">
-                        <span>{(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'}</span>
+                  {isFetchingLists && titleDescLists.length === 0 && (
+                    <div className="flex items-center justify-center py-6 text-muted-foreground text-xs gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {locale === 'ar' ? 'جارٍ التحميل...' : 'Loading...'}
+                    </div>
+                  )}
+                  {!isFetchingLists && titleDescLists.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground gap-2">
+                      <BookOpen className="w-8 h-8 opacity-25" />
+                      <p className="text-xs">{locale === 'ar' ? 'لا توجد قوائم بعد. أنشئ قائمة جديدة.' : 'No lists yet. Create your first list.'}</p>
+                    </div>
+                  )}
+                  {titleDescLists.map(list => {
+                    const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
+                    const isEditing = editingList?.id === list.id
+                    return (
+                    <div key={list.id} className={`flex flex-col gap-2 p-3 rounded-xl border transition-colors cursor-pointer ${
+                      isEditing
+                        ? 'border-pink-500/50 bg-pink-500/5'
+                        : 'border-border/60 bg-muted/20 hover:bg-muted/40'
+                    }`}>
+                      <div className="font-semibold text-sm truncate">{list.name}</div>
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono">
+                          {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
+                        </Badge>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-blue-500 hover:bg-blue-500/10 rounded" onClick={() => {
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-blue-500 hover:bg-blue-500/10 rounded" title={locale === 'ar' ? 'تعديل' : 'Edit'} onClick={() => {
+                            setEditingListError('')
                             try {
                               setEditingList({ id: list.id, name: list.name, pairs: JSON.parse(list.items) })
                             } catch {
@@ -4088,13 +4133,14 @@ export default function Home() {
                           }}>
                             <Edit3 className="w-3.5 h-3.5" />
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:bg-red-500/10 rounded" onClick={() => handleDeleteList(list.id)}>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:bg-red-500/10 rounded" title={locale === 'ar' ? 'حذف' : 'Delete'} onClick={() => handleDeleteList(list.id)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </ScrollArea>
             </div>
@@ -4107,57 +4153,77 @@ export default function Home() {
                     <label className="text-xs font-bold text-muted-foreground block">{locale === 'ar' ? 'اسم القائمة' : 'List Name'}</label>
                     <Input
                       value={editingList.name}
-                      onChange={(e) => setEditingList({ ...editingList, name: e.target.value })}
-                      placeholder={locale === 'ar' ? 'مثال: قائمة ألعاب رعب...' : 'e.g. Horror Games List...'}
-                      className="w-full bg-background font-bold text-base"
+                      onChange={(e) => { setEditingList({ ...editingList, name: e.target.value }); setEditingListError('') }}
+                      placeholder={locale === 'ar' ? 'مثال: قائمة أفلام رعب...' : 'e.g. Horror Movies List...'}
+                      className="w-full bg-background font-semibold text-base"
                     />
                   </div>
+
+                  {/* Error message */}
+                  {editingListError && (
+                    <div className="flex items-center gap-2 text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 shrink-0">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {editingListError}
+                    </div>
+                  )}
+
                   <div className="flex-1 border rounded-xl bg-muted/10 overflow-hidden flex flex-col min-h-0">
-                    <div className="bg-muted/40 border-b border-border p-2 flex justify-between items-center shrink-0">
-                      <span className="text-xs font-bold text-muted-foreground px-2">
-                        {editingList.pairs.length} {locale === 'ar' ? 'عنوان/وصف' : 'Title/Desc pairs'}
+                    <div className="bg-muted/40 border-b border-border px-4 py-2 flex justify-between items-center shrink-0">
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        <span className="font-bold text-foreground tabular-nums">{editingList.pairs.length}</span>
+                        {' '}{locale === 'ar' ? 'عنوان/وصف' : 'pairs'}
                       </span>
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="h-7 text-xs"
+                        className="h-7 text-xs gap-1.5 hover:bg-pink-500/10 hover:text-pink-600 transition-colors"
                         onClick={() => setEditingList({
                           ...editingList,
                           pairs: [{ id: Math.random().toString(36).substring(7), title: '', description: '' }, ...editingList.pairs]
                         })}
                       >
-                        <Activity className="w-3.5 h-3.5 mr-1" />
+                        <Plus className="w-3.5 h-3.5" />
                         {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
                       </Button>
                     </div>
                     <ScrollArea className="flex-1 p-4">
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         {editingList.pairs.map((pair, index) => (
-                          <div key={pair.id} className="relative p-3 bg-card border border-border/80 rounded-lg space-y-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className={`absolute top-2 ${locale === 'ar' ? 'left-2' : 'right-2'} h-6 w-6 p-0 text-red-500 hover:bg-red-500/10 hover:text-red-600 rounded-md`}
-                              onClick={() => setEditingList({
-                                ...editingList,
-                                pairs: editingList.pairs.filter(p => p.id !== pair.id)
-                              })}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                            <div className={`space-y-1 ${locale === 'ar' ? 'pl-8' : 'pr-8'}`}>
-                              <Input
-                                maxLength={100}
-                                value={pair.title}
-                                onChange={(e) => setEditingList({
+                          <div key={pair.id} className="relative p-3 bg-card border border-border/80 rounded-lg space-y-2 hover:border-border transition-colors">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-mono text-muted-foreground/60">#{index + 1}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10 hover:text-red-600 rounded-md"
+                                title={locale === 'ar' ? 'حذف العنصر' : 'Remove item'}
+                                onClick={() => setEditingList({
                                   ...editingList,
-                                  pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, title: e.target.value } : p)
+                                  pairs: editingList.pairs.filter(p => p.id !== pair.id)
                                 })}
-                                placeholder={locale === 'ar' ? 'العنوان...' : 'Title...'}
-                                className="h-8 text-sm"
-                                dir="auto"
-                              />
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                            <div className="space-y-1.5">
+                              <div className="relative">
+                                <Input
+                                  maxLength={100}
+                                  value={pair.title}
+                                  onChange={(e) => setEditingList({
+                                    ...editingList,
+                                    pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, title: e.target.value } : p)
+                                  })}
+                                  placeholder={locale === 'ar' ? 'العنوان (حتى 100 حرف)...' : 'Title (up to 100 chars)...'}
+                                  className="h-8 text-sm pr-14"
+                                  dir="auto"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-foreground/50 pointer-events-none">
+                                  {pair.title.length}/100
+                                </span>
+                              </div>
                               <textarea
+                                maxLength={4500}
                                 value={pair.description}
                                 onChange={(e) => setEditingList({
                                   ...editingList,
@@ -4171,22 +4237,41 @@ export default function Home() {
                           </div>
                         ))}
                         {editingList.pairs.length === 0 && (
-                          <div className="text-center py-8 text-muted-foreground text-sm">
-                            {locale === 'ar' ? 'لا يوجد عناصر في هذه القائمة' : 'No items in this list'}
+                          <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+                            <List className="w-10 h-10 opacity-20" />
+                            <div className="text-center">
+                              <p className="text-sm font-medium">{locale === 'ar' ? 'القائمة فارغة' : 'List is empty'}</p>
+                              <p className="text-xs opacity-60 mt-0.5">{locale === 'ar' ? 'اضغط "إضافة عنصر" لإضافة عنوان ووصف' : 'Click "Add Item" to add a title & description pair'}</p>
+                            </div>
                           </div>
                         )}
                       </div>
                     </ScrollArea>
                   </div>
-                  <div className="shrink-0 flex justify-end gap-2 pt-2 border-t border-border/50">
-                    <Button variant="default" onClick={handleSaveList} disabled={!editingList.name.trim() || editingList.pairs.length === 0}>
-                      {locale === 'ar' ? 'حفظ القائمة' : 'Save List'}
+                  <div className="shrink-0 flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+                    <Button variant="ghost" className="text-muted-foreground" onClick={() => { setEditingList(null); setEditingListError('') }}>
+                      {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+                    </Button>
+                    <Button
+                      variant="default"
+                      onClick={handleSaveList}
+                      disabled={!editingList.name.trim() || editingList.pairs.length === 0 || isSavingList}
+                      className="gap-2 min-w-[100px]"
+                    >
+                      {isSavingList ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      {isSavingList
+                        ? (locale === 'ar' ? 'جارٍ الحفظ...' : 'Saving...')
+                        : (locale === 'ar' ? 'حفظ القائمة' : 'Save List')}
                     </Button>
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm border-2 border-dashed rounded-xl">
-                  {locale === 'ar' ? 'اختر قائمة لتعديلها أو قم بإنشاء قائمة جديدة' : 'Select a list to edit or create a new one'}
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground border-2 border-dashed rounded-xl">
+                  <Shuffle className="w-10 h-10 opacity-20" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium">{locale === 'ar' ? 'لم يتم اختيار قائمة' : 'No list selected'}</p>
+                    <p className="text-xs opacity-60 mt-0.5">{locale === 'ar' ? 'اختر قائمة لتعديلها أو أنشئ قائمة جديدة' : 'Select a list to edit or create a new one'}</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -4199,58 +4284,70 @@ export default function Home() {
         <DialogContent className="sm:max-w-md w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <RotateCcw className="w-5 h-5 text-pink-500" />
+              <Shuffle className="w-5 h-5 text-pink-500" />
               {targetSlotsForAction 
-                ? (locale === 'ar' ? `تعيين قائمة عشوائية للمحدد (${targetSlotsForAction.length} قناة)` : `Set Random List for Selected (${targetSlotsForAction.length} slots)`)
-                : (locale === 'ar' ? 'تعيين قائمة عشوائية لكافة البثوث' : 'Set Random List for All Slots')}
+                ? (locale === 'ar' ? `تعيين قائمة عشوائية (${targetSlotsForAction.length} قناة)` : `Assign Random List (${targetSlotsForAction.length} slots)`)
+                : (locale === 'ar' ? 'تعيين قائمة عشوائية لجميع القنوات' : 'Assign Random List to All Slots')}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {locale === 'ar'
-                ? 'اختر قائمة من القوائم التي قمت بإنشائها مسبقاً.'
-                : 'Select a list from the ones you previously created.'}
+                ? 'سيتم اختيار عنوان ووصف عشوائي من القائمة في كل مرة يبدأ فيها البث.'
+                : 'A random title & description will be picked from the list each time a stream starts.'}
             </DialogDescription>
           </DialogHeader>
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center">
-              <label className="text-sm font-bold text-foreground">{locale === 'ar' ? 'اختر القائمة' : 'Select List'}</label>
-              <Button size="sm" variant="ghost" className="h-7 text-xs text-primary" onClick={() => setTitleDescManagerOpen(true)}>
+              <label className="text-sm font-bold text-foreground">{locale === 'ar' ? 'اختر القائمة' : 'Select a List'}</label>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-pink-500 hover:text-pink-600 hover:bg-pink-500/10" onClick={() => setTitleDescManagerOpen(true)}>
                 <Settings className="w-3.5 h-3.5 mr-1" />
                 {locale === 'ar' ? 'إدارة القوائم' : 'Manage Lists'}
               </Button>
             </div>
             
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+            <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+              {/* Remove option */}
               <div 
-                className="p-3 border border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors bg-muted/20"
+                className="flex items-center gap-2 p-3 border border-red-500/20 bg-red-500/5 rounded-lg cursor-pointer hover:bg-red-500/10 transition-colors"
                 onClick={() => {
                   bulkAction('setTitleDescListAll', undefined, { listId: null }, targetSlotsForAction)
                   setBulkRandomTitleDescOpen(false)
                 }}
               >
-                <div className="font-bold text-sm text-red-500">
-                  {locale === 'ar' ? 'إزالة القائمة المعينة' : 'Remove Assigned List'}
-                </div>
+                <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+                <span className="font-semibold text-sm text-red-500">
+                  {locale === 'ar' ? 'إزالة القائمة المعيّنة' : 'Remove Assigned List'}
+                </span>
               </div>
               
-              {titleDescLists.map(list => (
+              {titleDescLists.map(list => {
+                const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
+                return (
                 <div 
                   key={list.id} 
-                  className="p-3 border border-border/80 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                  className="p-3 border border-border/80 rounded-lg cursor-pointer hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group"
                   onClick={() => {
                     bulkAction('setTitleDescListAll', undefined, { listId: list.id }, targetSlotsForAction)
                     setBulkRandomTitleDescOpen(false)
                   }}
                 >
-                  <div className="font-bold text-sm">{list.name}</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'}
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold text-sm group-hover:text-pink-600 dark:group-hover:text-pink-400 transition-colors">{list.name}</div>
+                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-mono shrink-0">
+                      {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
+                    </Badge>
                   </div>
                 </div>
-              ))}
+                )
+              })}
               
               {titleDescLists.length === 0 && (
-                <div className="text-center py-6 text-muted-foreground text-sm">
-                  {locale === 'ar' ? 'لا يوجد قوائم. قم بإنشاء قائمة أولاً.' : 'No lists found. Create a list first.'}
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <BookOpen className="w-8 h-8 opacity-25" />
+                  <p className="text-sm">{locale === 'ar' ? 'لا توجد قوائم بعد.' : 'No lists yet.'}</p>
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setTitleDescManagerOpen(true)}>
+                    <Plus className="w-3 h-3 mr-1" />
+                    {locale === 'ar' ? 'إنشاء قائمة' : 'Create a List'}
+                  </Button>
                 </div>
               )}
             </div>
@@ -4325,8 +4422,8 @@ export default function Home() {
                 setBulkRandomTitleDescOpen(true)
               }}
             >
-              <RotateCcw className="w-3 h-3" />
-              {locale === 'ar' ? 'عناوين عشوائية' : 'Random T/D'}
+              <Shuffle className="w-3 h-3" />
+              {locale === 'ar' ? 'عناوين عشوائية' : 'Random List'}
             </Button>
 
             {/* Set Thumbnail Folder/Path */}
