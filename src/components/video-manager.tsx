@@ -25,9 +25,15 @@ import {
 import {
   FolderOpen, File, Upload, Download, Trash2, Edit3, Move,
   ChevronRight, FolderPlus, ArrowLeft, Home, RefreshCw, Link2, Loader2,
-  Check, AlertCircle, Play, HardDrive, X, Zap, Search
+  Check, AlertCircle, Play, HardDrive, X, Zap, Search, Image
 } from 'lucide-react'
 import { t, getLocale, type TranslationKey } from '@/lib/i18n'
+
+const isImageFile = (fileName: string) => {
+  if (!fileName) return false;
+  const ext = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+  return ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext);
+};
 
 interface VideoFile {
   name: string
@@ -1018,7 +1024,11 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                   />
                 )}
 
-                <File className="w-5 h-5 text-blue-500 shrink-0" />
+                {isImageFile(video.name) ? (
+                  <Image className="w-5 h-5 text-purple-500 shrink-0" />
+                ) : (
+                  <File className="w-5 h-5 text-blue-500 shrink-0" />
+                )}
 
                 {/* Name — click to select in select mode */}
                 <div
@@ -1044,9 +1054,9 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                   )}
                   {mode === 'manage' && (
                     <>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title="Preview"
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title={isImageFile(video.name) ? "View Image" : "Preview"}
                         onClick={() => setPreviewVideo(video)}>
-                        <Play className="w-3.5 h-3.5" />
+                        {isImageFile(video.name) ? <Image className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                       </Button>
                       <a href={`/api/videos/stream?path=${encodeURIComponent(video.path)}&download=1`} download={video.name} target="_blank" rel="noopener noreferrer">
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600" title={getLocale() === 'ar' ? 'تحميل مباشر' : 'Direct Download'}>
@@ -1247,15 +1257,24 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
           </DialogHeader>
           <div className="flex-1 flex items-center justify-center bg-black rounded-lg overflow-hidden min-h-0">
             {previewVideo && (
-              <video
-                key={previewVideo.path}
-                controls
-                autoPlay
-                className="max-w-full max-h-[70vh] w-full"
-                src={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}`}
-              >
-                Your browser does not support the video tag.
-              </video>
+              isImageFile(previewVideo.name) ? (
+                <img
+                  key={previewVideo.path}
+                  className="max-w-full max-h-[70vh] object-contain"
+                  src={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}`}
+                  alt={previewVideo.name}
+                />
+              ) : (
+                <video
+                  key={previewVideo.path}
+                  controls
+                  autoPlay
+                  className="max-w-full max-h-[70vh] w-full"
+                  src={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}`}
+                >
+                  Your browser does not support the video tag.
+                </video>
+              )
             )}
           </div>
           <DialogFooter className="shrink-0">

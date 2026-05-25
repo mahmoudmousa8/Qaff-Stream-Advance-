@@ -144,7 +144,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             }
 
             const allowedVideoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.ogv', '.mpeg', '.mpg']
-            const allowedExtensions = [...allowedVideoExts, '.png']
+            const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+            const allowedExtensions = [...allowedVideoExts, ...imageExts]
             const ext = path.extname(originalName).toLowerCase()
             if (!allowedExtensions.includes(ext)) {
                 file.resume()
@@ -193,10 +194,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             // Track bytes for progress/reporting
             file.on('data', (chunk) => {
                 bytesWritten += chunk.length
-                if (ext === '.png' && bytesWritten > 2097152) {
+                if (imageExts.includes(ext) && bytesWritten > 5242880) { // 5MB limit for images
                     file.pause()
                     writeStream.destroy()
-                    sendError(400, 'PNG thumbnail file size must be less than 2MB')
+                    sendError(400, 'Image file size must be less than 5MB')
                     return
                 }
                 if (currentStorageUsed + bytesWritten > maxStorageBytes) {
