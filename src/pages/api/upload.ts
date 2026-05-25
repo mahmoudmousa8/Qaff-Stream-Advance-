@@ -47,24 +47,35 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         return res.status(405).json({ error: 'Method Not Allowed' })
     }
 
-    const currentStorageUsed = getDirectorySize(APP_DATA_DIR)
-    const maxGB = parseInt(process.env.MAX_STORAGE_GB || '10', 10)
-    const maxStorageBytes = maxGB * 1024 * 1024 * 1024
-
-    if (currentStorageUsed >= maxStorageBytes) {
-        return res.status(403).json({ error: `Storage limit exceeded (${maxGB}GB). Please delete old videos.` })
+    let currentStorageUsed = getDirectorySize(VIDEOS_DIR)
+    if (!VIDEOS_DIR.startsWith(APP_DATA_DIR)) {
+        currentStorageUsed += getDirectorySize(APP_DATA_DIR)
     }
+    
+    let maxStorageBytes = 10 * 1024 * 1024 * 1024 // default but will be overridden if no MAX_STORAGE_GB
 
-    try {
-        const { statfsSync } = require('fs');
-        const stat = statfsSync(APP_DATA_DIR);
-        // stat.bavail = free blocks for unprivileged user, stat.blocks = total blocks
-        const usagePercent = ((Number(stat.blocks) - Number(stat.bavail)) / Number(stat.blocks)) * 100;
-        if (usagePercent >= 90) {
-            return res.status(507).json({ error: 'Server physical storage is over 90% full. Uploads are temporarily paused.' });
+    if (process.env.MAX_STORAGE_GB) {
+        const maxGB = parseInt(process.env.MAX_STORAGE_GB, 10)
+        maxStorageBytes = maxGB * 1024 * 1024 * 1024
+        
+        if (currentStorageUsed >= maxStorageBytes) {
+            return res.status(403).json({ error: `Storage limit exceeded (${maxGB}GB). Please delete old videos.` })
         }
-    } catch (err) {
-        console.error('[upload] Disk usage check failed:', err);
+    } else {
+        // Read physical space instead
+        try {
+            const { statfsSync } = require('fs');
+            const stat = statfsSync(VIDEOS_DIR);
+            const freeBytes = Number(stat.bavail) * Number(stat.bsize);
+            
+            if (freeBytes < 100 * 1024 * 1024) { // 100 MB minimum physical free space required
+                return res.status(507).json({ error: 'Server physical storage is almost full. Uploads are paused.' });
+            }
+            // Set maxStorageBytes to Infinity so it doesn't artificially block below if not set
+            maxStorageBytes = Infinity;
+        } catch (err) {
+            console.error('[upload] Disk usage check failed:', err);
+        }
     }
 
     const contentType = req.headers['content-type'] || ''

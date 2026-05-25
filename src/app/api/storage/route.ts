@@ -22,11 +22,31 @@ function getDirectorySize(dirPath: string): number {
     return size
 }
 
-function getDiskUsage(dir: string) {
-    const used = getDirectorySize(dir)
-    const maxGB = parseInt(process.env.MAX_STORAGE_GB || '10', 10)
-    const total = maxGB * 1024 * 1024 * 1024
-    const free = Math.max(0, total - used)
+function getDiskUsage(dataDir: string, videosDir: string) {
+    let used = getDirectorySize(videosDir)
+    if (!videosDir.startsWith(dataDir)) {
+        used += getDirectorySize(dataDir)
+    }
+
+    let total = 0
+    let free = 0
+
+    if (process.env.MAX_STORAGE_GB) {
+        const maxGB = parseInt(process.env.MAX_STORAGE_GB, 10)
+        total = maxGB * 1024 * 1024 * 1024
+        free = Math.max(0, total - used)
+    } else {
+        try {
+            const { statfsSync } = require('fs')
+            const stat = statfsSync(videosDir)
+            free = Number(stat.bavail) * Number(stat.bsize)
+            total = used + free // Total available quota based on physical free space
+        } catch (err) {
+            console.error('Failed to read physical disk space:', err)
+            total = 10 * 1024 * 1024 * 1024
+            free = Math.max(0, total - used)
+        }
+    }
 
     const usedPercent = total > 0 ? Math.round((used / total) * 100) : 0
     const freePercent = total > 0 ? Math.round((free / total) * 100) : 0
@@ -44,7 +64,7 @@ function formatBytes(bytes: number): string {
 // GET - Get storage usage
 export async function GET() {
     try {
-        const disk = getDiskUsage(APP_DATA_DIR)
+        const disk = getDiskUsage(APP_DATA_DIR, VIDEOS_DIR)
         // Only warn if they have used over 90% of their allocated storage
         const WARNING_THRESHOLD_PERCENT = 90
         const warning = disk.usedPercent >= WARNING_THRESHOLD_PERCENT
