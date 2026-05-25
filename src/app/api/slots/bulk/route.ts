@@ -682,7 +682,7 @@ export async function POST(request: NextRequest) {
         }
 
         const startTime = formatCairoDate(targetDate)
-        const stopDate = new Date(targetDate.getTime() + 10 * 60 * 1000)
+        const stopDate = new Date(targetDate.getTime() + 13 * 60 * 1000)
         const stopTime = formatCairoDate(stopDate)
 
         const result = await db.streamSlot.updateMany({
@@ -856,6 +856,7 @@ export async function POST(request: NextRequest) {
 
       case 'setTitleDescListAll': {
         const { listId } = body
+        console.log("setTitleDescListAll called. listId:", listId, "userFilter:", userFilter)
 
         const result = await db.streamSlot.updateMany({
           where: userFilter,
@@ -863,8 +864,78 @@ export async function POST(request: NextRequest) {
             titleDescListId: listId || null
           }
         })
+        
+        console.log("setTitleDescListAll result:", result)
 
         return NextResponse.json({ success: true, count: result.count, message: `تم تعيين القائمة لـ ${result.count} قناة بنجاح` })
+      }
+
+      case 'assignChannelsToSlots': {
+        const now = new Date()
+
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+        // 1. Fetch valid channels (created within the last 7 days)
+        const validChannels = await db.youtubeChannel.findMany({
+          where: {
+            createdAt: { gt: sevenDaysAgo }
+          },
+          orderBy: { createdAt: 'asc' }
+        })
+
+        // 2. Fetch slots the user has access to
+        const availableSlots = await db.streamSlot.findMany({
+          where: userFilter,
+          orderBy: { slotIndex: 'asc' }
+        })
+
+        // Find channels that are ALREADY in use by active or scheduled slots
+        const usedChannelsInActiveSlots = new Set<string>()
+        const freeSlots = []
+
+        for (const slot of availableSlots) {
+          const isBusy = slot.isRunning || slot.isScheduled || slot.status !== 'Stopped'
+          if (isBusy) {
+            if (slot.youtubeChannelId) {
+              usedChannelsInActiveSlots.add(slot.youtubeChannelId)
+            }
+          } else {
+            freeSlots.push(slot)
+          }
+        }
+
+        // Filter out valid channels that are already being used in active/scheduled slots
+        const availableChannels = validChannels.filter(c => !usedChannelsInActiveSlots.has(c.id))
+
+        if (availableChannels.length === 0) {
+          return NextResponse.json({ success: true, count: 0, assignedSlots: [], message: 'لا توجد قنوات متاحة للتعيين' })
+        }
+
+        let assignedCount = 0
+        const assignedSlots = []
+
+        // Assign channels to free slots
+        for (let i = 0; i < Math.min(freeSlots.length, availableChannels.length); i++) {
+          const slot = freeSlots[i]
+          const channel = availableChannels[i]
+
+          await db.streamSlot.update({
+            where: { id: slot.id },
+            data: {
+              youtubeChannelId: channel.id,
+              streamKey: '' // Auto Fetch
+            }
+          })
+          assignedCount++
+          assignedSlots.push(slot.slotIndex)
+        }
+
+        return NextResponse.json({
+          success: true,
+          count: assignedCount,
+          assignedSlots,
+          message: `تم تعيين ${assignedCount} قناة بنجاح`
+        })
       }
 
       default:
