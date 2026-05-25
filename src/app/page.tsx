@@ -4097,7 +4097,7 @@ export default function Home() {
                 <Plus className="w-4 h-4 mr-2" />
                 {locale === 'ar' ? 'إنشاء قائمة جديدة' : 'New List'}
               </Button>
-              <ScrollArea className="flex-1 h-full pr-2">
+              <div className="flex-1 overflow-y-auto h-full pr-2 min-h-0 custom-scrollbar">
                 <div className="space-y-2">
                   {isFetchingLists && titleDescLists.length === 0 && (
                     <div className="flex items-center justify-center py-6 text-muted-foreground text-xs gap-2">
@@ -4145,7 +4145,7 @@ export default function Home() {
                     )
                   })}
                 </div>
-              </ScrollArea>
+              </div>
             </div>
 
             {/* Right Side: Editor */}
@@ -4200,7 +4200,7 @@ export default function Home() {
                           {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
                       </Button>
                     </div>
-                    <ScrollArea className="flex-1 p-4">
+                    <div className="flex-1 overflow-y-auto p-4 min-h-0 custom-scrollbar">
                       <div id="title-desc-pairs-container" className="space-y-3 pb-4">
                         {editingList.pairs.map((pair, index) => (
                           <div key={pair.id} className="relative p-3 bg-card border border-border/80 rounded-lg space-y-2 hover:border-border transition-colors">
@@ -4265,7 +4265,7 @@ export default function Home() {
                           </div>
                         )}
                       </div>
-                    </ScrollArea>
+                    </div>
                   </div>
                   <div className="shrink-0 flex items-center justify-between gap-2 pt-2 border-t border-border/50">
                     <Button variant="ghost" className="text-muted-foreground" onClick={() => { setEditingList(null); setEditingListError('') }}>
