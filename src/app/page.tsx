@@ -4088,7 +4088,7 @@ export default function Home() {
 
           <div className="flex-1 min-h-0 flex gap-4 p-6 pt-2">
             {/* Left Side: Lists */}
-            <div className="w-1/3 flex flex-col gap-3 border-r border-border/50 pr-4">
+            <div className="w-1/3 flex flex-col gap-3 border-r border-border/50 pr-4 min-h-0">
               <Button
                 variant="outline"
                 className="w-full border-dashed border-2 hover:border-pink-500/50 text-muted-foreground hover:text-pink-600 hover:bg-pink-500/5 transition-colors"
@@ -4149,7 +4149,7 @@ export default function Home() {
             </div>
 
             {/* Right Side: Editor */}
-            <div className="w-2/3 flex flex-col gap-4">
+            <div className="w-2/3 flex flex-col gap-4 min-h-0">
               {editingList ? (
                 <>
                   <div className="shrink-0 space-y-1.5">
