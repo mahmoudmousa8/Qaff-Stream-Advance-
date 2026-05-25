@@ -87,7 +87,7 @@ const translations = {
         stopAll: 'Stop All',
         setTimeAll: 'Set Time All',
         dailyAll: 'Daily All',
-        hourlyAll: '15-Min Repeat All',
+        hourlyAll: '20-Min Repeat All',
         resetAll: 'Reset All',
         autoSave: 'Auto-Save',
 
@@ -166,7 +166,7 @@ const translations = {
         confirmStopAll: 'Stop ALL running streams?',
         confirmSetTimeAll: 'Set alternating schedule for ALL empty slots?',
         confirmDailyAll: 'Toggle Daily for ALL slots?',
-        confirmHourlyAll: 'Toggle 15-minute automatic repetition for all slots?',
+        confirmHourlyAll: 'Toggle 20-minute automatic repetition for all slots?',
         confirmResetAll: 'Reset schedule data for ALL slots?',
         logs: 'Logs',
 
@@ -333,7 +333,7 @@ const translations = {
         stopAll: 'إيقاف الكل',
         setTimeAll: 'ضبط الوقت للكل',
         dailyAll: 'يومي للكل',
-        hourlyAll: '15 دقيقة للكل',
+        hourlyAll: '20 دقيقة للكل',
         resetAll: 'إعادة تعيين الكل',
         autoSave: 'حفظ تلقائي',
 
