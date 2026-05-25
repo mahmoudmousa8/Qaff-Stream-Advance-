@@ -130,10 +130,37 @@ export async function POST(
           activeThumbnails.set(slotIndex, resolvedThumbnailPath)
         }
 
+        let finalTitle = slot.youtubeTitle || 'Live Stream'
+        let finalDescription = slot.youtubeDescription || ''
+
+        if ((slot as any).titleDescListId) {
+          try {
+            const tdList = await db.titleDescList.findUnique({
+              where: { id: (slot as any).titleDescListId }
+            })
+            if (tdList) {
+              const listData = JSON.parse(tdList.items)
+              const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+              if (pairs.length > 0) {
+                const titles = pairs.map((p: any) => p.title).filter((t: string) => t.trim() !== '')
+                const descs = pairs.map((p: any) => p.description).filter((d: string) => d.trim() !== '')
+                if (titles.length > 0) {
+                  finalTitle = titles[Math.floor(Math.random() * titles.length)]
+                }
+                if (descs.length > 0) {
+                  finalDescription = descs[Math.floor(Math.random() * descs.length)]
+                }
+              }
+            }
+          } catch (e: any) {
+            console.error(`[Start Route] Failed to fetch/parse title desc list for slot ${slot.slotIndex}:`, e.message)
+          }
+        }
+
         const yt = await setupYoutubeLiveStream(
           slot.youtubeChannelId,
-          slot.youtubeTitle || 'Live Stream',
-          slot.youtubeDescription || '',
+          finalTitle,
+          finalDescription,
           resolvedThumbnailPath,
           slot.streamKey
         )

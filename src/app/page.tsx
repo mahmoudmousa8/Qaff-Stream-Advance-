@@ -69,6 +69,15 @@ interface StreamSlot {
   youtubeTitle?: string | null
   youtubeDescription?: string | null
   youtubeThumbnailPath?: string | null
+  titleDescListId?: string | null
+}
+
+export interface TitleDescList {
+  id: string
+  name: string
+  items: string
+  createdAt: string
+  updatedAt: string
 }
 
 interface LogEntry {
@@ -317,6 +326,76 @@ export default function Home() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [selectedSlots, setSelectedSlots] = useState<number[]>([])
   const [bulkTitleDescOpen, setBulkTitleDescOpen] = useState(false)
+  const [titleDescManagerOpen, setTitleDescManagerOpen] = useState(false)
+  const [editingList, setEditingList] = useState<{ id?: string, name: string, pairs: { id: string, title: string, description: string }[] } | null>(null)
+  const [bulkRandomTitleDescOpen, setBulkRandomTitleDescOpen] = useState(false)
+  const [titleDescLists, setTitleDescLists] = useState<TitleDescList[]>([])
+  const [isFetchingLists, setIsFetchingLists] = useState(false)
+
+  const fetchTitleDescLists = useCallback(async () => {
+    setIsFetchingLists(true)
+    try {
+      const res = await fetch('/api/title-desc-lists')
+      const data = await res.json()
+      if (data.success) {
+        setTitleDescLists(data.data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch title desc lists', e)
+    } finally {
+      setIsFetchingLists(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTitleDescLists()
+  }, [fetchTitleDescLists])
+
+  const handleSaveList = async () => {
+    if (!editingList || !editingList.name.trim()) return
+    try {
+      const payload = {
+        name: editingList.name.trim(),
+        items: JSON.stringify(editingList.pairs)
+      }
+      const url = editingList.id ? `/api/title-desc-lists/${editingList.id}` : '/api/title-desc-lists'
+      const method = editingList.id ? 'PUT' : 'POST'
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (data.success) {
+        addLog(locale === 'ar' ? 'تم حفظ القائمة بنجاح' : 'List saved successfully')
+        setEditingList(null)
+        fetchTitleDescLists()
+      } else {
+        alert(data.error)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Error saving list')
+    }
+  }
+
+  const handleDeleteList = async (id: string) => {
+    if (!confirm(locale === 'ar' ? 'هل أنت متأكد من حذف هذه القائمة؟' : 'Are you sure you want to delete this list?')) return
+    try {
+      const res = await fetch(`/api/title-desc-lists/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        addLog(locale === 'ar' ? 'تم حذف القائمة' : 'List deleted')
+        fetchTitleDescLists()
+        // If it was assigned to any slots, refresh slots
+        fetchSlots()
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   const [bulkTitle, setBulkTitle] = useState('')
   const [bulkDesc, setBulkDesc] = useState('')
   const [targetSlotsForAction, setTargetSlotsForAction] = useState<number[] | undefined>(undefined)
@@ -387,6 +466,7 @@ export default function Home() {
     youtubeThumbnailPath: string
     streamKey: string
     rtmpServer: string
+    titleDescListId?: string | null
   } | null>(null)
   const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
@@ -1411,6 +1491,14 @@ export default function Home() {
                   }}
                   title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
                   <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Description for All'}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
+                  onClick={() => {
+                    setTargetSlotsForAction(undefined)
+                    setBulkRandomTitleDescOpen(true)
+                  }}
+                  title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية للكل' : 'Random Title/Desc All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
                   onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة لكافة القنوات' : 'Set unified thumbnail for all slots'}>
@@ -2671,6 +2759,7 @@ export default function Home() {
                                       youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
                                       streamKey: slot.streamKey ?? '',
                                       rtmpServer: slot.rtmpServer ?? '',
+                                      titleDescListId: slot.titleDescListId ?? null,
                                     })
                                     if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
                                   }}
@@ -3153,6 +3242,33 @@ export default function Home() {
                             </div>
                           )}
                         </div>
+
+                        {/* Title & Description List Selection */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                            <RotateCcw className="w-4 h-4 text-pink-500" />
+                            {locale === 'ar' ? 'قائمة عناوين وأوصاف عشوائية' : 'Random Title & Description List'}
+                          </label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {locale === 'ar'
+                              ? 'اختر قائمة من القوائم المنشأة مسبقاً لاختيار عنوان ووصف عشوائي منها في كل مرة يبدأ فيها البث.'
+                              : 'Select a list from previously created ones to randomly pick a title and description each time the stream starts.'}
+                          </p>
+                          <select
+                            value={settingsData.titleDescListId || ''}
+                            onChange={(e) => setSettingsData(p => p ? { ...p, titleDescListId: e.target.value || null } : p)}
+                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            dir={dir}
+                          >
+                            <option value="">{locale === 'ar' ? '-- لا يوجد قائمة (استخدم الثابت) --' : '-- No List (Use Static) --'}</option>
+                            {titleDescLists.map(list => (
+                              <option key={list.id} value={list.id}>
+                                {list.name} ({(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         {/* Title character counter & validation */}
                         <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <div className="flex justify-between items-center">
@@ -3258,7 +3374,6 @@ export default function Home() {
               onClick={async () => {
                 if (settingsSlot === null || !settingsData) return
                 try {
-                  // Build the update payload
                   const settingsSavePayload: Partial<StreamSlot> = {
                     swapVideoPath: settingsData.swapVideoPath,
                     swapVideoEnabled: settingsData.swapVideoEnabled,
@@ -3266,6 +3381,7 @@ export default function Home() {
                     youtubeTitle: settingsData.youtubeTitle,
                     youtubeDescription: settingsData.youtubeDescription,
                     youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
+                    titleDescListId: settingsData.titleDescListId || null,
                   }
                   // Always save streamKey when a YouTube channel is linked
                   // (empty string = auto-fetch mode, non-empty = specific key chosen)
@@ -3924,6 +4040,224 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Title/Desc List Manager Dialog ── */}
+      <Dialog open={titleDescManagerOpen} onOpenChange={(open) => {
+        if (!open) {
+          setTitleDescManagerOpen(false)
+          setEditingList(null)
+        }
+      }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <RotateCcw className="w-5 h-5 text-pink-500" />
+              {locale === 'ar' ? 'مدير قوائم العناوين والأوصاف العشوائية' : 'Random Title/Desc Lists Manager'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'قم بإنشاء قوائم تحتوي على عناوين وأوصاف. عند تعيين قائمة لقناة، سيتم اختيار عنوان ووصف عشوائياً في كل مرة يبدأ فيها البث.'
+                : 'Create lists containing titles and descriptions. When assigned to a channel, a random title and desc will be picked every time it streams.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0 flex gap-4 p-6 pt-2">
+            {/* Left Side: Lists */}
+            <div className="w-1/3 flex flex-col gap-3 border-r border-border/50 pr-4">
+              <Button
+                variant="outline"
+                className="w-full border-dashed border-2 hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                onClick={() => setEditingList({ name: '', pairs: [] })}
+              >
+                <Activity className="w-4 h-4 mr-2" />
+                {locale === 'ar' ? 'إنشاء قائمة جديدة' : 'Create New List'}
+              </Button>
+              <ScrollArea className="flex-1 h-full pr-2">
+                <div className="space-y-2">
+                  {titleDescLists.map(list => (
+                    <div key={list.id} className="flex flex-col gap-2 p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors">
+                      <div className="font-bold text-sm truncate">{list.name}</div>
+                      <div className="text-xs text-muted-foreground flex items-center justify-between">
+                        <span>{(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'}</span>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-blue-500 hover:bg-blue-500/10 rounded" onClick={() => {
+                            try {
+                              setEditingList({ id: list.id, name: list.name, pairs: JSON.parse(list.items) })
+                            } catch {
+                              setEditingList({ id: list.id, name: list.name, pairs: [] })
+                            }
+                          }}>
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:bg-red-500/10 rounded" onClick={() => handleDeleteList(list.id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Right Side: Editor */}
+            <div className="w-2/3 flex flex-col gap-4">
+              {editingList ? (
+                <>
+                  <div className="shrink-0 space-y-1.5">
+                    <label className="text-xs font-bold text-muted-foreground block">{locale === 'ar' ? 'اسم القائمة' : 'List Name'}</label>
+                    <Input
+                      value={editingList.name}
+                      onChange={(e) => setEditingList({ ...editingList, name: e.target.value })}
+                      placeholder={locale === 'ar' ? 'مثال: قائمة ألعاب رعب...' : 'e.g. Horror Games List...'}
+                      className="w-full bg-background font-bold text-base"
+                    />
+                  </div>
+                  <div className="flex-1 border rounded-xl bg-muted/10 overflow-hidden flex flex-col min-h-0">
+                    <div className="bg-muted/40 border-b border-border p-2 flex justify-between items-center shrink-0">
+                      <span className="text-xs font-bold text-muted-foreground px-2">
+                        {editingList.pairs.length} {locale === 'ar' ? 'عنوان/وصف' : 'Title/Desc pairs'}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 text-xs"
+                        onClick={() => setEditingList({
+                          ...editingList,
+                          pairs: [{ id: Math.random().toString(36).substring(7), title: '', description: '' }, ...editingList.pairs]
+                        })}
+                      >
+                        <Activity className="w-3.5 h-3.5 mr-1" />
+                        {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
+                      </Button>
+                    </div>
+                    <ScrollArea className="flex-1 p-4">
+                      <div className="space-y-4">
+                        {editingList.pairs.map((pair, index) => (
+                          <div key={pair.id} className="relative p-3 bg-card border border-border/80 rounded-lg space-y-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className={`absolute top-2 ${locale === 'ar' ? 'left-2' : 'right-2'} h-6 w-6 p-0 text-red-500 hover:bg-red-500/10 hover:text-red-600 rounded-md`}
+                              onClick={() => setEditingList({
+                                ...editingList,
+                                pairs: editingList.pairs.filter(p => p.id !== pair.id)
+                              })}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                            <div className={`space-y-1 ${locale === 'ar' ? 'pl-8' : 'pr-8'}`}>
+                              <Input
+                                maxLength={100}
+                                value={pair.title}
+                                onChange={(e) => setEditingList({
+                                  ...editingList,
+                                  pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, title: e.target.value } : p)
+                                })}
+                                placeholder={locale === 'ar' ? 'العنوان...' : 'Title...'}
+                                className="h-8 text-sm"
+                                dir="auto"
+                              />
+                              <textarea
+                                value={pair.description}
+                                onChange={(e) => setEditingList({
+                                  ...editingList,
+                                  pairs: editingList.pairs.map(p => p.id === pair.id ? { ...p, description: e.target.value } : p)
+                                })}
+                                placeholder={locale === 'ar' ? 'الوصف...' : 'Description...'}
+                                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                dir="auto"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                        {editingList.pairs.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground text-sm">
+                            {locale === 'ar' ? 'لا يوجد عناصر في هذه القائمة' : 'No items in this list'}
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  <div className="shrink-0 flex justify-end gap-2 pt-2 border-t border-border/50">
+                    <Button variant="default" onClick={handleSaveList} disabled={!editingList.name.trim() || editingList.pairs.length === 0}>
+                      {locale === 'ar' ? 'حفظ القائمة' : 'Save List'}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm border-2 border-dashed rounded-xl">
+                  {locale === 'ar' ? 'اختر قائمة لتعديلها أو قم بإنشاء قائمة جديدة' : 'Select a list to edit or create a new one'}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk List Selector Dialog ── */}
+      <Dialog open={bulkRandomTitleDescOpen} onOpenChange={(open) => !open && setBulkRandomTitleDescOpen(false)}>
+        <DialogContent className="sm:max-w-md w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <RotateCcw className="w-5 h-5 text-pink-500" />
+              {targetSlotsForAction 
+                ? (locale === 'ar' ? `تعيين قائمة عشوائية للمحدد (${targetSlotsForAction.length} قناة)` : `Set Random List for Selected (${targetSlotsForAction.length} slots)`)
+                : (locale === 'ar' ? 'تعيين قائمة عشوائية لكافة البثوث' : 'Set Random List for All Slots')}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'اختر قائمة من القوائم التي قمت بإنشائها مسبقاً.'
+                : 'Select a list from the ones you previously created.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-bold text-foreground">{locale === 'ar' ? 'اختر القائمة' : 'Select List'}</label>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-primary" onClick={() => setTitleDescManagerOpen(true)}>
+                <Settings className="w-3.5 h-3.5 mr-1" />
+                {locale === 'ar' ? 'إدارة القوائم' : 'Manage Lists'}
+              </Button>
+            </div>
+            
+            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+              <div 
+                className="p-3 border border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors bg-muted/20"
+                onClick={() => {
+                  bulkAction('setTitleDescListAll', undefined, { listId: null }, targetSlotsForAction)
+                  setBulkRandomTitleDescOpen(false)
+                }}
+              >
+                <div className="font-bold text-sm text-red-500">
+                  {locale === 'ar' ? 'إزالة القائمة المعينة' : 'Remove Assigned List'}
+                </div>
+              </div>
+              
+              {titleDescLists.map(list => (
+                <div 
+                  key={list.id} 
+                  className="p-3 border border-border/80 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+                  onClick={() => {
+                    bulkAction('setTitleDescListAll', undefined, { listId: list.id }, targetSlotsForAction)
+                    setBulkRandomTitleDescOpen(false)
+                  }}
+                >
+                  <div className="font-bold text-sm">{list.name}</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {(() => { try { return JSON.parse(list.items).length } catch { return 0 } })()} {locale === 'ar' ? 'عنصر' : 'items'}
+                  </div>
+                </div>
+              ))}
+              
+              {titleDescLists.length === 0 && (
+                <div className="text-center py-6 text-muted-foreground text-sm">
+                  {locale === 'ar' ? 'لا يوجد قوائم. قم بإنشاء قائمة أولاً.' : 'No lists found. Create a list first.'}
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Selected Slots Floating Actions Bar ── */}
       {selectedSlots.length > 0 && (
         <div className="fixed bottom-6 left-1/2 z-50 w-auto max-w-[95vw] bg-background/85 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-3 overflow-x-auto select-none transition-all duration-300 animate-springy-slide-up">
@@ -3979,6 +4313,20 @@ export default function Home() {
             >
               <Edit3 className="w-3 h-3" />
               {locale === 'ar' ? 'العنوان والوصف' : 'Title & Desc'}
+            </Button>
+
+            {/* Set Random Title & Description */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => {
+                setTargetSlotsForAction(selectedSlots)
+                setBulkRandomTitleDescOpen(true)
+              }}
+            >
+              <RotateCcw className="w-3 h-3" />
+              {locale === 'ar' ? 'عناوين عشوائية' : 'Random T/D'}
             </Button>
 
             {/* Set Thumbnail Folder/Path */}

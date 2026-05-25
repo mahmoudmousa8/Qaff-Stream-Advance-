@@ -45,6 +45,7 @@ model StreamSlot {
   youtubeDescription String   @default("")
   youtubeThumbnailPath String @default("")
   youtubeBroadcastId String   @default("")
+  titleDescListId    String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -81,6 +82,14 @@ model User {
   slotsLimit  Int      @default(50)
   renewalDate String   @default("") // E.g., "2026-12-31"
   securityKey String   @default("") // E.g., client's security token for RTMP streaming
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TitleDescList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  items       String   // JSON string: { titles: string[], descriptions: string[] }
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
