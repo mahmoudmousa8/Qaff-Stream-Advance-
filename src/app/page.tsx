@@ -491,6 +491,19 @@ export default function Home() {
     setLocaleState(getLocale())
     setIsDarkMode(document.documentElement.classList.contains('dark'))
     fetchTunnelUrl()
+
+    console.log(
+      `%c🎥 Qaff Studio Streaming %c\n` +
+      `%cProfessional Broadcasting Console %c\n` +
+      `-----------------------------------------\n` +
+      `Licensing & Technical Support: https://streamer.qaff.net\n` +
+      `For Sales: +201202406944 / +201012656551\n` +
+      `-----------------------------------------`,
+      `color: #ef4444; font-size: 20px; font-weight: bold; font-family: sans-serif;`,
+      ``,
+      `color: #6366f1; font-size: 13px; font-weight: 500;`,
+      ``
+    )
   }, [fetchTunnelUrl])
 
   // Auto-scroll log to bottom
@@ -2343,12 +2356,12 @@ export default function Home() {
                       return (
                         <div
                           key={slot.id}
-                          className={`rounded-xl border bg-card shadow-sm transition-all duration-200 overflow-hidden ${
+                          className={`rounded-xl border bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-primary/5 overflow-hidden ${
                             slot.isRunning
                               ? 'border-green-500/40 shadow-green-500/10 shadow-md'
                               : slot.status === 'Scheduled'
                               ? 'border-orange-500/40'
-                              : 'border-border/60 hover:border-border'
+                              : 'border-border/60 hover:border-border/80'
                           }`}
                         >
                           {/* Card Header */}
