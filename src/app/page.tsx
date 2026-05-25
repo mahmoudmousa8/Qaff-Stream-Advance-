@@ -1470,8 +1470,8 @@ export default function Home() {
                 <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 20 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط أقرب 20 للكل' : 'Set 20m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط أقرب 20 للكل' : 'Set 20m All'}
+                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 10 دقائق؟' : 'Set all slots to nearest 20 minutes (stream 10 mins)?')} title={locale === 'ar' ? 'ضبط البدء والإيقاف لأقرب 20 للكل' : 'Set 20m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط البدء والإيقاف لأقرب 20 للكل' : 'Set 20m All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
                 onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
@@ -1488,8 +1488,6 @@ export default function Home() {
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
                 onClick={() => {
                   setTargetSlotsForAction(undefined)
-                  setBulkTitle('')
-                  setBulkDesc('')
                   setBulkTitleDescOpen(true)
                 }}
                 title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
@@ -1504,7 +1502,7 @@ export default function Home() {
                 <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية للكل' : 'Random Title/Desc All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
-                onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
+                onClick={() => { setTargetSlotsForAction(undefined); setBulkThumbnailSelectorOpen(true); }} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
                 <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف/مجلد للكل' : 'Thumbnail Folder All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
@@ -1512,7 +1510,7 @@ export default function Home() {
                 <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف للكل' : 'Clear Thumbnail'}
               </Button>
                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                onClick={() => setBulkSwapSelectorOpen(true)} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
+                onClick={() => { setTargetSlotsForAction(undefined); setBulkSwapSelectorOpen(true); }} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
                 <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مجلد تبديل للكل' : 'Swap Folder All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
@@ -1659,7 +1657,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* â€•â€•â€• Main Content â€•â€•â€• */}
+      {/* ――― Main Content ――― */}
       {/* ――― Main Content ――― */}
       {user?.role === 'admin' ? (
         <main className="flex-1 overflow-auto p-6 bg-muted/30">
@@ -2825,7 +2823,7 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Ã¢â€¢Â Ã¢â€¢Â Ã¢â€¢Â  Per-Channel Logs Dialog Ã¢â€¢Â Ã¢â€¢Â Ã¢â€¢Â  */}
+      {/* ――― Per-Channel Logs Dialog ――― */}
       < Dialog open={!!channelLogs
       } onOpenChange={(open) => !open && closeChannelLogs()}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col" dir={dir}>
@@ -2869,7 +2867,7 @@ export default function Home() {
         </DialogContent>
       </Dialog >
 
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Timezone Dialog Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ――― Timezone Dialog ――― */}
       < Dialog open={tzDialogOpen} onOpenChange={setTzDialogOpen} >
         <DialogContent className="sm:max-w-md" dir={dir}>
           <DialogHeader>
@@ -2916,7 +2914,7 @@ export default function Home() {
         </DialogContent>
       </Dialog >
 
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Videos Manager Dialog Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ――― Videos Manager Dialog ――― */}
       < Dialog open={videosManagerOpen} onOpenChange={setVideosManagerOpen} >
         <DialogContent className="sm:max-w-6xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col">
           <DialogHeader className="shrink-0">
@@ -2931,7 +2929,7 @@ export default function Home() {
         </DialogContent>
       </Dialog >
 
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Video Selector Dialog Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ――― Video Selector Dialog ――― */}
       < Dialog open={videoSelectorSlot !== null} onOpenChange={(open) => !open && setVideoSelectorSlot(null)}>
         <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col">
           <DialogHeader className="shrink-0">
@@ -2953,7 +2951,7 @@ export default function Home() {
         </DialogContent>
       </Dialog >
 
-      {/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Confirm Dialog Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */}
+      {/* ――― Confirm Dialog ――― */}
       < Dialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -4499,7 +4497,7 @@ export default function Home() {
               {locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
             </Button>
 
-            {/* Set Closest 15 */}
+            {/* Set Closest 20 */}
             <Button
               size="sm"
               variant="outline"
@@ -4510,7 +4508,7 @@ export default function Home() {
               {locale === 'ar' ? 'أقرب 20' : 'Closest 20m'}
             </Button>
 
-            {/* Repeat 15m / Hourly */}
+            {/* Repeat 20m / Hourly */}
             <Button
               size="sm"
               variant="outline"
