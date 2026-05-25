@@ -972,6 +972,7 @@ export default function Home() {
       const qs = new URLSearchParams()
       qs.set('page', currentPage.toString())
       qs.set('limit', SLOTS_PER_PAGE.toString())
+      qs.set('_t', Date.now().toString())
       if (debouncedSearchQuery) qs.set('search', debouncedSearchQuery)
 
       const res = await fetch(`/api/slots?${qs.toString()}`)
@@ -1246,6 +1247,9 @@ export default function Home() {
       })
       const data = await res.json()
       addLog(data.message)
+      if (['setTitleDescListAll', 'setTitleDescAll', 'setThumbnailAll'].includes(action)) {
+        alert(data.message)
+      }
       if (data.errors) data.errors.forEach((err: string) => addLog(err))
       fetchSlots(); fetchStats()
     } catch { addLog(`Error in bulk action: ${action}`) }
