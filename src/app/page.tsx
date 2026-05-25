@@ -2326,6 +2326,7 @@ export default function Home() {
                                     youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
                                     streamKey: slot.streamKey ?? '',
                                     rtmpServer: slot.rtmpServer ?? '',
+                                    titleDescListId: slot.titleDescListId ?? null,
                                   })
                                   // Pre-fetch stream keys if channel is already linked
                                   if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
