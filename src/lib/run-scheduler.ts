@@ -35,6 +35,9 @@ export const activeMainVideos: Map<number, string> = g.__qaffActiveMainVideos
 if (!g.__qaffActiveSwapVideos) g.__qaffActiveSwapVideos = new Map<number, string>()
 export const activeSwapVideos: Map<number, string> = g.__qaffActiveSwapVideos
 
+if (!g.__qaffActiveThumbnails) g.__qaffActiveThumbnails = new Map<number, string>()
+export const activeThumbnails: Map<number, string> = g.__qaffActiveThumbnails
+
 interface FolderQueue {
   files: string[]
   currentIndex: number
@@ -149,6 +152,64 @@ export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: num
 
 function resolveSwapVideoFile(filePathOrDir: string, slotIndex: number): string {
   return resolveVideoFileFromFolder(filePathOrDir, slotIndex, 'swap')
+}
+
+export function resolveThumbnailFileFromFolder(filePathOrDir: string, slotIndex: number): string {
+  try {
+    const stats = fs.statSync(filePathOrDir)
+    if (!stats.isDirectory()) {
+      return filePathOrDir
+    }
+
+    const files = fs.readdirSync(filePathOrDir)
+    const imageExtensions = ['.png', '.jpg', '.jpeg']
+    const imageFiles = files
+      .filter(file => {
+        const ext = path.extname(file).toLowerCase()
+        return imageExtensions.includes(ext)
+      })
+      .map(file => path.join(filePathOrDir, file))
+
+    if (imageFiles.length === 0) {
+      console.warn(`[Scheduler] Directory ${filePathOrDir} contains no image files. Using directory path directly.`)
+      return filePathOrDir
+    }
+
+    const queueKey = `${slotIndex}_thumbnail`
+    let queue = folderQueues.get(queueKey)
+
+    const needsNewQueue = !queue || 
+      queue.currentIndex >= queue.files.length || 
+      queue.files.length !== imageFiles.length ||
+      !imageFiles.every(f => queue!.files.includes(f))
+
+    if (needsNewQueue) {
+      let shuffled = shuffleArray(imageFiles)
+      const lastSelectedKey = `${slotIndex}_thumbnail_last`
+      const lastSelected = g[lastSelectedKey]
+      if (shuffled.length > 1 && shuffled[0] === lastSelected) {
+        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]]
+      }
+
+      queue = {
+        files: shuffled,
+        currentIndex: 0
+      }
+      folderQueues.set(queueKey, queue)
+    }
+
+    const selectedFile = queue!.files[queue!.currentIndex]
+    queue!.currentIndex++
+    
+    const lastSelectedKey = `${slotIndex}_thumbnail_last`
+    g[lastSelectedKey] = selectedFile
+
+    console.log(`[Scheduler Queue] Slot ${slotIndex + 1} (thumbnail): selected ${path.basename(selectedFile)} (${queue!.currentIndex}/${queue!.files.length} in queue)`)
+    return selectedFile
+  } catch (e: any) {
+    console.error(`[Scheduler] Error resolving thumbnail file from directory ${filePathOrDir}:`, e)
+    return filePathOrDir
+  }
 }
 
 if (!g.__qaffLastActionTokens) g.__qaffLastActionTokens = new Map<number, string>()
@@ -1199,11 +1260,17 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               }
             }
 
+            let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+            if (resolvedThumbnailPath) {
+              resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slot.slotIndex)
+              activeThumbnails.set(slot.slotIndex, resolvedThumbnailPath)
+            }
+
             const yt = await setupYoutubeLiveStream(
               slot.youtubeChannelId,
               slot.youtubeTitle || 'Live Stream',
               slot.youtubeDescription || '',
-              slot.youtubeThumbnailPath || undefined,
+              resolvedThumbnailPath,
               slot.streamKey,
               finalScheduledStartTime
             )

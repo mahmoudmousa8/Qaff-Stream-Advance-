@@ -12,14 +12,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const userFilter: any = {}
-  if (user.role === 'user') {
-    userFilter.slotIndex = { lt: user.slotsLimit }
-  }
-
   try {
     const body = await request.json()
-    const { action, thumbnailPath } = body
+    const { action, thumbnailPath, slotIndexes } = body
+
+    const userFilter: any = {}
+    if (user.role === 'user') {
+      userFilter.slotIndex = { lt: user.slotsLimit }
+    }
+
+    if (Array.isArray(slotIndexes)) {
+      const validIndexes = slotIndexes.map(Number).filter(idx => {
+        if (user.role === 'user') {
+          return idx < user.slotsLimit
+        }
+        return true
+      })
+      userFilter.slotIndex = { in: validIndexes }
+    }
 
     switch (action) {
       case 'startAll': {
@@ -128,11 +138,18 @@ export async function POST(request: NextRequest) {
                 try {
                   console.log(`[Bulk Start] Slot ${slot.slotIndex}: Setting up YouTube Live broadcast...`)
                   const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+                  const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
+                  let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+                  if (resolvedThumbnailPath) {
+                    resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slot.slotIndex)
+                    activeThumbnails.set(slot.slotIndex, resolvedThumbnailPath)
+                  }
+
                   const yt = await setupYoutubeLiveStream(
                     slot.youtubeChannelId,
                     slot.youtubeTitle || 'Live Stream',
                     slot.youtubeDescription || '',
-                    slot.youtubeThumbnailPath || undefined,
+                    resolvedThumbnailPath,
                     slot.streamKey
                   )
                   finalStreamKey = yt.streamKey || finalStreamKey
@@ -797,6 +814,19 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json({ success: true, count: result.count, message: `Cleared swap path from all ${result.count} slots` })
+      }
+
+      case 'setTitleDescAll': {
+        const { youtubeTitle, youtubeDescription } = body
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            youtubeTitle: youtubeTitle || '',
+            youtubeDescription: youtubeDescription || ''
+          }
+        })
+
+        return NextResponse.json({ success: true, count: result.count, message: `تم تعيين العنوان والوصف لـ ${result.count} قناة بنجاح` })
       }
 
       default:

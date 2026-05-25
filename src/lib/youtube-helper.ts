@@ -290,13 +290,15 @@ export async function setupYoutubeLiveStream(
       const thumbnailSize = thumbnailBuffer.length
 
       if (thumbnailSize <= 2 * 1024 * 1024) {
-        console.log(`[YouTube Helper] Uploading PNG Thumbnail (${(thumbnailSize / 1024).toFixed(1)} KB)...`)
+        const isJpg = thumbnailPath.toLowerCase().endsWith('.jpg') || thumbnailPath.toLowerCase().endsWith('.jpeg')
+        const contentType = isJpg ? 'image/jpeg' : 'image/png'
+        console.log(`[YouTube Helper] Uploading Thumbnail (${(thumbnailSize / 1024).toFixed(1)} KB) with Content-Type: ${contentType}...`)
         const setThumbnailUrl = `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${broadcastId}`
         const thumbnailResponse = await fetchWithTimeout(setThumbnailUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'image/png',
+            'Content-Type': contentType,
             'Content-Length': thumbnailSize.toString()
           },
           body: thumbnailBuffer

@@ -14,7 +14,7 @@ import {
   Play, Square, Clock, RotateCcw, Save, RefreshCw,
   Sun, Moon, Calendar, AlertCircle,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, Activity, HardDrive,
-  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX
+  Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -302,12 +302,26 @@ function StreamSlotsSkeleton() {
   )
 }
 
+const isFolderOrImage = (p: string) => {
+  const lastSegment = p.split(/[/\\]/).pop() || '';
+  if (!lastSegment.includes('.')) return true; // It's a folder!
+  const ext = lastSegment.split('.').pop()?.toLowerCase() || '';
+  return ['png', 'jpg', 'jpeg'].includes(ext);
+};
+
 export default function Home() {
   const router = useRouter()
   const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
   const [slots, setSlots] = useState<StreamSlot[]>([])
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'scheduled'>('all')
   const [logs, setLogs] = useState<LogEntry[]>([])
+  const [selectedSlots, setSelectedSlots] = useState<number[]>([])
+  const [bulkTitleDescOpen, setBulkTitleDescOpen] = useState(false)
+  const [bulkTitle, setBulkTitle] = useState('')
+  const [bulkDesc, setBulkDesc] = useState('')
+  const [targetSlotsForAction, setTargetSlotsForAction] = useState<number[] | undefined>(undefined)
+  const [selectedChannels, setSelectedChannels] = useState<Set<string>>(new Set())
+  const [ytSearchQuery, setYtSearchQuery] = useState('')
   const [autoSave, setAutoSave] = useState(true)
   const [loading, setLoading] = useState(true)
   const [currentPage, setCurrentPage] = useState(1)
@@ -321,6 +335,7 @@ export default function Home() {
     if (filterStatus === 'scheduled') return slot.isScheduled
     return true
   })
+
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: string; onConfirm: () => void } | null>(null)
   const [videoSelectorSlot, setVideoSelectorSlot] = useState<number | null>(null)
   const [videosManagerOpen, setVideosManagerOpen] = useState(false)
@@ -397,6 +412,11 @@ export default function Home() {
   const [ytUnlinkConfirm, setYtUnlinkConfirm] = useState<string | null>(null)
   const [ytCleanupLoading, setYtCleanupLoading] = useState<string | null>(null)
   const [cleanupBusy, setCleanupBusy] = useState(false)
+
+  const filteredChannels = ytChannels.filter(ch =>
+    (ch.name || '').toLowerCase().includes(ytSearchQuery.toLowerCase()) ||
+    (ch.channelTitle || '').toLowerCase().includes(ytSearchQuery.toLowerCase())
+  )
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -480,6 +500,14 @@ export default function Home() {
     }
   }, [logs])
 
+  // Reset YouTube manager state when closed
+  useEffect(() => {
+    if (!ytManagerOpen) {
+      setSelectedChannels(new Set())
+      setYtSearchQuery('')
+    }
+  }, [ytManagerOpen])
+
   // Debounce global search
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -528,6 +556,63 @@ export default function Home() {
       alert(locale === 'ar' ? 'فشل الاتصال بالخادم' : 'Network error')
     } finally {
       setYtCleanupLoading(null)
+    }
+  }
+
+  const handleDeleteSelectedChannels = async () => {
+    if (selectedChannels.size === 0) return
+    const confirmMsg = locale === 'ar' 
+      ? `هل أنت متأكد من إلغاء ربط وحذف عدد ${selectedChannels.size} من القنوات المحددة؟`
+      : `Are you sure you want to unlink and delete the ${selectedChannels.size} selected channels?`
+    if (!confirm(confirmMsg)) return
+    
+    setYtLoading(true)
+    try {
+      const ids = Array.from(selectedChannels).join(',')
+      const res = await fetch(`/api/youtube/channels?id=${encodeURIComponent(ids)}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        addLog(locale === 'ar' ? 'تم حذف القنوات المحددة بنجاح' : 'Successfully deleted selected channels')
+        setSelectedChannels(new Set())
+        await fetchYtChannels()
+        await fetchSlots()
+      } else {
+        alert(data.error || 'Failed to delete channels')
+      }
+    } catch {
+      alert('Network error')
+    } finally {
+      setYtLoading(false)
+    }
+  }
+
+  const handleCleanupSelectedChannels = async () => {
+    if (selectedChannels.size === 0) return
+    const confirmMsg = locale === 'ar'
+      ? `هل تريد تنظيف البثوث المجدولة والمعلقة لـ ${selectedChannels.size} قنوات محددة؟`
+      : `Do you want to clean up upcoming broadcasts for the ${selectedChannels.size} selected channels?`
+    if (!confirm(confirmMsg)) return
+
+    setCleanupBusy(true)
+    try {
+      const ids = Array.from(selectedChannels)
+      const res = await fetch('/api/youtube/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelDbIds: ids })
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(data.message)
+        setSelectedChannels(new Set())
+        await fetchYtChannels()
+      } else {
+        alert(data.message || 'Cleanup failed')
+      }
+    } catch {
+      alert('Network error')
+    } finally {
+      setCleanupBusy(false)
     }
   }
 
@@ -1038,12 +1123,12 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const bulkAction = async (action: string, ampm?: 'AM' | 'PM', payload?: any) => {
+  const bulkAction = async (action: string, ampm?: 'AM' | 'PM', payload?: any, targetSlotIndexes?: number[]) => {
     try {
       const res = await fetch('/api/slots/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ampm, ...payload })
+        body: JSON.stringify({ action, ampm, slotIndexes: targetSlotIndexes, ...payload })
       })
       const data = await res.json()
       addLog(data.message)
@@ -1052,8 +1137,8 @@ export default function Home() {
     } catch { addLog(`Error in bulk action: ${action}`) }
   }
 
-  const confirmBulkAction = (action: string, actionName: string, ampm?: 'AM' | 'PM') => {
-    setConfirmDialog({ open: true, action: actionName, onConfirm: () => { bulkAction(action, ampm); setConfirmDialog(null) } })
+  const confirmBulkAction = (action: string, actionName: string, ampm?: 'AM' | 'PM', targetSlotIndexes?: number[]) => {
+    setConfirmDialog({ open: true, action: actionName, onConfirm: () => { bulkAction(action, ampm, undefined, targetSlotIndexes); setConfirmDialog(null) } })
   }
 
   const getStatusColor = (status: string) => {
@@ -1303,6 +1388,16 @@ export default function Home() {
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                   onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
                   <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+                </Button>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
+                  onClick={() => {
+                    setTargetSlotsForAction(undefined)
+                    setBulkTitle('')
+                    setBulkDesc('')
+                    setBulkTitleDescOpen(true)
+                  }}
+                  title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
+                  <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Description for All'}
                 </Button>
                 <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
                   onClick={() => setBulkThumbnailSelectorOpen(true)} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة لكافة القنوات' : 'Set unified thumbnail for all slots'}>
@@ -1736,7 +1831,24 @@ export default function Home() {
                 <table className="w-full border-collapse" style={{ minWidth: 1265, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 28 }}>#</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Checkbox
+                            checked={filteredSlots.length > 0 && filteredSlots.every(s => selectedSlots.includes(s.slotIndex))}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                const visibleIndexes = filteredSlots.map(s => s.slotIndex)
+                                setSelectedSlots(prev => Array.from(new Set([...prev, ...visibleIndexes])))
+                              } else {
+                                const visibleIndexes = filteredSlots.map(s => s.slotIndex)
+                                setSelectedSlots(prev => prev.filter(idx => !visibleIndexes.includes(idx)))
+                              }
+                            }}
+                            className="w-3.5 h-3.5"
+                          />
+                          <span>#</span>
+                        </div>
+                      </th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 130 }}>{t('colDetails')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 160 }}>{t('colStreamKey')}</th>
@@ -1770,7 +1882,20 @@ export default function Home() {
                         <tr key={slot.id} className="hover:bg-orange-500/15 transition-colors border-b border-border/50">
                           {/* # */}
                           <td className="text-center font-mono text-xs font-medium px-2 py-1 text-muted-foreground">
-                            {slot.slotIndex + 1}
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Checkbox
+                                checked={selectedSlots.includes(slot.slotIndex)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedSlots(prev => [...prev, slot.slotIndex])
+                                  } else {
+                                    setSelectedSlots(prev => prev.filter(idx => idx !== slot.slotIndex))
+                                  }
+                                }}
+                                className="w-3.5 h-3.5"
+                              />
+                              <span>{slot.slotIndex + 1}</span>
+                            </div>
                           </td>
 
                           {/* Channel Name */}
@@ -2076,11 +2201,6 @@ export default function Home() {
                                 title={t('advancedSettings')}>
                                 <Settings className="w-3.5 h-3.5" />
                               </Button>
-                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
-                                onClick={() => openChannelLogs(slot.slotIndex)}
-                                title={t('colLogs')}>
-                                <FileText className="w-3.5 h-3.5" />
-                              </Button>
                             </div>
                           </td>
 
@@ -2234,6 +2354,17 @@ export default function Home() {
                           {/* Card Header */}
                           <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/30">
                             <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={selectedSlots.includes(slot.slotIndex)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedSlots(prev => [...prev, slot.slotIndex])
+                                  } else {
+                                    setSelectedSlots(prev => prev.filter(idx => idx !== slot.slotIndex))
+                                  }
+                                }}
+                                className="w-3.5 h-3.5"
+                              />
                               <span className="text-[10px] font-bold font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                                 #{slot.slotIndex + 1}
                               </span>
@@ -2532,11 +2663,6 @@ export default function Home() {
                                   }}
                                   title={t('advancedSettings')}>
                                   <Settings className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-8 w-8 p-0 rounded-lg hover:bg-muted hover:scale-110 transition-all"
-                                  onClick={() => openChannelLogs(slot.slotIndex)}
-                                  title={t('colLogs')}>
-                                  <FileText className="w-3.5 h-3.5" />
                                 </Button>
                               </div>
                             </div>
@@ -2860,8 +2986,8 @@ export default function Home() {
                           <p className="font-bold">{t('swapVideoActive')}</p>
                           <p className="opacity-90 mt-0.5">
                             {locale === 'ar'
-                              ? `البث سينتقل تلقائياً للفيديو المختار قبل 10 دقائق من موعد الإيقاف المحدد: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`
-                              : `Broadcast will switch automatically to this video 10 minutes before stop time: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`}
+                              ? `البث سينتقل تلقائياً للفيديو المختار قبل دقيقتين من موعد الإيقاف المحدد: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`
+                              : `Broadcast will switch automatically to this video 2 minutes before stop time: ${slots.find(s => s.slotIndex === settingsSlot)?.schedStop}.`}
                           </p>
                         </div>
                       </div>
@@ -3156,12 +3282,12 @@ export default function Home() {
           <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <FolderOpen className="w-5 h-5 text-primary" />
-              {locale === 'ar' ? 'اختر صورة غلاف البث' : 'Select Stream Thumbnail Image'} #{settingsSlot !== null ? settingsSlot + 1 : ''}
+              {locale === 'ar' ? 'اختر صورة أو مجلد غلاف البث' : 'Select Stream Thumbnail Image/Folder'} #{settingsSlot !== null ? settingsSlot + 1 : ''}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {locale === 'ar' 
-                ? 'تصفح واختر ملف صورة (يجب أن يكون بصيغة PNG وبحجم أقل من 2 ميجابايت).' 
-                : 'Browse and select an image file (must be strictly PNG and size under 2MB).'}
+                ? 'تصفح واختر ملف صورة (PNG/JPG بحجم أقل من 2 ميجابايت) أو مجلداً كاملاً للصور ليتم التناوب عليها عشوائياً وبدون تكرار.' 
+                : 'Browse and select an image file (PNG/JPG under 2MB) or a folder containing thumbnails to cycle randomly.'}
             </DialogDescription>
           </DialogHeader>
           {thumbnailSelectorOpen && (
@@ -3169,10 +3295,10 @@ export default function Home() {
               <VideoManager
                 mode="select"
                 onVideoSelect={(path) => {
-                  if (!path.toLowerCase().endsWith('.png')) {
+                  if (!isFolderOrImage(path)) {
                     alert(locale === 'ar' 
-                      ? 'عذراً، يجب اختيار ملف بصيغة PNG فقط لصورة الغلاف!' 
-                      : 'Please select a strictly PNG file format for the thumbnail!')
+                      ? 'عذراً، يجب اختيار ملف صورة (PNG/JPG) أو مجلد يحتوي على صور!' 
+                      : 'Please select an image file (PNG/JPG) or a folder containing images!')
                     return
                   }
                   setSettingsData(p => p ? { ...p, youtubeThumbnailPath: path } : p)
@@ -3191,12 +3317,12 @@ export default function Home() {
           <DialogHeader className="shrink-0 px-6 pt-6 pb-2">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <FolderOpen className="w-5 h-5 text-primary" />
-              {locale === 'ar' ? 'اختر صورة غلاف موحدة لكافة البثوث' : 'Select Unified Thumbnail Image for All Streams'}
+              {locale === 'ar' ? 'اختر صورة أو مجلد غلاف موحد للبثوث المحددة' : 'Select Thumbnail Image/Folder for Selected Streams'}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {locale === 'ar' 
-                ? 'تصفح واختر ملف صورة PNG ليتم تطبيقه على كافة القنوات المسموحة لك.' 
-                : 'Browse and select a PNG image file to apply to all your slots.'}
+                ? 'تصفح واختر ملف صورة (PNG/JPG بحجم أقل من 2 ميجابايت) أو مجلداً كاملاً للصور ليتم التناوب عليها عشوائياً وبدون تكرار.' 
+                : 'Browse and select an image file (PNG/JPG under 2MB) or a folder containing thumbnails to cycle randomly.'}
             </DialogDescription>
           </DialogHeader>
           {bulkThumbnailSelectorOpen && (
@@ -3204,13 +3330,13 @@ export default function Home() {
               <VideoManager
                 mode="select"
                 onVideoSelect={(path) => {
-                  if (!path.toLowerCase().endsWith('.png')) {
+                  if (!isFolderOrImage(path)) {
                     alert(locale === 'ar' 
-                      ? 'عذراً، يجب اختيار ملف بصيغة PNG فقط لصورة الغلاف!' 
-                      : 'Please select a strictly PNG file format for the thumbnail!')
+                      ? 'عذراً، يجب اختيار ملف صورة (PNG/JPG) أو مجلد يحتوي على صور!' 
+                      : 'Please select an image file (PNG/JPG) or a folder containing images!')
                     return
                   }
-                  bulkAction('setThumbnailAll', undefined, { thumbnailPath: path })
+                  bulkAction('setThumbnailAll', undefined, { thumbnailPath: path }, targetSlotsForAction)
                   setBulkThumbnailSelectorOpen(false)
                 }}
                 onClose={() => setBulkThumbnailSelectorOpen(false)}
@@ -3237,7 +3363,7 @@ export default function Home() {
               <VideoManager
                 mode="select"
                 onVideoSelect={(path) => {
-                  bulkAction('setSwapVideoAll', undefined, { swapVideoPath: path })
+                  bulkAction('setSwapVideoAll', undefined, { swapVideoPath: path }, targetSlotsForAction)
                   setBulkSwapSelectorOpen(false)
                 }}
                 onClose={() => setBulkSwapSelectorOpen(false)}
@@ -3330,11 +3456,39 @@ export default function Home() {
 
             {/* List of channels */}
             <div className="space-y-3">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
                 <h4 className="text-sm font-bold text-foreground">
                   🔑 {locale === 'ar' ? 'القنوات المرتبطة حالياً' : 'Currently Linked Channels'}
                 </h4>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedChannels.size > 0 && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleDeleteSelectedChannels}
+                        disabled={ytLoading}
+                        className="h-8 text-xs flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white border-none"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {locale === 'ar' ? `حذف المحدد (${selectedChannels.size})` : `Delete Selected (${selectedChannels.size})`}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleCleanupSelectedChannels}
+                        disabled={cleanupBusy || ytLoading}
+                        className="h-8 text-xs flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white border-none"
+                      >
+                        {cleanupBusy ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CalendarX className="w-3.5 h-3.5" />
+                        )}
+                        {locale === 'ar' ? `تنظيف المحدد (${selectedChannels.size})` : `Clean Selected (${selectedChannels.size})`}
+                      </Button>
+                    </>
+                  )}
                   <Button
                     size="sm"
                     variant="destructive"
@@ -3362,28 +3516,54 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Search Box */}
+              {ytChannels.length > 0 && (
+                <div className="relative">
+                  <Search className={`absolute ${locale === 'ar' ? 'right-3' : 'left-3'} top-2.5 h-4 w-4 text-muted-foreground`} />
+                  <Input
+                    value={ytSearchQuery}
+                    onChange={(e) => setYtSearchQuery(e.target.value)}
+                    placeholder={locale === 'ar' ? 'بحث باسم القناة المستعار أو الرسمي...' : 'Search by channel nickname or official name...'}
+                    className={`${locale === 'ar' ? 'pr-9 pl-4' : 'pl-9 pr-4'} bg-background text-xs`}
+                    dir="auto"
+                  />
+                </div>
+              )}
+
               {ytLoading && ytChannels.length === 0 ? (
                 <div className="py-8 flex flex-col items-center justify-center text-muted-foreground text-xs gap-2 border border-dashed rounded-xl bg-muted/20">
                   <Loader2 className="w-6 h-6 animate-spin text-primary" />
                   <span>{locale === 'ar' ? 'جاري تحميل القنوات...' : 'Loading channels...'}</span>
                 </div>
-              ) : ytChannels.length === 0 ? (
+              ) : filteredChannels.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground text-xs border border-dashed rounded-xl bg-muted/10">
-                  📭 {locale === 'ar' ? 'لا توجد قنوات مرتبطة حالياً. استخدم النموذج أعلاه لربط قناتك.' : 'No channels linked yet. Use the form above to link one.'}
+                  📭 {locale === 'ar' ? 'لا توجد قنوات مطابقة. استخدم النموذج أعلاه لربط قناتك أو غير نص البحث.' : 'No channels found matching query.'}
                 </div>
               ) : (
                 <div className="border border-border rounded-xl overflow-hidden shadow-sm bg-card">
                   <Table>
                     <TableHeader className="bg-muted/40">
                       <TableRow>
+                        <TableHead className="w-10 px-4 py-2.5">
+                          <Checkbox 
+                            checked={filteredChannels.length > 0 && filteredChannels.every(ch => selectedChannels.has(ch.id))}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedChannels(new Set(filteredChannels.map(ch => ch.id)))
+                              } else {
+                                setSelectedChannels(new Set())
+                              }
+                            }}
+                          />
+                        </TableHead>
                         <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'الاسم المستعار' : 'Nickname'}</TableHead>
-                        <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'عنوان يوتيوب الرسمي' : 'Official YouTube Title'}</TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5">{locale === 'ar' ? 'إسم القناة' : 'Channel Name'}</TableHead>
                         <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 150 }}>{locale === 'ar' ? 'انتهاء الصلاحية' : 'Token Expiry'}</TableHead>
-                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 80 }}></TableHead>
+                        <TableHead className="text-xs font-semibold px-4 py-2.5 text-center" style={{ width: 120 }}></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {ytChannels.map(ch => {
+                      {filteredChannels.map(ch => {
                         // Calculate 7-day expiry countdown from createdAt
                         const createdMs = ch.createdAt ? new Date(ch.createdAt).getTime() : Date.now()
                         const expiryMs = createdMs + 7 * 24 * 60 * 60 * 1000
@@ -3394,8 +3574,34 @@ export default function Home() {
                         const isUrgent = !isExpired && remainDays < 2
                         return (
                         <TableRow key={ch.id} className="hover:bg-muted/20 transition-colors">
+                          <TableCell className="px-4 py-3">
+                            <Checkbox 
+                              checked={selectedChannels.has(ch.id)}
+                              onCheckedChange={(checked) => {
+                                const next = new Set(selectedChannels)
+                                if (checked) {
+                                  next.add(ch.id)
+                                } else {
+                                  next.delete(ch.id)
+                                }
+                                setSelectedChannels(next)
+                              }}
+                            />
+                          </TableCell>
                           <TableCell className="px-4 py-3 font-semibold text-xs text-foreground/95">{ch.name}</TableCell>
-                          <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">{ch.channelTitle}</TableCell>
+                          <TableCell className="px-4 py-3 text-xs text-muted-foreground font-mono">
+                            <a
+                              href={`https://www.youtube.com/channel/${ch.channelId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+                            >
+                              {ch.channelTitle || ch.channelId}
+                              <svg className="w-3.5 h-3.5 inline ml-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          </TableCell>
                           <TableCell className="px-4 py-3 text-xs text-center">
                             {isExpired ? (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 font-bold text-[10px]">
@@ -3649,6 +3855,228 @@ export default function Home() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Bulk Title & Description Dialog ── */}
+      <Dialog open={bulkTitleDescOpen} onOpenChange={(open) => !open && setBulkTitleDescOpen(false)}>
+        <DialogContent className="sm:max-w-md w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Edit3 className="w-5 h-5 text-primary" />
+              {targetSlotsForAction 
+                ? (locale === 'ar' ? `تعيين العنوان والوصف للمحدد (${targetSlotsForAction.length} قناة)` : `Set Title & Description for Selected (${targetSlotsForAction.length} slots)`)
+                : (locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث' : 'Set Title & Description for All Slots')}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'أدخل العنوان والوصف الموحدين ليتم إعادة تعيينهما لجميع القنوات المختارة.'
+                : 'Enter a unified title and description to apply to all selected channels.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-6 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground block">{locale === 'ar' ? 'العنوان' : 'Title'}</label>
+              <Input
+                value={bulkTitle}
+                onChange={(e) => setBulkTitle(e.target.value)}
+                placeholder={locale === 'ar' ? 'مثال: بث مباشر 24 ساعة...' : 'e.g. 24/7 Live Stream...'}
+                className="w-full bg-background"
+                dir="auto"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground block">{locale === 'ar' ? 'الوصف' : 'Description'}</label>
+              <textarea
+                value={bulkDesc}
+                onChange={(e) => setBulkDesc(e.target.value)}
+                placeholder={locale === 'ar' ? 'أدخل تفاصيل البث هنا...' : 'Enter stream description here...'}
+                className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                dir="auto"
+              />
+            </div>
+          </div>
+          <DialogFooter className="px-6 py-4 bg-muted/40 border-t border-border/80">
+            <Button variant="outline" onClick={() => setBulkTitleDescOpen(false)}>
+              {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                bulkAction('setTitleDescAll', undefined, { youtubeTitle: bulkTitle, youtubeDescription: bulkDesc }, targetSlotsForAction)
+                setBulkTitleDescOpen(false)
+              }}
+            >
+              {locale === 'ar' ? 'تعيين' : 'Apply'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Selected Slots Floating Actions Bar ── */}
+      {selectedSlots.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[95vw] bg-background/85 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-3 overflow-x-auto select-none transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2 border-r border-border/80 pr-3 shrink-0">
+            <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/15 font-bold text-xs">
+              {locale === 'ar' ? `تم تحديد ${selectedSlots.length}` : `${selectedSlots.length} Selected`}
+            </Badge>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground rounded-md"
+              onClick={() => setSelectedSlots([])}
+              title={locale === 'ar' ? 'إلغاء التحديد' : 'Deselect All'}
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Start Selected */}
+            <Button
+              size="sm"
+              variant="default"
+              className="h-8 bg-green-600 hover:bg-green-700 text-white font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('startAll', locale === 'ar' ? 'تشغيل القنوات المحددة؟' : 'Start selected slots?', undefined, selectedSlots)}
+            >
+              <Play className="w-3 h-3 fill-current" />
+              {locale === 'ar' ? 'تشغيل' : 'Start'}
+            </Button>
+
+            {/* Stop Selected */}
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-8 bg-red-600 hover:bg-red-700 text-white font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('stopAll', locale === 'ar' ? 'إيقاف القنوات المحددة؟' : 'Stop selected slots?', undefined, selectedSlots)}
+            >
+              <Square className="w-3 h-3 fill-current" />
+              {locale === 'ar' ? 'إيقاف' : 'Stop'}
+            </Button>
+
+            {/* Set Title & Description */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium gap-1 text-xs"
+              onClick={() => {
+                setTargetSlotsForAction(selectedSlots)
+                setBulkTitle('')
+                setBulkDesc('')
+                setBulkTitleDescOpen(true)
+              }}
+            >
+              <Edit3 className="w-3 h-3" />
+              {locale === 'ar' ? 'العنوان والوصف' : 'Title & Desc'}
+            </Button>
+
+            {/* Set Thumbnail Folder/Path */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 text-violet-600 dark:text-violet-400 font-medium gap-1 text-xs"
+              onClick={() => {
+                setTargetSlotsForAction(selectedSlots)
+                setBulkThumbnailSelectorOpen(true)
+              }}
+            >
+              <ImageIcon className="w-3 h-3" />
+              {locale === 'ar' ? 'غلاف' : 'Thumbnail'}
+            </Button>
+
+            {/* Clear Thumbnail */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف غلاف القنوات المحددة؟' : 'Clear thumbnail for selected slots?', undefined, selectedSlots)}
+              title={locale === 'ar' ? 'مسح الغلاف للمحدد' : 'Clear Thumbnail'}
+            >
+              <Trash2 className="w-3 h-3" />
+              {locale === 'ar' ? 'مسح الغلاف' : 'Clear Cover'}
+            </Button>
+
+            {/* Set Swap Video/Folder */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs"
+              onClick={() => {
+                setTargetSlotsForAction(selectedSlots)
+                setBulkSwapSelectorOpen(true)
+              }}
+            >
+              <FolderOpen className="w-3 h-3" />
+              {locale === 'ar' ? 'مجلد تبديل' : 'Swap Folder'}
+            </Button>
+
+            {/* Clear Swap */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف مجلد/فيديو التبديل للمحدد؟' : 'Clear swap for selected slots?', undefined, selectedSlots)}
+              title={locale === 'ar' ? 'مسح تبديل المحدد' : 'Clear Swap'}
+            >
+              <Trash2 className="w-3 h-3" />
+              {locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
+            </Button>
+
+            {/* Set Closest 15 */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set selected slots to nearest 15 mins?', undefined, selectedSlots)}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أقرب 15' : 'Closest 15m'}
+            </Button>
+
+            {/* Repeat 15m / Hourly */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 15 دقيقة للقنوات المحددة؟' : 'Enable 15m hourly for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? '15 دقيقة' : '15 Mins'}
+            </Button>
+
+            {/* Daily */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('dailyAll', locale === 'ar' ? 'تفعيل يومي للقنوات المحددة؟' : 'Enable daily for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? 'يومي' : 'Daily'}
+            </Button>
+
+            {/* Clear Times */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح التواريخ للقنوات المحددة؟' : 'Clear times for selected slots?', undefined, selectedSlots)}
+            >
+              <X className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
+            </Button>
+
+            {/* Reset Selected */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-gray-500/20 hover:bg-muted font-medium gap-1 text-xs"
+              onClick={() => confirmBulkAction('resetAll', locale === 'ar' ? 'إعادة تعيين القنوات المحددة؟' : 'Reset selected slots?', undefined, selectedSlots)}
+            >
+              <RotateCcw className="w-3 h-3" />
+              {locale === 'ar' ? 'إعادة تعيين' : 'Reset'}
+            </Button>
+          </div>
+        </div>
+      )}
     </div >
   )
 }

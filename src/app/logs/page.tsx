@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, RefreshCw, Trash2, Loader2, Terminal, Sun, Moon, Globe, HardDrive, Wifi } from 'lucide-react'
 import Image from 'next/image'
 import { t, getLocale, setLocale, type Locale } from '@/lib/i18n'
@@ -21,6 +22,7 @@ export default function LogsPage() {
     const [loading, setLoading] = useState(true)
     const [locale, setLocaleState] = useState<Locale>('en')
     const [isDarkMode, setIsDarkMode] = useState(false)
+    const [autoUpdate, setAutoUpdate] = useState(true)
     const logViewportRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -62,10 +64,12 @@ export default function LogsPage() {
     }
 
     useEffect(() => {
-        fetchLogs()
-        const logsInterval = setInterval(fetchLogs, 5000)
-        return () => { clearInterval(logsInterval) }
-    }, [])
+        if (autoUpdate) {
+            fetchLogs()
+            const logsInterval = setInterval(fetchLogs, 5000)
+            return () => { clearInterval(logsInterval) }
+        }
+    }, [autoUpdate])
 
     // Handle ESC key to go back
     useEffect(() => {
@@ -107,7 +111,7 @@ export default function LogsPage() {
     }
 
     return (
-        <div className="h-screen flex flex-col overflow-hidden bg-background" dir="ltr">
+        <div className="h-screen flex flex-col overflow-hidden bg-background" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
             {/* Header */}
             <header className="border-b bg-card shrink-0">
                 <div className="px-4 py-2 flex items-center justify-between gap-2">
@@ -128,7 +132,21 @@ export default function LogsPage() {
                         </a>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1.5 mx-2 bg-muted/60 px-2.5 py-1 rounded-lg border border-border/80">
+                            <Checkbox
+                                id="autoUpdateLogs"
+                                checked={autoUpdate}
+                                onCheckedChange={(checked) => setAutoUpdate(!!checked)}
+                                className="w-3.5 h-3.5"
+                            />
+                            <label
+                                htmlFor="autoUpdateLogs"
+                                className="text-xs font-semibold cursor-pointer select-none text-muted-foreground whitespace-nowrap"
+                            >
+                                {locale === 'ar' ? 'تحديث تلقائي' : 'Auto Update'}
+                            </label>
+                        </div>
                         <Button size="sm" variant="ghost" onClick={switchLocale} title={t('language')}>
                             <Globe className="w-4 h-4 mr-1" />
                             {locale === 'en' ? 'AR' : 'EN'}
@@ -142,7 +160,7 @@ export default function LogsPage() {
                         </Button>
                         <Button size="sm" variant="destructive" onClick={clearLogs} className="h-7">
                             <Trash2 className="w-3.5 h-3.5 mr-1" />
-                            {t('delete') || 'Clear'}
+                            {locale === 'ar' ? 'مسح السجلات' : 'Clear Logs'}
                         </Button>
                     </div>
                 </div>

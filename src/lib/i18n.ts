@@ -333,7 +333,7 @@ const translations = {
         stopAll: 'إيقاف الكل',
         setTimeAll: 'ضبط الوقت للكل',
         dailyAll: 'يومي للكل',
-        hourlyAll: 'تكرار 15 دقيقة للكل',
+        hourlyAll: '15 دقيقة للكل',
         resetAll: 'إعادة تعيين الكل',
         autoSave: 'حفظ تلقائي',
 

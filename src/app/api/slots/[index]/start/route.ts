@@ -123,11 +123,18 @@ export async function POST(
       try {
         console.log(`[Start Route] Slot ${slotIndex}: Setting up YouTube Live broadcast...`)
         const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+        const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
+        let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+        if (resolvedThumbnailPath) {
+          resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slotIndex)
+          activeThumbnails.set(slotIndex, resolvedThumbnailPath)
+        }
+
         const yt = await setupYoutubeLiveStream(
           slot.youtubeChannelId,
           slot.youtubeTitle || 'Live Stream',
           slot.youtubeDescription || '',
-          slot.youtubeThumbnailPath || undefined,
+          resolvedThumbnailPath,
           slot.streamKey
         )
         finalStreamKey = yt.streamKey || finalStreamKey

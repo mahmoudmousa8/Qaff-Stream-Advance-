@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { channelDbId, all } = body
+    const { channelDbId, channelDbIds, all } = body
 
     if (all) {
       const sevenDaysAgo = new Date()
@@ -47,6 +47,37 @@ export async function POST(request: NextRequest) {
       }
 
       const msg = `تم بنجاح تنظيف وحذف إجمالي ${totalDeletedCount} من البثوث المجدولة على القنوات النشطة.`
+      return NextResponse.json({
+        success: true,
+        deletedCount: totalDeletedCount,
+        errors: errorsList.length > 0 ? errorsList : undefined,
+        message: msg
+      })
+    }
+
+    if (Array.isArray(channelDbIds)) {
+      const channels = await db.youtubeChannel.findMany({
+        where: { id: { in: channelDbIds } }
+      })
+
+      let totalDeletedCount = 0
+      const errorsList: string[] = []
+      const detailMsg: string[] = []
+
+      for (const channel of channels) {
+        try {
+          const res = await cleanupUpcomingBroadcasts(channel.id)
+          totalDeletedCount += res.deletedCount
+          if (res.errors && res.errors.length > 0) {
+            errorsList.push(`${channel.name}: ${res.errors.join(', ')}`)
+          }
+          detailMsg.push(`${channel.name} (${res.deletedCount} deleted)`)
+        } catch (err: any) {
+          errorsList.push(`${channel.name}: ${err.message || String(err)}`)
+        }
+      }
+
+      const msg = `تم بنجاح تنظيف وحذف إجمالي ${totalDeletedCount} من البثوث المجدولة على القنوات المحددة.`
       return NextResponse.json({
         success: true,
         deletedCount: totalDeletedCount,
