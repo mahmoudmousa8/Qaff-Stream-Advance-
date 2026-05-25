@@ -147,3 +147,26 @@
 .animate-indeterminate {
   animation: indeterminate-slide 1.4s infinite linear;
 }
+
+@keyframes springy-slide-up {
+  0% {
+    transform: translate(-50%, 150%) scale(0.96);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -10%) scale(1.015);
+    opacity: 0.95;
+  }
+  85% {
+    transform: translate(-50%, 2%) scale(0.995);
+    opacity: 0.99;
+  }
+  100% {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-springy-slide-up {
+  animation: springy-slide-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}

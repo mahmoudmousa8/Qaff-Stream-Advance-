@@ -3913,7 +3913,7 @@ export default function Home() {
 
       {/* ── Selected Slots Floating Actions Bar ── */}
       {selectedSlots.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[95vw] bg-background/85 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-3 overflow-x-auto select-none transition-all duration-300 animate-in fade-in slide-in-from-bottom-5">
+        <div className="fixed bottom-6 left-1/2 z-50 w-auto max-w-[95vw] bg-background/85 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-3 overflow-x-auto select-none transition-all duration-300 animate-springy-slide-up">
           <div className="flex items-center gap-2 border-r border-border/80 pr-3 shrink-0">
             <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/15 font-bold text-xs">
               {locale === 'ar' ? `تم تحديد ${selectedSlots.length}` : `${selectedSlots.length} Selected`}
