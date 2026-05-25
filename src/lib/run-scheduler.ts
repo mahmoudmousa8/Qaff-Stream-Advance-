@@ -52,6 +52,21 @@ function shuffleArray<T>(array: T[]): T[] {
   return arr
 }
 
+function getCurrentlyActiveFiles(excludeSlotIndex: number): Set<string> {
+  const active = new Set<string>()
+  for (const [slotIdx, filePath] of activeMainVideos.entries()) {
+    if (slotIdx !== excludeSlotIndex && filePath) {
+      active.add(path.resolve(filePath))
+    }
+  }
+  for (const [slotIdx, filePath] of activeSwapVideos.entries()) {
+    if (slotIdx !== excludeSlotIndex && filePath) {
+      active.add(path.resolve(filePath))
+    }
+  }
+  return active
+}
+
 export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: number, type: 'main' | 'swap'): string {
   try {
     const stats = fs.statSync(filePathOrDir)
@@ -96,7 +111,29 @@ export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: num
       folderQueues.set(queueKey, queue)
     }
 
-    const selectedFile = queue!.files[queue!.currentIndex]
+    let selectedFile = queue!.files[queue!.currentIndex]
+    const activeFiles = getCurrentlyActiveFiles(slotIndex)
+
+    if (activeFiles.has(path.resolve(selectedFile))) {
+      let alternativeIndex = -1
+      for (let idx = queue!.currentIndex + 1; idx < queue!.files.length; idx++) {
+        if (!activeFiles.has(path.resolve(queue!.files[idx]))) {
+          alternativeIndex = idx
+          break
+        }
+      }
+
+      if (alternativeIndex !== -1) {
+        const temp = queue!.files[queue!.currentIndex]
+        queue!.files[queue!.currentIndex] = queue!.files[alternativeIndex]
+        queue!.files[alternativeIndex] = temp
+        selectedFile = queue!.files[queue!.currentIndex]
+        console.log(`[Scheduler Queue] Slot ${slotIndex + 1} (${type}): file ${path.basename(temp)} was active on another slot. Swapped with alternative: ${path.basename(selectedFile)}`)
+      } else {
+        console.log(`[Scheduler Queue] Slot ${slotIndex + 1} (${type}): file ${path.basename(selectedFile)} is active, but no alternative non-active files exist in queue. Proceeding.`)
+      }
+    }
+
     queue!.currentIndex++
     
     const lastSelectedKey = `${slotIndex}_${type}_last`
