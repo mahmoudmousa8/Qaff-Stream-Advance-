@@ -172,7 +172,7 @@ const translations = {
 
         // Settings & Timezone
         timezoneServer: 'Timezone',
-        timezoneWarning: 'It will affect the scheduled times of future streams only, and will have no impact on the currently running streams.',
+        timezoneWarning: 'Changing the timezone affects future scheduled streams only. Currently running streams are not affected.',
         timezoneCurrent: 'Current Timezone',
         timezoneNew: 'New Timezone',
         timezoneLoading: 'Loading...',
@@ -418,7 +418,7 @@ const translations = {
 
         // Settings & Timezone
         timezoneServer: 'المنطقة الزمنية',
-        timezoneWarning: 'سيؤثر على مواعيد جدولة البث المستقبلية ولن يترتب عليه أي تأثير على البثوث المشغّلة حاليًا',
+        timezoneWarning: 'تغيير المنطقة الزمنية يؤثر على جدولة البثوث المستقبلية فقط، ولن يؤثر على البثوث الجارية حالياً.',
         timezoneCurrent: 'المنطقة الزمنية الحالية',
         timezoneNew: 'المنطقة الزمنية الجديدة',
         timezoneLoading: 'جاري التحميل...',
