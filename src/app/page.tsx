@@ -3934,7 +3934,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="default"
-              className="h-8 bg-green-600 hover:bg-green-700 text-white font-medium gap-1 text-xs"
+              className="h-8 bg-green-600 hover:bg-green-700 text-white font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('startAll', locale === 'ar' ? 'تشغيل القنوات المحددة؟' : 'Start selected slots?', undefined, selectedSlots)}
             >
               <Play className="w-3 h-3 fill-current" />
@@ -3945,7 +3945,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="destructive"
-              className="h-8 bg-red-600 hover:bg-red-700 text-white font-medium gap-1 text-xs"
+              className="h-8 bg-red-600 hover:bg-red-700 text-white font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('stopAll', locale === 'ar' ? 'إيقاف القنوات المحددة؟' : 'Stop selected slots?', undefined, selectedSlots)}
             >
               <Square className="w-3 h-3 fill-current" />
@@ -3956,7 +3956,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium gap-1 text-xs"
+              className="h-8 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => {
                 setTargetSlotsForAction(selectedSlots)
                 setBulkTitle('')
@@ -3972,7 +3972,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 text-violet-600 dark:text-violet-400 font-medium gap-1 text-xs"
+              className="h-8 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 text-violet-600 dark:text-violet-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => {
                 setTargetSlotsForAction(selectedSlots)
                 setBulkThumbnailSelectorOpen(true)
@@ -3986,7 +3986,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف غلاف القنوات المحددة؟' : 'Clear thumbnail for selected slots?', undefined, selectedSlots)}
               title={locale === 'ar' ? 'مسح الغلاف للمحدد' : 'Clear Thumbnail'}
             >
@@ -3998,7 +3998,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs"
+              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => {
                 setTargetSlotsForAction(selectedSlots)
                 setBulkSwapSelectorOpen(true)
@@ -4012,7 +4012,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف مجلد/فيديو التبديل للمحدد؟' : 'Clear swap for selected slots?', undefined, selectedSlots)}
               title={locale === 'ar' ? 'مسح تبديل المحدد' : 'Clear Swap'}
             >
@@ -4024,7 +4024,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs"
+              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب 15 دقيقة وبث 10 دقائق؟' : 'Set selected slots to nearest 15 mins?', undefined, selectedSlots)}
             >
               <Clock className="w-3.5 h-3.5" />
@@ -4035,7 +4035,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs"
+              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 15 دقيقة للقنوات المحددة؟' : 'Enable 15m hourly for selected slots?', undefined, selectedSlots)}
             >
               <Sun className="w-3 h-3" />
@@ -4046,7 +4046,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs"
+              className="h-8 border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('dailyAll', locale === 'ar' ? 'تفعيل يومي للقنوات المحددة؟' : 'Enable daily for selected slots?', undefined, selectedSlots)}
             >
               <Sun className="w-3 h-3" />
@@ -4057,7 +4057,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs"
+              className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح التواريخ للقنوات المحددة؟' : 'Clear times for selected slots?', undefined, selectedSlots)}
             >
               <X className="w-3.5 h-3.5" />
@@ -4068,7 +4068,7 @@ export default function Home() {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 border-gray-500/20 hover:bg-muted font-medium gap-1 text-xs"
+              className="h-8 border-gray-500/20 hover:bg-muted font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('resetAll', locale === 'ar' ? 'إعادة تعيين القنوات المحددة؟' : 'Reset selected slots?', undefined, selectedSlots)}
             >
               <RotateCcw className="w-3 h-3" />

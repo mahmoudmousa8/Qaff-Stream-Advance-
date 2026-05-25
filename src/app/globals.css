@@ -170,3 +170,26 @@
 .animate-springy-slide-up {
   animation: springy-slide-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
+
+/* Premium tactile micro-interactions for buttons */
+.btn-premium {
+  transition: transform 0.15s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.15s, border-color 0.15s, box-shadow 0.15s !important;
+}
+
+.btn-premium:hover:not(:disabled) {
+  transform: translateY(-1.5px);
+}
+
+.btn-premium:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Accessibility: Support prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
