@@ -25,7 +25,7 @@ export async function POST(
 
     // If this slot has an active YouTube broadcast, transition it to complete first
     const slot = await db.streamSlot.findUnique({ where: { slotIndex } })
-    if (slot?.youtubeChannelId && slot?.youtubeBroadcastId && slot?.outputType === 'youtube') {
+    if (slot?.isRunning && slot?.youtubeChannelId && slot?.youtubeBroadcastId && slot?.outputType === 'youtube') {
       try {
         const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
         await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
@@ -47,6 +47,9 @@ export async function POST(
         daily: false,
         weekly: false,
         hourly: false,
+        repeat30m: false,
+        repeat1h: false,
+        repeat2h: false,
         isScheduled: false,
         isRunning: false,
         manuallyStopped: true,

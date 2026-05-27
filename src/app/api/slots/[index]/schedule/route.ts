@@ -52,7 +52,7 @@ export async function POST(
       }
     }
 
-    const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+    const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
 
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },

@@ -286,7 +286,7 @@ export function verifyStreamStatusAfterDelay(
 
           await db.streamSlot.update({
             where: { slotIndex },
-            data: { isRunning: false, status: slot.daily || slot.weekly || slot.hourly ? 'Scheduled' : 'Stopped' }
+            data: { isRunning: false, status: slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h ? 'Scheduled' : 'Stopped' }
           })
         } else {
           console.log(`[Verification SUCCESS] Slot ${slotIndex + 1} is stopped successfully after 10s.`)
@@ -301,7 +301,7 @@ export function verifyStreamStatusAfterDelay(
           const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
           state.crashCount++
           
-          const isRecurring = slot.daily || slot.weekly || slot.hourly
+          const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
           if (state.crashCount >= MAX_CRASH_COUNT) {
             recoveryStates.delete(stateKey)
             
@@ -315,7 +315,7 @@ export function verifyStreamStatusAfterDelay(
               if (oldStart && oldStop) {
                 let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
                 if (durMins < 0) durMins += 1440
-                nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+                nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
                 const nParsed = parseScheduleTime(nextStartTime)
                 if (nParsed) {
                   const nDate = getCairoTargetDate(nParsed, now)
@@ -490,7 +490,15 @@ function durToActualStop(schedStop: string, startDate: Date): string {
   return `${monthStr}-${dayStr} ${hourStr}:${minuteStr}`
 }
 
-function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, hourly?: boolean): string {
+function calculateNextRun(
+  schedStart: string,
+  daily: boolean,
+  weekly: boolean,
+  hourly?: boolean,
+  repeat30m?: boolean,
+  repeat1h?: boolean,
+  repeat2h?: boolean
+): string {
   if (!schedStart) return ''
   const now = new Date()
   try {
@@ -498,15 +506,20 @@ function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, h
     if (!parsed) return ''
     const { month, day, hour, minute } = parsed
 
-    if (hourly) {
+    let intervalMins = 0
+    if (hourly) intervalMins = 20
+    else if (repeat30m) intervalMins = 30
+    else if (repeat1h) intervalMins = 60
+    else if (repeat2h) intervalMins = 120
+
+    if (intervalMins > 0) {
       const cairoNow = getCairoNowFields(now)
-      const baseMinute = minute % 20
-      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, month - 1, day, hour, minute, 0)
       
-      while (now >= nextRun) {
-        const nextDate = new Date(nextRun.getTime() + 20 * 60 * 1000)
-        const nextFields = getCairoNowFields(nextDate)
-        nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
+      if (now >= nextRun) {
+        const diffMs = now.getTime() - nextRun.getTime()
+        const intervalsNeeded = Math.floor(diffMs / (intervalMins * 60000)) + 1
+        nextRun = new Date(nextRun.getTime() + intervalsNeeded * intervalMins * 60000)
       }
       
       const finalFields = getCairoNowFields(nextRun)
@@ -690,6 +703,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         { daily: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
         { weekly: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
         { hourly: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
+        { repeat30m: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
+        { repeat1h: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
+        { repeat2h: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
         // Catch-all: streams that should be running (were not manually stopped)
         {
           manuallyStopped: false,
@@ -717,7 +733,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       activeSwapVideos.delete(slot.slotIndex)
 
       // ── Reschedule finished/stopped recurring slots ──
-      const isRecurring = slot.daily || slot.weekly || slot.hourly
+      const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
       if (!slot.isScheduled && isRecurring && slot.schedStart) {
         const parsedStart = parseScheduleTime(slot.schedStart)
         let shouldReschedule = !slot.manuallyStopped
@@ -737,7 +753,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           if (oldStart && oldStop) {
             let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
             if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
             const nParsed = parseScheduleTime(nextStartTime)
             if (nParsed) {
               const nDate = getCairoTargetDate(nParsed, now)
@@ -813,7 +829,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
       // Too many crashes → mark permanently failed or reschedule if recurring
       if (state.crashCount >= MAX_CRASH_COUNT) {
-        const isRecurring = slot.daily || slot.weekly || slot.hourly
+        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
         if (isRecurring) {
           logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Rescheduling for the next occurrence.`)
           
@@ -824,7 +840,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           if (oldStart && oldStop) {
             let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
             if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
             const nParsed = parseScheduleTime(nextStartTime)
             if (nParsed) {
               const nDate = getCairoTargetDate(nParsed, now)
@@ -908,13 +924,13 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         // Recalculate next start/stop for daily/weekly/hourly slots
         let nextStartTime = slot.schedStart || ''
         let nextStopTime = slot.schedStop || ''
-        if (slot.daily || slot.weekly || slot.hourly) {
+        if (slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h) {
           const oldStart = parseScheduleTime(slot.schedStart)
           const oldStop = parseScheduleTime(slot.schedStop)
           if (oldStart && oldStop) {
             let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
             if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
             const nParsed = parseScheduleTime(nextStartTime)
             if (nParsed) {
               const nDate = getCairoTargetDate(nParsed, now)
@@ -925,8 +941,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           }
         }
 
-        const newStatus = slot.daily || slot.weekly || slot.hourly ? 'Scheduled' : 'Stopped'
-        const isRecurring = slot.daily || slot.weekly || slot.hourly
+        const newStatus = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h ? 'Scheduled' : 'Stopped'
+        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
         const claimed = await db.streamSlot.updateMany({
           where: { slotIndex: slot.slotIndex, isRunning: true },
           data: {
@@ -1091,13 +1107,13 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       // Recalculate next start/stop for daily/weekly/hourly slots
       let nextStartTime = slot.schedStart || ''
       let nextStopTime = slot.schedStop || ''
-      if (slot.daily || slot.weekly || slot.hourly) {
+      if (slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h) {
         const oldStart = parseScheduleTime(slot.schedStart)
         const oldStop = parseScheduleTime(slot.schedStop)
         if (oldStart && oldStop) {
           let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
           if (durMins < 0) durMins += 1440
-          nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+          nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
           const nParsed = parseScheduleTime(nextStartTime)
           if (nParsed) {
             const nDate = getCairoTargetDate(nParsed, now)
@@ -1108,8 +1124,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         }
       }
 
-      const newStatus = slot.daily || slot.weekly || slot.hourly ? 'Scheduled' : 'Stopped'
-      const isRecurring = slot.daily || slot.weekly || slot.hourly
+      const newStatus = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h ? 'Scheduled' : 'Stopped'
+      const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
       const claimed = await db.streamSlot.updateMany({
         where: { slotIndex: slot.slotIndex, isRunning: true },
         data: {
@@ -1133,7 +1149,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       const token = Math.random().toString(36).substring(7)
       lastActionTokens.set(slot.slotIndex, token)
       verifyStreamStatusAfterDelay(slot.slotIndex, 'stop', token)
-      const stopReason = `schedStop=${slot.schedStop}, daily=${slot.daily}, weekly=${slot.weekly}, hourly=${slot.hourly}`
+      const stopReason = `schedStop=${slot.schedStop}, daily=${slot.daily}, weekly=${slot.weekly}, hourly=${slot.hourly}, repeat30m=${slot.repeat30m}, repeat1h=${slot.repeat1h}, repeat2h=${slot.repeat2h}`
       logs.push(`Slot ${slot.slotIndex + 1}: Auto-stopped (${stopReason}) → nextStart=${nextStartTime}`)
       continue // just stopped — don't also queue for start this tick
     }
@@ -1178,7 +1194,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Recovery start bypassed because backoff is active (${waitSec}s remaining)`)
       } else {
         let shouldRun = false;
-        if (!slot.daily && !slot.weekly && !slot.hourly && !slot.schedStart) {
+        if (!slot.daily && !slot.weekly && !slot.hourly && !slot.repeat30m && !slot.repeat1h && !slot.repeat2h && !slot.schedStart) {
           // It's a completely manual 24/7 stream. If manuallyStopped is false, it MUST run!
           shouldRun = true;
         } else if (slot.schedStart && slot.isScheduled) {
@@ -1332,7 +1348,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
             state.crashCount++
             
-            const isRecurring = slot.daily || slot.weekly || slot.hourly
+            const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
             if (state.crashCount >= MAX_CRASH_COUNT) {
               recoveryStates.delete(stateKey)
               
@@ -1344,7 +1360,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
                 if (oldStart && oldStop) {
                   let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
                   if (durMins < 0) durMins += 1440
-                  nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+                  nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
                   const nParsed = parseScheduleTime(nextStartTime)
                   if (nParsed) {
                     const nDate = getCairoTargetDate(nParsed, now)
@@ -1436,7 +1452,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
         state.crashCount++
         
-        const isRecurring = slot.daily || slot.weekly || slot.hourly
+        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
         if (state.crashCount >= MAX_CRASH_COUNT) {
           recoveryStates.delete(stateKey)
           
@@ -1448,7 +1464,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             if (oldStart && oldStop) {
               let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
               if (durMins < 0) durMins += 1440
-              nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly)
+              nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h)
               const nParsed = parseScheduleTime(nextStartTime)
               if (nParsed) {
                 const nDate = getCairoTargetDate(nParsed, now)

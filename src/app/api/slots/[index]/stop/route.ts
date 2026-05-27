@@ -47,7 +47,7 @@ export async function POST(
       console.error('Failed to connect to stream manager:', error)
     }
 
-    if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+    if (slot.isRunning && slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
       try {
         const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
         await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)

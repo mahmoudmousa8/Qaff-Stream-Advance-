@@ -51,6 +51,9 @@ interface StreamSlot {
   daily: boolean
   weekly: boolean
   hourly: boolean
+  repeat30m?: boolean
+  repeat1h?: boolean
+  repeat2h?: boolean
   isScheduled: boolean
   nextRunTime: string
   status: string
@@ -215,7 +218,7 @@ function buildStopByDuration(schedStart: string, durH: number, durM: number): st
 function getDuration(schedStart: string, schedStop: string): { h: number; m: number } {
   if (!schedStop) return { h: -1, m: -1 }
   
-  if (!schedStart && schedStop.startsWith('DUR ')) {
+  if (schedStop.startsWith('DUR ')) {
     const [hStr, mStr] = schedStop.replace('DUR ', '').split(':')
     return { h: parseInt(hStr || '0'), m: parseInt(mStr || '0') }
   }
@@ -488,7 +491,7 @@ export default function Home() {
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
   const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
+  const [geminiModel, setGeminiModel] = useState('models/gemma-4-31b-it')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model' | 'function'; text?: string; parts?: any[] }[]>([])
 
   // YouTube stream keys state (for dropdown in settings dialog)
@@ -846,7 +849,7 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const savedKey = localStorage.getItem('qaff_gemini_api_key') || ''
       setGeminiApiKey(savedKey)
-      const savedModel = localStorage.getItem('qaff_gemini_model') || 'gemini-2.5-flash'
+      const savedModel = localStorage.getItem('qaff_gemini_model') || 'models/gemma-4-31b-it'
       setGeminiModel(savedModel)
     }
   }, [])
@@ -1100,6 +1103,13 @@ export default function Home() {
     updateSlot(index, updates)
   }
 
+  const handleSlotMultipleChange = (index: number, updates: Partial<StreamSlot>) => {
+    setSlots(prev => prev.map(slot =>
+      slot.slotIndex === index ? { ...slot, ...updates } : slot
+    ))
+    updateSlot(index, updates)
+  }
+
 
   const handleOutputTypeChange = (slotIndex: number, newType: string) => {
     // When switching to YouTube/Facebook, set the fixed RTMP base
@@ -1239,7 +1249,7 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
-  const handleClosest20Schedule = (index: number) => {
+    const handleClosest20Schedule = (index: number) => {
     const now = new Date()
     const target = new Date(now)
     const minutes = now.getMinutes()
@@ -1257,10 +1267,20 @@ export default function Home() {
 
     target.setHours(targetHour, targetMin, 0, 0)
 
-    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
-    const stopStr = buildStopByDuration(startStr, 0, 13)  // 13 minutes duration
-    handleSlotChange(index, 'schedStart', startStr)
-    handleSlotChange(index, 'schedStop', stopStr)
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":" + String(target.getMinutes()).padStart(2,'0')
+    const stopStr = "DUR 00:13"  // 13 minutes duration
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: true,
+      daily: false,
+      weekly: false,
+      repeat30m: false,
+      repeat1h: false,
+      repeat2h: false,
+      isScheduled: true,
+      nextRunTime: ''
+    })
   }
 
   const handleClosest30Schedule = (index: number) => {
@@ -1279,10 +1299,20 @@ export default function Home() {
 
     target.setHours(targetHour, targetMin, 0, 0)
 
-    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
-    const stopStr = buildStopByDuration(startStr, 0, 24)  // 24 minutes duration
-    handleSlotChange(index, 'schedStart', startStr)
-    handleSlotChange(index, 'schedStop', stopStr)
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":" + String(target.getMinutes()).padStart(2,'0')
+    const stopStr = "DUR 00:24"  // 24 minutes duration
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: false,
+      daily: false,
+      weekly: false,
+      repeat30m: true,
+      repeat1h: false,
+      repeat2h: false,
+      isScheduled: true,
+      nextRunTime: ''
+    })
   }
 
   const handleClosestHourSchedule = (index: number) => {
@@ -1293,10 +1323,20 @@ export default function Home() {
 
     target.setHours(targetHour, targetMin, 0, 0)
 
-    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
-    const stopStr = buildStopByDuration(startStr, 0, 50)  // 50 minutes duration
-    handleSlotChange(index, 'schedStart', startStr)
-    handleSlotChange(index, 'schedStop', stopStr)
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":00"
+    const stopStr = "DUR 00:50"  // 50 minutes duration
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: false,
+      daily: false,
+      weekly: false,
+      repeat30m: false,
+      repeat1h: true,
+      repeat2h: false,
+      isScheduled: true,
+      nextRunTime: ''
+    })
   }
 
   const handleClosest2HourSchedule = (index: number) => {
@@ -1308,10 +1348,20 @@ export default function Home() {
 
     target.setHours(targetHour, targetMin, 0, 0)
 
-    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
-    const stopStr = buildStopByDuration(startStr, 1, 50)  // 1 hour 50 minutes duration (110 minutes)
-    handleSlotChange(index, 'schedStart', startStr)
-    handleSlotChange(index, 'schedStop', stopStr)
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":00"
+    const stopStr = "DUR 01:50"  // 1 hour 50 minutes duration (110 minutes)
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: false,
+      daily: false,
+      weekly: false,
+      repeat30m: false,
+      repeat1h: false,
+      repeat2h: true,
+      isScheduled: true,
+      nextRunTime: ''
+    })
   }
 
   const handleClientAction = (action: { name: string; target: string }) => {
@@ -1617,8 +1667,8 @@ export default function Home() {
               </Badge>
             )}
 
-          <div className="flex flex-col items-center justify-center gap-3 w-full mt-3">
-            {/* Top Bar 1: Bulk Actions */}
+          <div className="flex flex-col items-center justify-center gap-2.5 w-full mt-3">
+            {/* Top Bar Row 1: Controls */}
             <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
               <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
                 onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
@@ -1636,6 +1686,22 @@ export default function Home() {
                 onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
                 <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}
               </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
+                <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-cyan-600 dark:text-cyan-400 font-semibold"
+                onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
+                <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات للمسارات' : 'Assign Channels to Slots'}
+              </Button>
+            </div>
+
+            {/* Top Bar Row 2: Schedules & Repeats */}
+            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
                 onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
                 <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
@@ -1653,20 +1719,24 @@ export default function Home() {
                 <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
-                onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
-                <Sun className="w-3 h-3 mr-0.5" />{t('hourlyAll')}
+                onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للكل؟' : 'Toggle 20-min repeat for all slots?')}>
+                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 دقيقة للكل' : '20m Repeat All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400 font-semibold"
+                onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 دقيقة للكل؟' : 'Toggle 30-min repeat for all slots?')}>
+                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 دقيقة للكل' : '30m Repeat All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
+                onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للكل؟' : 'Toggle 1-hour repeat for all slots?')}>
+                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعة للكل' : '1h Repeat All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-purple-600 dark:text-purple-400 font-semibold"
+                onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')}>
+                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعتين للكل' : '2h Repeat All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
                 onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
                 <Sun className="w-3 h-3 mr-0.5" />{t('dailyAll')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2"
-                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-cyan-600 dark:text-cyan-400 font-semibold"
-                onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
-                <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات للمسارات' : 'Assign Channels to Slots'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
                 onClick={() => {
@@ -1674,7 +1744,7 @@ export default function Home() {
                   setBulkTitleDescOpen(true)
                 }}
                 title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
-                <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Description for All'}
+                <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عنوان ووصف للكل' : 'Title & Desc All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
                 onClick={() => {
@@ -1682,23 +1752,23 @@ export default function Home() {
                   setBulkRandomTitleDescOpen(true)
                 }}
                 title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية للكل' : 'Random Title/Desc All'}
+                <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية' : 'Random All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-violet-600 dark:text-violet-400 font-semibold"
                 onClick={() => { setTargetSlotsForAction(undefined); setBulkThumbnailSelectorOpen(true); }} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
-                <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف/مجلد للكل' : 'Thumbnail Folder All'}
+                <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف للكل' : 'Thumbnail All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
                 onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف للكل' : 'Clear Thumbnail'}
+                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف' : 'Clear Cover'}
               </Button>
-               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
                 onClick={() => { setTargetSlotsForAction(undefined); setBulkSwapSelectorOpen(true); }} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
-                <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مجلد تبديل للكل' : 'Swap Folder All'}
+                <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تبديل للكل' : 'Swap All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
                 onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap'}
+                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
               </Button>
             </div>
 
@@ -2181,6 +2251,7 @@ export default function Home() {
                       const rtmpBase = RTMP_BASES[outputType] || ''
                       const finalRtmpUrl = getFinalRtmpUrl(slot)
                       const isLocked = slot.isRunning || slot.status !== 'Stopped'
+                      const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
 
                       return (
                         <tr key={slot.id} className="hover:bg-orange-500/15 transition-colors border-b border-border/50">
@@ -2355,16 +2426,37 @@ export default function Home() {
                                 <div className="flex items-center justify-center w-[18px] h-[18px] bg-red-500/15 text-red-500 rounded-[4px] shrink-0 border border-red-500/20">
                                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
                                 </div>
-                                <input
-                                  type="text"
+                                <select
                                   disabled={isLocked}
-                                  value={slot.schedStop || ''}
-                                  placeholder="00-00 00:00"
-                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStop', e.target.value)}
-                                  className={`w-[85px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStop ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                  dir="ltr"
-                                />
-                                <DateTimePicker disabled={isLocked} value={slot.schedStop || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStop', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
+                                  value={durH >= 0 ? durH : 0}
+                                  onChange={(e) => {
+                                    const newH = parseInt(e.target.value)
+                                    const currentM = durM >= 0 ? durM : 0
+                                    const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
+                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                  }}
+                                  className={`bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {Array.from({ length: 24 }).map((_, i) => (
+                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'س' : 'h'}</option>
+                                  ))}
+                                </select>
+                                <span className="text-[10px] text-muted-foreground">:</span>
+                                <select
+                                  disabled={isLocked}
+                                  value={durM >= 0 ? durM : 0}
+                                  onChange={(e) => {
+                                    const newM = parseInt(e.target.value)
+                                    const currentH = durH >= 0 ? durH : 0
+                                    const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
+                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                  }}
+                                  className={`bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {Array.from({ length: 60 }).map((_, i) => (
+                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'د' : 'm'}</option>
+                                  ))}
+                                </select>
                                 
                                 {/* Reset Button */}
                                 <button
@@ -2423,40 +2515,97 @@ export default function Home() {
                                 </button>
                               </div>
 
-                              {/* Hourly / Daily / Weekly */}
-                              <div className={`w-[215px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'hourly', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'daily', false)
-                                      handleSlotChange(slot.slotIndex, 'weekly', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
-                                  <label htmlFor={`hourly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                              {/* Recurrence Checkboxes */}
+                              <div className={`flex flex-col gap-1 bg-muted/20 px-2 py-1 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                                {/* Row 1 */}
+                                <div className="flex justify-center items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: !!c,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: !!c,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: !!c,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`hourly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'daily', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'hourly', false)
-                                      handleSlotChange(slot.slotIndex, 'weekly', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
-                                  <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'weekly', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'hourly', false)
-                                      handleSlotChange(slot.slotIndex, 'daily', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
-                                  <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                {/* Row 2 */}
+                                <div className="flex justify-center items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: !!c,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`repeat30m-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`repeat30m-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: !!c,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`repeat1h-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`repeat1h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: !!c,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`repeat2h-${slot.slotIndex}`} className="w-3 h-3" />
+                                    <label htmlFor={`repeat2h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                  </div>
                                 </div>
                               </div>
 
@@ -2829,18 +2978,37 @@ export default function Home() {
                                 <div className="w-4 h-4 bg-red-500/15 text-red-500 rounded flex items-center justify-center shrink-0 border border-red-500/20">
                                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
                                 </div>
-                                <input
-                                  type="text"
+                                <select
                                   disabled={isLocked}
-                                  value={slot.schedStop || ''}
-                                  placeholder="00-00 00:00"
-                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStop', e.target.value)}
-                                  className={`w-[80px] bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${
-                                    slot.schedStop ? 'text-foreground/80' : 'text-muted-foreground/50'
-                                  } ${isLocked ? 'opacity-50' : ''}`}
-                                  dir="ltr"
-                                />
-                                <DateTimePicker disabled={isLocked} value={slot.schedStop || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStop', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`} />
+                                  value={durH >= 0 ? durH : 0}
+                                  onChange={(e) => {
+                                    const newH = parseInt(e.target.value)
+                                    const currentM = durM >= 0 ? durM : 0
+                                    const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
+                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                  }}
+                                  className={`bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {Array.from({ length: 24 }).map((_, i) => (
+                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'س' : 'h'}</option>
+                                  ))}
+                                </select>
+                                <span className="text-xs text-muted-foreground">:</span>
+                                <select
+                                  disabled={isLocked}
+                                  value={durM >= 0 ? durM : 0}
+                                  onChange={(e) => {
+                                    const newM = parseInt(e.target.value)
+                                    const currentH = durH >= 0 ? durH : 0
+                                    const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
+                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                  }}
+                                  className={`bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  {Array.from({ length: 60 }).map((_, i) => (
+                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'د' : 'm'}</option>
+                                  ))}
+                                </select>
                               </div>
 
                               {/* Closest quick scheduling buttons */}
@@ -2883,40 +3051,97 @@ export default function Home() {
                                 </button>
                               </div>
 
-                              {/* Hourly / Daily / Weekly */}
-                              <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'hourly', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'daily', false)
-                                      handleSlotChange(slot.slotIndex, 'weekly', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                  <label htmlFor={`m-hourly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                              {/* Recurrence Checkboxes */}
+                              <div className={`flex flex-col gap-1 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
+                                {/* Row 1 */}
+                                <div className="flex items-center gap-2.5">
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: !!c,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: !!c,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: !!c,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-hourly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'daily', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'hourly', false)
-                                      handleSlotChange(slot.slotIndex, 'weekly', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                  <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                    handleSlotChange(slot.slotIndex, 'weekly', !!c)
-                                    if (c) {
-                                      handleSlotChange(slot.slotIndex, 'hourly', false)
-                                      handleSlotChange(slot.slotIndex, 'daily', false)
-                                    }
-                                    if (!c) handleSlotChange(slot.slotIndex, 'nextRunTime', '')
-                                  }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                  <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                {/* Row 2 */}
+                                <div className="flex items-center gap-2.5">
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: !!c,
+                                        repeat1h: false,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-repeat30m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-repeat30m-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: !!c,
+                                        repeat2h: false,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-repeat1h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-repeat1h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
+                                      handleSlotMultipleChange(slot.slotIndex, {
+                                        weekly: false,
+                                        daily: false,
+                                        hourly: false,
+                                        repeat30m: false,
+                                        repeat1h: false,
+                                        repeat2h: !!c,
+                                        nextRunTime: ''
+                                      })
+                                    }} id={`m-repeat2h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                    <label htmlFor={`m-repeat2h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                  </div>
                                 </div>
                               </div>
 
@@ -4139,6 +4364,7 @@ export default function Home() {
                 onChange={(e) => setGeminiModel(e.target.value)}
                 className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
               >
+                <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                 <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                 <option value="gemini-1.5-flash">gemini-1.5-flash</option>
@@ -5019,7 +5245,40 @@ export default function Home() {
               onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للقنوات المحددة؟' : 'Enable 20m hourly for selected slots?', undefined, selectedSlots)}
             >
               <Sun className="w-3 h-3" />
-              {locale === 'ar' ? '20 دقيقة' : '20 Mins'}
+              {locale === 'ar' ? '20 دقيقة للكل' : '20m Repeat'}
+            </Button>
+
+            {/* Repeat 30m */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 دقيقة للقنوات المحددة؟' : 'Enable 30m repeat for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? '30 دقيقة للكل' : '30m Repeat'}
+            </Button>
+
+            {/* Repeat 1h */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للقنوات المحددة؟' : 'Enable 1h repeat for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? 'ساعة للكل' : '1h Repeat'}
+            </Button>
+
+            {/* Repeat 2h */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 text-purple-600 dark:text-purple-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للقنوات المحددة؟' : 'Enable 2h repeat for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? 'ساعتين للكل' : '2h Repeat'}
             </Button>
 
             {/* Daily */}
@@ -5030,7 +5289,7 @@ export default function Home() {
               onClick={() => confirmBulkAction('dailyAll', locale === 'ar' ? 'تفعيل يومي للقنوات المحددة؟' : 'Enable daily for selected slots?', undefined, selectedSlots)}
             >
               <Sun className="w-3 h-3" />
-              {locale === 'ar' ? 'يومي' : 'Daily'}
+              {locale === 'ar' ? 'يومي للكل' : 'Daily All'}
             </Button>
 
             {/* Clear Times */}

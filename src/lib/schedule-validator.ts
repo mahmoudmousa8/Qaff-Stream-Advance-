@@ -23,7 +23,7 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   if (!baselineStop) return []
   const durationMs = baselineStop.getTime() - baselineStart.getTime()
 
-  const isRecurring = slot.daily || slot.weekly || slot.hourly
+  const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
   if (!isRecurring) {
     // One-time occurrence
     if (baselineStart.getTime() < windowEnd.getTime() && windowStart.getTime() < baselineStop.getTime()) {
@@ -37,31 +37,39 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   const startMinute = startFields.minute
   const startWeekday = startFields.weekday
 
-  if (slot.hourly) {
-    const nowFields = getCairoNowFields(windowStart)
-    const baseMinute = startMinute % 20
-    let currentHourDate = getAbsoluteDateFromCairoFields(nowFields.year, nowFields.month, nowFields.day, nowFields.hour, baseMinute, 0)
+  let intervalMins = 0
+  if (slot.hourly) intervalMins = 20
+  else if (slot.repeat30m) intervalMins = 30
+  else if (slot.repeat1h) intervalMins = 60
+  else if (slot.repeat2h) intervalMins = 120
+
+  if (intervalMins > 0) {
+    const occurrences: { start: Date, end: Date }[] = []
+    let currentOccStart = baselineStart
     
-    while (currentHourDate.getTime() < windowStart.getTime()) {
-      const nextDate = new Date(currentHourDate.getTime() + 20 * 60 * 1000)
-      const nextFields = getCairoNowFields(nextDate)
-      currentHourDate = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
+    // Fast forward to windowStart
+    if (currentOccStart.getTime() < windowStart.getTime()) {
+      const diffMs = windowStart.getTime() - currentOccStart.getTime()
+      const intervalsNeeded = Math.floor(diffMs / (intervalMins * 60000))
+      currentOccStart = new Date(currentOccStart.getTime() + intervalsNeeded * intervalMins * 60000)
     }
     
-    const occurrences: { start: Date, end: Date }[] = []
-    let hourLoopCount = 0
-    while (currentHourDate.getTime() <= windowEnd.getTime() && hourLoopCount < 2000) {
-      hourLoopCount++
-      const occStart = currentHourDate
+    // Rewind slightly if we fast-forwarded past windowStart just to be safe not to miss any overlap
+    while (currentOccStart.getTime() > windowStart.getTime() && currentOccStart.getTime() - intervalMins * 60000 >= baselineStart.getTime()) {
+      currentOccStart = new Date(currentOccStart.getTime() - intervalMins * 60000)
+    }
+
+    let loopCount = 0
+    while (currentOccStart.getTime() <= windowEnd.getTime() && loopCount < 2000) {
+      loopCount++
+      const occStart = currentOccStart
       const occEnd = new Date(occStart.getTime() + durationMs)
       
       if (occStart.getTime() < windowEnd.getTime() && windowStart.getTime() < occEnd.getTime()) {
         occurrences.push({ start: occStart, end: occEnd })
       }
       
-      const nextDate = new Date(currentHourDate.getTime() + 20 * 60 * 1000)
-      const nextFields = getCairoNowFields(nextDate)
-      currentHourDate = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
+      currentOccStart = new Date(currentOccStart.getTime() + intervalMins * 60000)
     }
     return occurrences
   }
@@ -181,8 +189,8 @@ export function areSlotsOverlapping(slotA: any, slotB: any, now: Date = new Date
 
   if (!stopA || !stopB) return false
 
-  const isRecurringA = slotA.daily || slotA.weekly || slotA.hourly
-  const isRecurringB = slotB.daily || slotB.weekly || slotB.hourly
+  const isRecurringA = slotA.daily || slotA.weekly || slotA.hourly || slotA.repeat30m || slotA.repeat1h || slotA.repeat2h
+  const isRecurringB = slotB.daily || slotB.weekly || slotB.hourly || slotB.repeat30m || slotB.repeat1h || slotB.repeat2h
 
   if (isRecurringA && isRecurringB) {
     // Both are recurring. Check over an 8-day window starting now.

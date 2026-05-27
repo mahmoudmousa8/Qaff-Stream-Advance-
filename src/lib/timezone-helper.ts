@@ -165,7 +165,15 @@ export function parseScheduleTime(sched: string): { month: number; day: number; 
   }
 }
 
-export function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, hourly?: boolean): string {
+export function calculateNextRun(
+  schedStart: string,
+  daily: boolean,
+  weekly: boolean,
+  hourly?: boolean,
+  repeat30m?: boolean,
+  repeat1h?: boolean,
+  repeat2h?: boolean
+): string {
   if (!schedStart) return ''
   const now = new Date()
   try {
@@ -173,15 +181,20 @@ export function calculateNextRun(schedStart: string, daily: boolean, weekly: boo
     if (!parsed) return ''
     const { month, day, hour, minute } = parsed
 
-    if (hourly) {
+    let intervalMins = 0
+    if (hourly) intervalMins = 20
+    else if (repeat30m) intervalMins = 30
+    else if (repeat1h) intervalMins = 60
+    else if (repeat2h) intervalMins = 120
+
+    if (intervalMins > 0) {
       const cairoNow = getCairoNowFields(now)
-      const baseMinute = minute % 20
-      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
+      let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, month - 1, day, hour, minute, 0)
       
-      while (now >= nextRun) {
-        const nextDate = new Date(nextRun.getTime() + 20 * 60 * 1000)
-        const nextFields = getCairoNowFields(nextDate)
-        nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
+      if (now >= nextRun) {
+        const diffMs = now.getTime() - nextRun.getTime()
+        const intervalsNeeded = Math.floor(diffMs / (intervalMins * 60000)) + 1
+        nextRun = new Date(nextRun.getTime() + intervalsNeeded * intervalMins * 60000)
       }
       
       const finalFields = getCairoNowFields(nextRun)

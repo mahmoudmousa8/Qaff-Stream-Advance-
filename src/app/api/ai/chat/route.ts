@@ -154,6 +154,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { apiKey, model = 'gemini-2.5-flash', messages } = await request.json()
+    const cleanModel = model.startsWith('models/') ? model.replace('models/', '') : model
 
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
       return NextResponse.json({ error: 'Gemini API Key is required' }, { status: 400 })
@@ -286,7 +287,7 @@ Ensure that the JSON is valid and easy for the system to parse.`
 
     while (loopCount < maxLoops) {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
