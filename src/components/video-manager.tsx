@@ -976,6 +976,20 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                 <Badge variant="secondary" className="text-xs shrink-0">
                   {folder.videoCount} {t('items')}
                 </Badge>
+                {mode === 'select' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 border border-green-500/20 text-green-600 hover:bg-green-600 hover:text-white shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onVideoSelect && onVideoSelect(folder.path)
+                    }}
+                    title={getLocale() === 'en' ? 'Select this folder' : 'اختيار هذا المجلد'}
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                  </Button>
+                )}
                 {mode === 'manage' && (
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <a href={`/api/videos/zip?paths=${encodeURIComponent(folder.path)}&name=${encodeURIComponent(folder.name + '.zip')}`} onClick={e => e.stopPropagation()} download={`${folder.name}.zip`} target="_blank" rel="noopener noreferrer">

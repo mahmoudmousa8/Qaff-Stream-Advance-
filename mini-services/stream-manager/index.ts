@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'child_process'
 import { createServer } from 'http'
-import { existsSync, mkdirSync } from 'fs'
+import { existsSync, mkdirSync, statSync } from 'fs'
 import { join, resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
@@ -351,9 +351,20 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
   }
 
   const isUrl = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://') || filePath.startsWith('http://') || filePath.startsWith('https://') || filePath.startsWith('rtsp://')
-  if (!isUrl && !existsSync(filePath)) {
-    updateDbSlotStatus(slotIndex, false, 'Failed')
-    return { success: false, message: `File not found: ${filePath}` }
+  if (!isUrl) {
+    if (!existsSync(filePath)) {
+      updateDbSlotStatus(slotIndex, false, 'Failed')
+      return { success: false, message: `File not found: ${filePath}` }
+    }
+    try {
+      if (statSync(filePath).isDirectory()) {
+        updateDbSlotStatus(slotIndex, false, 'Failed')
+        return { success: false, message: `Path is a directory, not a video file: ${filePath}` }
+      }
+    } catch (err: any) {
+      updateDbSlotStatus(slotIndex, false, 'Failed')
+      return { success: false, message: `Error checking file path: ${err.message}` }
+    }
   }
 
   const restartCount = existing ? existing.restartCount : 0

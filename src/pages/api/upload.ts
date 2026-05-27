@@ -53,9 +53,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     
     let maxStorageBytes = 10 * 1024 * 1024 * 1024 // default but will be overridden if no MAX_STORAGE_GB
+    let maxGB = 10
 
     if (process.env.MAX_STORAGE_GB) {
-        const maxGB = parseInt(process.env.MAX_STORAGE_GB, 10)
+        maxGB = parseInt(process.env.MAX_STORAGE_GB, 10)
         maxStorageBytes = maxGB * 1024 * 1024 * 1024
         
         if (currentStorageUsed >= maxStorageBytes) {

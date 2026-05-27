@@ -18,16 +18,18 @@ export async function GET(request: NextRequest) {
   const skip = (page - 1) * limit
 
   try {
-    // Ensure at least 100 slots exist, or enough to cover the maximum slotsLimit assigned to any user
+    // Ensure slots exist up to the limit of slots the current request is trying to query,
+    // or up to the user's limit (whichever is smaller), but not exceeding the overall maxUserLimit.
     const users = await db.user.findMany({
       select: { slotsLimit: true }
     })
     const maxUserLimit = Math.max(100, ...users.map(u => u.slotsLimit || 0))
+    const maxNeededIndex = Math.min(skip + limit, maxUserLimit)
     const existingCount = await db.streamSlot.count()
 
-    if (existingCount < maxUserLimit) {
+    if (existingCount < maxNeededIndex) {
       const slotsToCreate: any[] = []
-      for (let i = existingCount; i < maxUserLimit; i++) {
+      for (let i = existingCount; i < maxNeededIndex; i++) {
         slotsToCreate.push({
           slotIndex: i,
           channelName: `Slot ${i + 1}`,

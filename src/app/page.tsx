@@ -15,7 +15,7 @@ import {
   Sun, Moon, Calendar, AlertCircle, Activity,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
   Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
-  Shuffle, Plus, List, BookOpen, Dices, Link2
+  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -487,6 +487,9 @@ export default function Home() {
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
+  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash')
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model' | 'function'; text?: string; parts?: any[] }[]>([])
 
   // YouTube stream keys state (for dropdown in settings dialog)
   const [ytStreamKeys, setYtStreamKeys] = useState<{ id: string; title: string; streamKey: string; rtmpServer: string; status: string }[]>([])
@@ -496,6 +499,11 @@ export default function Home() {
   // Slot-level stream keys for the main table row dropdowns
   const [slotStreamKeys, setSlotStreamKeys] = useState<Record<number, { id: string; title: string; streamKey: string; rtmpServer: string }[]>>({})
   const [slotStreamKeysLoading, setSlotStreamKeysLoading] = useState<Record<number, boolean>>({})
+
+  // AI assistant chat state
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
+  const [aiInputValue, setAiInputValue] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
 
   // YouTube channels manager state
   const [ytManagerOpen, setYtManagerOpen] = useState(false)
@@ -832,6 +840,16 @@ export default function Home() {
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [locale])
+
+  // Load API key on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedKey = localStorage.getItem('qaff_gemini_api_key') || ''
+      setGeminiApiKey(savedKey)
+      const savedModel = localStorage.getItem('qaff_gemini_model') || 'gemini-2.5-flash'
+      setGeminiModel(savedModel)
+    }
+  }, [])
 
   // Session validation
   useEffect(() => {
@@ -1245,12 +1263,145 @@ export default function Home() {
     handleSlotChange(index, 'schedStop', stopStr)
   }
 
+  const handleClosest30Schedule = (index: number) => {
+    const now = new Date()
+    const target = new Date(now)
+    const minutes = now.getMinutes()
+    let targetMin = 0
+    let targetHour = now.getHours()
+
+    if (minutes < 30) {
+      targetMin = 30
+    } else {
+      targetMin = 0
+      targetHour += 1
+    }
+
+    target.setHours(targetHour, targetMin, 0, 0)
+
+    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:${String(target.getMinutes()).padStart(2,'0')}`
+    const stopStr = buildStopByDuration(startStr, 0, 24)  // 24 minutes duration
+    handleSlotChange(index, 'schedStart', startStr)
+    handleSlotChange(index, 'schedStop', stopStr)
+  }
+
+  const handleClosestHourSchedule = (index: number) => {
+    const now = new Date()
+    const target = new Date(now)
+    let targetHour = now.getHours() + 1
+    let targetMin = 0
+
+    target.setHours(targetHour, targetMin, 0, 0)
+
+    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
+    const stopStr = buildStopByDuration(startStr, 0, 50)  // 50 minutes duration
+    handleSlotChange(index, 'schedStart', startStr)
+    handleSlotChange(index, 'schedStop', stopStr)
+  }
+
+  const handleClosest2HourSchedule = (index: number) => {
+    const now = new Date()
+    const target = new Date(now)
+    const currentHour = now.getHours()
+    let targetHour = currentHour + (2 - (currentHour % 2))
+    let targetMin = 0
+
+    target.setHours(targetHour, targetMin, 0, 0)
+
+    const startStr = `${String(target.getMonth()+1).padStart(2,'0')}-${String(target.getDate()).padStart(2,'0')} ${String(target.getHours()).padStart(2,'0')}:00`
+    const stopStr = buildStopByDuration(startStr, 1, 50)  // 1 hour 50 minutes duration (110 minutes)
+    handleSlotChange(index, 'schedStart', startStr)
+    handleSlotChange(index, 'schedStop', stopStr)
+  }
+
+  const handleClientAction = (action: { name: string; target: string }) => {
+    console.log('[AI Client Action] Executing:', action)
+    if (action.name === 'navigateUI') {
+      if (action.target === 'channels') {
+        setYtManagerOpen(true)
+      } else if (action.target === 'logs') {
+        router.push('/logs')
+      } else if (action.target === 'add_channel') {
+        window.open('/api/auth/youtube/redirect', '_blank')
+      } else if (action.target === 'slots') {
+        fetchSlots()
+      }
+    }
+    fetchSlots()
+    fetchStats()
+  }
+
+  const handleSendAiMessage = async (customPrompt?: string) => {
+    const promptToSend = customPrompt || aiInputValue
+    if (!promptToSend.trim()) return
+
+    const key = geminiApiKey.trim()
+    if (!key) {
+      alert(locale === 'ar' ? 'يرجى إدخال مفتاح API الخاص بـ Gemini أولاً.' : 'Please enter Gemini API key first.')
+      return
+    }
+
+    const newUserMsg: typeof chatMessages[number] = { role: 'user', text: promptToSend, parts: [{ text: promptToSend }] }
+    const updatedHistory = [...chatMessages, newUserMsg]
+    setChatMessages(updatedHistory)
+    if (!customPrompt) setAiInputValue('')
+    setAiLoading(true)
+
+    try {
+      const formattedContents = updatedHistory.map(msg => ({
+        role: msg.role,
+        parts: msg.parts || [{ text: msg.text || '' }]
+      }))
+
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: key, model: geminiModel, messages: formattedContents })
+      })
+
+      const data = await res.json()
+      if (data.error) {
+        setChatMessages(prev => [...prev, { role: 'model', text: `Error: ${data.error}` }])
+      } else {
+        if (data.history) {
+          const newHistory = data.history.map((msg: any) => {
+            const text = msg.parts?.find((p: any) => p.text)?.text || '';
+            return {
+              role: msg.role,
+              text,
+              parts: msg.parts
+            };
+          });
+          setChatMessages(newHistory);
+        } else {
+          setChatMessages(prev => [...prev, { role: 'model', text: data.reply }])
+        }
+
+        if (data.clientAction) {
+          handleClientAction(data.clientAction)
+        }
+      }
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { role: 'model', text: `Failed to connect: ${err.message}` }])
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  const handleSaveGeminiKey = (key: string, model: string) => {
+    localStorage.setItem('qaff_gemini_api_key', key)
+    localStorage.setItem('qaff_gemini_model', model)
+    setGeminiApiKey(key)
+    setGeminiModel(model)
+    alert(locale === 'ar' ? 'تم حفظ الإعدادات بنجاح!' : 'Settings saved successfully!')
+  }
+
   const bulkAction = async (action: string, ampm?: 'AM' | 'PM', payload?: any, targetSlotIndexes?: number[]) => {
     try {
       const res = await fetch('/api/slots/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ampm, slotIndexes: targetSlotIndexes, ...payload })
+        body: JSON.stringify({ action, ampm, slotIndexes: targetSlotIndexes, locale, ...payload })
       })
       const data = await res.json()
       addLog(data.message)
@@ -1481,9 +1632,25 @@ export default function Home() {
                 onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
                 <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
               </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
+                onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
+                <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}
+              </Button>
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-teal-600 dark:text-teal-400 font-semibold"
-                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'ضبط البدء والإيقاف لأقرب 20 للكل' : 'Set 20m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ضبط البدء والإيقاف لأقرب 20 للكل' : 'Set 20m All'}
+                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-600 dark:text-blue-400 font-semibold"
+                onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set all slots to nearest 30 minutes (stream 24 mins)?')} title={locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-indigo-600 dark:text-indigo-400 font-semibold"
+                onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وبث 50 دقيقة؟' : 'Set all slots to nearest hour (stream 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-purple-600 dark:text-purple-400 font-semibold"
+                onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-orange-600 dark:text-orange-400 font-semibold"
                 onClick={() => confirmBulkAction('hourlyAll', t('confirmHourlyAll'))}>
@@ -1537,6 +1704,11 @@ export default function Home() {
 
             {/* Top Bar 2: Navigation & Settings */}
             <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all text-purple-600 dark:text-purple-400 font-bold" onClick={() => setAiAssistantOpen(true)}>
+                <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-500 animate-pulse" />
+                {locale === 'ar' ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant'}
+              </Button>
+
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all" onClick={() => setVideosManagerOpen(true)}>
                 <FolderOpen className="w-3.5 h-3.5 mr-1" />
                 {t('videos')}
@@ -1769,7 +1941,7 @@ export default function Home() {
                         <input
                           type="range"
                           min="1"
-                          max="1000"
+                          max="5000"
                           value={adminClientData.slotsLimit || 10}
                           onChange={(e) => setAdminClientData(p => ({ ...p, slotsLimit: parseInt(e.target.value) }))}
                           className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
@@ -2178,78 +2350,78 @@ export default function Home() {
                           {/* Stop Schedule */}
                           <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
                             <div className="flex flex-row items-center gap-2 flex-nowrap">
-                              {/* Stop Group – Duration: 0-11h, 0-59m */}
-                              {(() => {
-                                const { h: durH, m: durM } = getDuration(slot.schedStart, slot.schedStop)
-                                const hasDur = durH >= 0 && durM >= 0
+                              {/* Stop Group */}
+                              <div className="flex gap-1.5 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
+                                <div className="flex items-center justify-center w-[18px] h-[18px] bg-red-500/15 text-red-500 rounded-[4px] shrink-0 border border-red-500/20">
+                                  <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
+                                </div>
+                                <input
+                                  type="text"
+                                  disabled={isLocked}
+                                  value={slot.schedStop || ''}
+                                  placeholder="00-00 00:00"
+                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStop', e.target.value)}
+                                  className={`w-[85px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStop ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  dir="ltr"
+                                />
+                                <DateTimePicker disabled={isLocked} value={slot.schedStop || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStop', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
+                                
+                                {/* Reset Button */}
+                                <button
+                                  type="button"
+                                  disabled={isLocked}
+                                  onClick={() => {
+                                    handleSlotChange(slot.slotIndex, 'schedStart', '')
+                                    handleSlotChange(slot.slotIndex, 'schedStop', '')
+                                  }}
+                                  className="h-6 w-6 flex items-center justify-center rounded bg-muted/50 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border transition-colors ml-1 disabled:opacity-50"
+                                  title={locale === 'ar' ? 'إعادة تعيين التواريخ' : 'Reset dates'}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
 
-                                const sc = "h-6 text-[10px] font-mono border rounded bg-background focus:outline-none cursor-pointer px-1"
-                                return (
-                                  <div className="w-[185px] flex justify-center gap-1 items-center bg-muted/40 px-2 py-1 rounded shrink-0">
-                                    <div className="flex items-center justify-center w-[18px] h-[18px] bg-red-500/15 text-red-500 rounded-[4px] shrink-0 border border-red-500/20 mr-0.5">
-                                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
-                                    </div>
-
-                                    <select
-                                      disabled={isLocked}
-                                      value={hasDur ? String(durH) : ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                        const h = parseInt(val)
-                                        const m = hasDur ? durM : 0
-                                        handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                      }}
-                                      className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                    >
-                                      <option value="">--</option>
-                                      {Array.from({length:12},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                    </select>
-
-                                    <span className="text-muted-foreground font-bold">:</span>
-
-                                    <select
-                                      disabled={isLocked}
-                                      value={hasDur ? String(durM) : ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                        const m = parseInt(val)
-                                        const h = hasDur ? durH : 0
-                                        handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                      }}
-                                      className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                    >
-                                      <option value="">--</option>
-                                      {Array.from({length:60},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                    </select>
-
-                                    {/* Reset Button */}
-                                    <button
-                                      disabled={isLocked}
-                                      onClick={() => {
-                                        handleSlotChange(slot.slotIndex, 'schedStart', '')
-                                        handleSlotChange(slot.slotIndex, 'schedStop', '')
-                                      }}
-                                      className="h-6 w-6 flex items-center justify-center rounded bg-muted/50 hover:bg-destructive/10 hover:text-destructive text-muted-foreground border transition-colors ml-1 disabled:opacity-50"
-                                      title="إعادة تعيين التواريخ"
-                                    >
-                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-3.5 h-3.5">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                )
-                              })()}
-
-                              <button
-                                disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                onClick={() => handleClosest20Schedule(slot.slotIndex)}
-                                className="h-6 px-2 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
-                                title={locale === 'ar' ? 'ضبط لأقرب 20 دقيقة وبث 13 دقيقة' : 'Set to nearest 20 mins and stream for 13 mins'}
-                              >
-                                {locale === 'ar' ? 'أقرب 20' : 'Closest 20'}
-                              </button>
+                              {/* Closest quick scheduling buttons */}
+                              <div className="flex gap-1 items-center shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest20Schedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب 20 دقيقة (مدة 13 دقيقة)' : 'Nearest 20 mins (13m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب 20' : 'Closest 20'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest30Schedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-bold bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/20 rounded text-blue-600 dark:text-blue-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب 30 دقيقة (مدة 24 دقيقة)' : 'Nearest 30 mins (24m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب 30' : 'Closest 30'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-bold bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/20 rounded text-indigo-600 dark:text-indigo-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب ساعة (مدة 50 دقيقة)' : 'Nearest hour (50m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest 1h'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-bold bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/20 rounded text-purple-600 dark:text-purple-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب ساعتين (مدة ساعة و50 دقيقة)' : 'Nearest 2 hours (1h 50m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعتين' : 'Closest 2h'}
+                                </button>
+                              </div>
 
                               {/* Hourly / Daily / Weekly */}
                               <div className={`w-[215px] flex justify-center items-center gap-2 bg-muted/20 px-2 py-0.5 rounded border border-border/50 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
@@ -2652,52 +2824,64 @@ export default function Home() {
                                 <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`} />
                               </div>
 
-                              {/* Duration selectors */}
-                              <div className="flex gap-1 items-center bg-muted/40 px-2 py-1 rounded border border-border/40">
+                              {/* Stop Group */}
+                              <div className="flex gap-1.5 items-center bg-muted/40 px-2 py-1 rounded border border-border/40 shrink-0">
                                 <div className="w-4 h-4 bg-red-500/15 text-red-500 rounded flex items-center justify-center shrink-0 border border-red-500/20">
                                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5"><rect x="5" y="5" width="14" height="14" rx="3.5" /></svg>
                                 </div>
-                                <select
+                                <input
+                                  type="text"
                                   disabled={isLocked}
-                                  value={hasDur ? String(durH) : ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value
-                                    if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                    const h = parseInt(val)
-                                    const m = hasDur ? durM : 0
-                                    handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                  }}
-                                  className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                >
-                                  <option value="">--</option>
-                                  {Array.from({length:12},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                </select>
-                                <span className="text-muted-foreground font-bold text-sm">:</span>
-                                <select
-                                  disabled={isLocked}
-                                  value={hasDur ? String(durM) : ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value
-                                    if (!val) { handleSlotChange(slot.slotIndex, 'schedStop', ''); return }
-                                    const m = parseInt(val)
-                                    const h = hasDur ? durH : 0
-                                    handleSlotChange(slot.slotIndex, 'schedStop', buildStopByDuration(slot.schedStart, h, m))
-                                  }}
-                                  className={`${sc} w-[42px] disabled:opacity-50`} dir="ltr"
-                                >
-                                  <option value="">--</option>
-                                  {Array.from({length:60},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
-                                </select>
+                                  value={slot.schedStop || ''}
+                                  placeholder="00-00 00:00"
+                                  onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStop', e.target.value)}
+                                  className={`w-[80px] bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${
+                                    slot.schedStop ? 'text-foreground/80' : 'text-muted-foreground/50'
+                                  } ${isLocked ? 'opacity-50' : ''}`}
+                                  dir="ltr"
+                                />
+                                <DateTimePicker disabled={isLocked} value={slot.schedStop || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStop', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`} />
                               </div>
 
-                              <button
-                                disabled={isLocked}
-                                onClick={() => handleClosest20Schedule(slot.slotIndex)}
-                                className="h-7 px-3 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors shrink-0 disabled:opacity-50"
-                                title={locale === 'ar' ? 'ضبط لأقرب 20 دقيقة وبث 13 دقيقة' : 'Set to nearest 20 mins and stream for 13 mins'}
-                              >
-                                {locale === 'ar' ? 'أقرب 20' : 'Closest 20'}
-                              </button>
+                              {/* Closest quick scheduling buttons */}
+                              <div className="flex gap-1 items-center shrink-0 flex-wrap">
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest20Schedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-bold bg-teal-500/10 hover:bg-teal-500/25 border border-teal-500/20 rounded text-teal-600 dark:text-teal-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب 20 دقيقة (مدة 13 دقيقة)' : 'Nearest 20 mins (13m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب 20' : 'Closest 20'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest30Schedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-bold bg-blue-500/10 hover:bg-blue-500/25 border border-blue-500/20 rounded text-blue-600 dark:text-blue-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب 30 دقيقة (مدة 24 دقيقة)' : 'Nearest 30 mins (24m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب 30' : 'Closest 30'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-bold bg-indigo-500/10 hover:bg-indigo-500/25 border border-indigo-500/20 rounded text-indigo-600 dark:text-indigo-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب ساعة (مدة 50 دقيقة)' : 'Nearest hour (50m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعة' : 'Closest 1h'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-bold bg-purple-500/10 hover:bg-purple-500/25 border border-purple-500/20 rounded text-purple-600 dark:text-purple-400 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? 'أقرب ساعتين (مدة ساعة و50 دقيقة)' : 'Nearest 2 hours (1h 50m duration)'}
+                                >
+                                  {locale === 'ar' ? 'أقرب ساعتين' : 'Closest 2h'}
+                                </button>
+                              </div>
 
                               {/* Hourly / Daily / Weekly */}
                               <div className={`flex items-center gap-2.5 bg-muted/20 px-2 py-1 rounded border border-border/40 ${isLocked ? 'opacity-50' : ''}`}>
@@ -3922,6 +4106,248 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
+      {/* ── AI Assistant (Gemini) Dialog ── */}
+      <Dialog open={aiAssistantOpen} onOpenChange={(open) => !open && setAiAssistantOpen(false)}>
+        <DialogContent className="sm:max-w-3xl w-[95vw] h-[80vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-border/80">
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <Sparkles className="w-6 h-6 text-purple-500 animate-pulse" />
+              {locale === 'ar' ? 'مساعد الذكاء الاصطناعي (Google Gemini)' : 'AI Assistant (Google Gemini)'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {locale === 'ar'
+                ? 'استعن بذكاء Gemini الاصطناعي لصياغة العناوين وتنسيق قوائم البثوث وتوليدها تلقائياً وحفظها بضغطة زر.'
+                : 'Leverage Google Gemini AI to compose video titles, generate stream descriptions, and save structured lists directly.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Gemini API Key Section */}
+          <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col md:flex-row items-center gap-3 shrink-0">
+            <label className="text-xs font-semibold text-foreground shrink-0 flex items-center gap-1">
+              🔑 {locale === 'ar' ? 'إعدادات Gemini:' : 'Gemini Settings:'}
+            </label>
+            <div className="flex flex-col sm:flex-row w-full gap-2 items-center">
+              <Input
+                type="password"
+                placeholder={locale === 'ar' ? 'مفتاح Google Gemini API' : 'Google Gemini API Key'}
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                className="h-8 text-xs font-mono flex-1 w-full"
+              />
+              <select
+                value={geminiModel}
+                onChange={(e) => setGeminiModel(e.target.value)}
+                className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
+              >
+                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+              </select>
+              <Button
+                size="sm"
+                onClick={() => handleSaveGeminiKey(geminiApiKey, geminiModel)}
+                className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold w-full sm:w-auto shrink-0"
+              >
+                {locale === 'ar' ? 'حفظ' : 'Save'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Chat Messages scroll area */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-muted/10 flex flex-col min-h-0">
+            {chatMessages.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+                <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center border border-purple-500/20 text-purple-500 animate-bounce">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div className="space-y-1.5 max-w-md">
+                  <h5 className="text-sm font-semibold text-foreground">
+                    {locale === 'ar' ? 'مرحباً بك في مساعد البث الذكي!' : 'Welcome to the Smart Broadcaster AI!'}
+                  </h5>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {locale === 'ar'
+                      ? 'يمكنك سؤالي عن صياغة عناوين إسلامية جذابة، توليد أوصاف للبث، أو كتابة قوائم عشوائية كاملة لتطبيقها على القنوات.'
+                      : 'Ask me to formulate Islamic titles, generate descriptions, or construct random title lists to apply to slots.'}
+                  </p>
+                </div>
+
+                {/* Quick Prompts */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-lg pt-4">
+                  <button
+                    onClick={() => handleSendAiMessage(locale === 'ar' ? 'اقترح لي 10 عناوين إسلامية مميزة لبث تلاوة القرآن الكريم' : 'Suggest 10 attractive Islamic titles for Quran recitation livestream')}
+                    className="p-2.5 text-xs text-left bg-card hover:bg-muted border rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    📝 {locale === 'ar' ? 'اقتراح عناوين للبث الإسلامي' : 'Suggest Quran titles'}
+                  </button>
+                  <button
+                    onClick={() => handleSendAiMessage(locale === 'ar' ? 'اقترح لي قائمة عناوين وأوصاف جاهزة للحفظ بصيغة JSON' : 'Generate a list of titles and descriptions formatted in JSON for saving')}
+                    className="p-2.5 text-xs text-left bg-card hover:bg-muted border rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    🗃️ {locale === 'ar' ? 'توليد قائمة عناوين جاهزة للحفظ' : 'Generate JSON list for saving'}
+                  </button>
+                  <button
+                    onClick={() => handleSendAiMessage(locale === 'ar' ? 'كيف يمكنني ربط وترخيص قنوات اليوتيوب في المتصفح الخاص بي؟' : 'How do I link and authorize YouTube channels using my browser?')}
+                    className="p-2.5 text-xs text-left bg-card hover:bg-muted border rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    🔗 {locale === 'ar' ? 'كيفية ربط وترخيص القنوات' : 'How to link/auth channels'}
+                  </button>
+                  <button
+                    onClick={() => handleSendAiMessage(locale === 'ar' ? 'ما هي ميزة البث المسجل فقط وميزة التبديل قبل الإيقاف؟' : 'What is recorded-only stream and pre-stop swap video feature?')}
+                    className="p-2.5 text-xs text-left bg-card hover:bg-muted border rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    ℹ️ {locale === 'ar' ? 'معرفة المزيد عن مزايا الجدولة' : 'Explain schedule features'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4 flex flex-col justify-end">
+                {chatMessages.map((msg, index) => {
+                  if (msg.role === 'function') {
+                    const funcNames = msg.parts?.map((p: any) => p.functionResponse?.name).join(', ') || 'الإجراء';
+                    let label = locale === 'ar' ? `🔧 تم تنفيذ إجراء: ${funcNames}` : `🔧 Executed action: ${funcNames}`;
+                    if (funcNames.includes('startStream')) label = locale === 'ar' ? '⚡ تم بدء تشغيل البث بنجاح' : '⚡ Stream started successfully';
+                    if (funcNames.includes('stopStream')) label = locale === 'ar' ? '🛑 تم إيقاف تشغيل البث بنجاح' : '🛑 Stream stopped successfully';
+                    if (funcNames.includes('updateSlotConfig')) label = locale === 'ar' ? '📝 تم تحديث إعدادات القناة بنجاح' : '📝 Slot configuration updated successfully';
+                    if (funcNames.includes('applyBulkAction')) label = locale === 'ar' ? '⚙️ تم تطبيق الإجراء الجماعي بنجاح' : '⚙️ Bulk action applied successfully';
+                    if (funcNames.includes('navigateUI')) label = locale === 'ar' ? '🧭 تم تغيير واجهة العرض بنجاح' : '🧭 UI view redirected successfully';
+                    
+                    return (
+                      <div key={index} className="self-center my-1 text-[10px] bg-muted/60 border border-border/40 px-3 py-1 rounded-full text-muted-foreground/80 flex items-center gap-1 font-mono shrink-0">
+                        {label}
+                      </div>
+                    );
+                  }
+
+                  if (!msg.text || msg.text.trim() === '') return null;
+
+                  const isUser = msg.role === 'user'
+                  return (
+                    <div
+                      key={index}
+                      className={`flex flex-col max-w-[85%] ${
+                        isUser ? 'self-end items-end' : 'self-start items-start'
+                      }`}
+                    >
+                      <div className="text-[10px] text-muted-foreground mb-1 px-1">
+                        {isUser ? (locale === 'ar' ? 'أنت' : 'You') : (locale === 'ar' ? 'مساعد البث' : 'Broadcaster AI')}
+                      </div>
+                      <div
+                        className={`p-3 rounded-xl text-xs leading-relaxed ${
+                          isUser
+                            ? 'bg-purple-600 text-white rounded-br-none shadow-md shadow-purple-500/20'
+                            : 'bg-card border border-border text-foreground rounded-bl-none'
+                        }`}
+                        style={{ whiteSpace: 'pre-wrap' }}
+                      >
+                        {msg.text}
+                      </div>
+
+                      {/* If the message is from model and contains JSON structured title-desc list, offer save button */}
+                      {!isUser && (() => {
+                        try {
+                          const jsonRegex = /\{[\s\S]*\}|\[[\s\S]*\]/
+                          const match = msg.text.match(jsonRegex)
+                          if (match) {
+                            const parsed = JSON.parse(match[0])
+                            const hasTitles = Array.isArray(parsed.titles) && parsed.titles.length > 0
+                            const hasDescs = Array.isArray(parsed.descriptions) && parsed.descriptions.length > 0
+                            if (hasTitles || hasDescs) {
+                              return (
+                                <div className="mt-2 flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={async () => {
+                                      const listName = prompt(locale === 'ar' ? 'أدخل اسماً لقائمة العناوين الجديدة:' : 'Enter a name for the new Title/Desc List:')
+                                      if (!listName?.trim()) return
+                                      try {
+                                        const titles = parsed.titles || [];
+                                        const descs = parsed.descriptions || [];
+                                        const maxLen = Math.max(titles.length, descs.length);
+                                         const pairs: any[] = [];
+                                        for (let i = 0; i < maxLen; i++) {
+                                          pairs.push({
+                                            id: Math.random().toString(36).substring(7),
+                                            title: titles[i] || '',
+                                            description: descs[i] || ''
+                                          });
+                                        }
+
+                                        const res = await fetch('/api/title-desc-lists', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({
+                                            name: listName.trim(),
+                                            items: JSON.stringify(pairs)
+                                          })
+                                        })
+                                        const rData = await res.json()
+                                        if (rData.success) {
+                                          alert(locale === 'ar' ? 'تم حفظ القائمة بنجاح وجلبها للوحة!' : 'List saved successfully to the dashboard!')
+                                          fetchSlots()
+                                        } else {
+                                          alert(rData.error || 'Failed to save list')
+                                        }
+                                      } catch (err: any) {
+                                        alert(`Error: ${err.message}`)
+                                      }
+                                    }}
+                                    className="h-7 text-[10px] font-bold border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white flex items-center gap-1"
+                                  >
+                                    💾 {locale === 'ar' ? 'حفظ كقائمة في اللوحة' : 'Save as new list in panel'}
+                                  </Button>
+                                </div>
+                              )
+                            }
+                          }
+                        } catch {}
+                        return null
+                      })()}
+                    </div>
+                  )
+                })}
+                {aiLoading && (
+                  <div className="self-start flex flex-col items-start max-w-[85%]">
+                    <div className="text-[10px] text-muted-foreground mb-1 px-1">
+                      {locale === 'ar' ? 'مساعد البث' : 'Broadcaster AI'}
+                    </div>
+                    <div className="p-3 rounded-xl bg-card border border-border text-foreground rounded-bl-none flex items-center gap-2">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+                      <span className="text-[10px] text-muted-foreground">{locale === 'ar' ? 'جاري الكتابة...' : 'Typing...'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Chat message input */}
+          <div className="shrink-0 p-4 border-t border-border/80 bg-background flex gap-2">
+            <Input
+              value={aiInputValue}
+              onChange={(e) => setAiInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleSendAiMessage()
+                }
+              }}
+              placeholder={locale === 'ar' ? 'اسأل مساعد الذكاء الاصطناعي...' : 'Ask the AI Assistant...'}
+              className="text-xs bg-muted/30"
+              disabled={aiLoading}
+            />
+            <Button
+              onClick={() => handleSendAiMessage()}
+              disabled={aiLoading || !aiInputValue.trim()}
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5"
+            >
+              {locale === 'ar' ? 'إرسال' : 'Send'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Change Password Dialog ── */}
       <Dialog open={pwDialogOpen} onOpenChange={(open) => !open && setPwDialogOpen(false)}>
         <DialogContent className="sm:max-w-md" dir={dir}>
@@ -4530,6 +4956,17 @@ export default function Home() {
               {locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
             </Button>
 
+            {/* Set File Only */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-teal-500/20 bg-teal-500/5 hover:bg-teal-500/10 text-teal-600 dark:text-teal-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط القنوات المحددة إلى بث مسجل فقط (ملف) وإلغاء التبديل؟' : 'Set selected slots to recorded stream only (file input) and disable swap?', undefined, selectedSlots)}
+            >
+              <FileVideo className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'مسجل فقط' : 'File Only'}
+            </Button>
+
             {/* Set Closest 20 */}
             <Button
               size="sm"
@@ -4539,6 +4976,39 @@ export default function Home() {
             >
               <Clock className="w-3.5 h-3.5" />
               {locale === 'ar' ? 'أقرب 20' : 'Closest 20m'}
+            </Button>
+
+            {/* Set Closest 30 */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set selected slots to nearest 30 mins?', undefined, selectedSlots)}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أقرب 30' : 'Closest 30m'}
+            </Button>
+
+            {/* Set Closest Hour */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب ساعة وبث 50 دقيقة؟' : 'Set selected slots to nearest hour?', undefined, selectedSlots)}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أقرب ساعة' : 'Closest Hour'}
+            </Button>
+
+            {/* Set Closest 2h */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10 text-purple-600 dark:text-purple-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set selected slots to nearest 2 hours?', undefined, selectedSlots)}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أقرب ساعتين' : 'Closest 2h'}
             </Button>
 
             {/* Repeat 20m / Hourly */}

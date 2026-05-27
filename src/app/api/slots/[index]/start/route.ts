@@ -236,13 +236,20 @@ export async function POST(
         slot: updatedSlot,
         message: result.message || 'streamRunning'
       })
-    } catch (error) {
-      console.error('Failed to connect to stream manager:', error)
+    } catch (error: any) {
+      console.error('Failed to start stream:', error)
       await db.streamSlot.update({
         where: { slotIndex },
         data: { status: 'Failed', isRunning: false, manuallyStopped: true }
       })
-      return NextResponse.json({ error: 'Stream manager not available' }, { status: 503 })
+      // Write the error into the System Logs database
+      await db.systemLog.create({
+        data: { message: `Slot ${slotIndex + 1}: ${error.message || 'فشل بدء البث'}` }
+      })
+      
+      const isManagerError = error.message && (error.message.includes('fetch') || error.message.includes('connect'));
+      const userMessage = isManagerError ? 'Stream manager not available' : (error.message || 'streamFailed');
+      return NextResponse.json({ error: userMessage }, { status: 500 })
     }
   } catch (error) {
     console.error('Error starting stream:', error)

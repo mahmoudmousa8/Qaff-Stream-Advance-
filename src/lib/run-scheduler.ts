@@ -72,7 +72,13 @@ function getCurrentlyActiveFiles(excludeSlotIndex: number): Set<string> {
 
 export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: number, type: 'main' | 'swap'): string {
   try {
-    const stats = fs.statSync(filePathOrDir)
+    let stats: fs.Stats
+    try {
+      stats = fs.statSync(filePathOrDir)
+    } catch (fsErr: any) {
+      throw new Error(`المسار المحدد غير موجود أو لا يمكن الوصول إليه: ${filePathOrDir}`)
+    }
+
     if (!stats.isDirectory()) {
       return filePathOrDir
     }
@@ -87,8 +93,7 @@ export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: num
       .map(file => path.join(filePathOrDir, file))
 
     if (videoFiles.length === 0) {
-      console.warn(`[Scheduler] Directory ${filePathOrDir} contains no video files. Using directory path directly.`)
-      return filePathOrDir
+      throw new Error(`المجلد لا يحتوي على أي ملفات فيديو صالحة (مثل mp4, mkv, avi): ${filePathOrDir}`)
     }
 
     const queueKey = `${slotIndex}_${type}`
@@ -146,7 +151,7 @@ export function resolveVideoFileFromFolder(filePathOrDir: string, slotIndex: num
     return selectedFile
   } catch (e: any) {
     console.error(`[Scheduler] Error resolving video file from directory ${filePathOrDir}:`, e)
-    return filePathOrDir
+    throw new Error(e.message || `فشل في الوصول إلى مسار الفيديو: ${filePathOrDir}`)
   }
 }
 
@@ -156,7 +161,13 @@ function resolveSwapVideoFile(filePathOrDir: string, slotIndex: number): string 
 
 export function resolveThumbnailFileFromFolder(filePathOrDir: string, slotIndex: number): string {
   try {
-    const stats = fs.statSync(filePathOrDir)
+    let stats: fs.Stats
+    try {
+      stats = fs.statSync(filePathOrDir)
+    } catch (fsErr: any) {
+      throw new Error(`مسار الصورة المصغرة غير موجود أو لا يمكن الوصول إليه: ${filePathOrDir}`)
+    }
+
     if (!stats.isDirectory()) {
       return filePathOrDir
     }
@@ -171,8 +182,7 @@ export function resolveThumbnailFileFromFolder(filePathOrDir: string, slotIndex:
       .map(file => path.join(filePathOrDir, file))
 
     if (imageFiles.length === 0) {
-      console.warn(`[Scheduler] Directory ${filePathOrDir} contains no image files. Using directory path directly.`)
-      return filePathOrDir
+      throw new Error(`المجلد لا يحتوي على أي صور مصغرة صالحة (مثل png, jpg, jpeg): ${filePathOrDir}`)
     }
 
     const queueKey = `${slotIndex}_thumbnail`
@@ -208,7 +218,7 @@ export function resolveThumbnailFileFromFolder(filePathOrDir: string, slotIndex:
     return selectedFile
   } catch (e: any) {
     console.error(`[Scheduler] Error resolving thumbnail file from directory ${filePathOrDir}:`, e)
-    return filePathOrDir
+    throw new Error(e.message || `فشل في الوصول إلى مسار الصورة المصغرة: ${filePathOrDir}`)
   }
 }
 
@@ -490,11 +500,11 @@ function calculateNextRun(schedStart: string, daily: boolean, weekly: boolean, h
 
     if (hourly) {
       const cairoNow = getCairoNowFields(now)
-      const baseMinute = minute % 15
+      const baseMinute = minute % 20
       let nextRun = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, cairoNow.hour, baseMinute, 0)
       
       while (now >= nextRun) {
-        const nextDate = new Date(nextRun.getTime() + 15 * 60 * 1000)
+        const nextDate = new Date(nextRun.getTime() + 20 * 60 * 1000)
         const nextFields = getCairoNowFields(nextDate)
         nextRun = getAbsoluteDateFromCairoFields(nextFields.year, nextFields.month, nextFields.day, nextFields.hour, nextFields.minute, 0)
       }

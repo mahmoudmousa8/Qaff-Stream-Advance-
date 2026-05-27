@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { action, thumbnailPath, slotIndexes } = body
+    const { action, thumbnailPath, slotIndexes, locale } = body
 
     const userFilter: any = {}
     if (user.role === 'user') {
@@ -237,6 +237,9 @@ export async function POST(request: NextRequest) {
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
                 data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+              })
+              await db.systemLog.create({
+                data: { message: `Slot ${slot.slotIndex + 1}: ${error.message || 'فشل بدء البث'}` }
               })
               results.push({ status: 'rejected', reason: error })
             }
@@ -700,7 +703,156 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        return NextResponse.json({ success: true, count: result.count, message: `Set closest 15-minute schedule (duration 10 mins) and scheduled all ${result.count} slots` })
+        return NextResponse.json({ success: true, count: result.count, message: locale === 'ar' ? `تم ضبط أوقات البدء والإيقاف لأقرب 20 دقيقة وبث 13 دقيقة للكل (${startTime})` : `Set closest 20-minute schedule (duration 13 mins) and scheduled all ${result.count} slots` })
+      }
+
+      case 'setFileOnlyAll': {
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            inputType: 'file',
+            swapVideoEnabled: false,
+          }
+        })
+        return NextResponse.json({
+          success: true,
+          count: result.count,
+          message: locale === 'ar'
+            ? `تم تحويل كافة المسارات إلى بث مسجل فقط (إجمالي ${result.count})`
+            : `Set all slots to recorded stream only (${result.count} slots)`
+        })
+      }
+
+      case 'setClosest30m24mAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
+        const now = new Date()
+        const cairoNow = getCairoNowFields(now)
+
+        let targetHour = cairoNow.hour
+        let targetMinute = 0
+        if (cairoNow.minute < 30) {
+          targetMinute = 30
+        } else {
+          targetMinute = 0
+          targetHour += 1
+        }
+        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, targetMinute, 0)
+
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
+        const startTime = formatCairoDate(targetDate)
+        const stopDate = new Date(targetDate.getTime() + 24 * 60 * 1000)
+        const stopTime = formatCairoDate(stopDate)
+
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            schedStart: startTime,
+            schedStop: stopTime,
+            isScheduled: true,
+            manuallyStopped: false,
+            nextRunTime: startTime,
+            status: 'Scheduled',
+            hourly: false,
+            daily: false,
+            weekly: false
+          }
+        })
+
+        return NextResponse.json({
+          success: true,
+          count: result.count,
+          message: locale === 'ar'
+            ? `تم ضبط أوقات البدء والإيقاف لأقرب نصف ساعة وبث 24 دقيقة للكل (${startTime})`
+            : `Set all slots to nearest 30 mins (stream 24m) at ${startTime}`
+        })
+      }
+
+      case 'setClosestHour50mAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
+        const now = new Date()
+        const cairoNow = getCairoNowFields(now)
+
+        let targetHour = cairoNow.hour + 1
+        let targetMinute = 0
+        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, targetMinute, 0)
+
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
+        const startTime = formatCairoDate(targetDate)
+        const stopDate = new Date(targetDate.getTime() + 50 * 60 * 1000)
+        const stopTime = formatCairoDate(stopDate)
+
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            schedStart: startTime,
+            schedStop: stopTime,
+            isScheduled: true,
+            manuallyStopped: false,
+            nextRunTime: startTime,
+            status: 'Scheduled',
+            hourly: false,
+            daily: false,
+            weekly: false
+          }
+        })
+
+        return NextResponse.json({
+          success: true,
+          count: result.count,
+          message: locale === 'ar'
+            ? `تم ضبط أوقات البدء والإيقاف لأقرب ساعة وبث 50 دقيقة للكل (${startTime})`
+            : `Set all slots to nearest hour (stream 50m) at ${startTime}`
+        })
+      }
+
+      case 'setClosest2h110mAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
+        const now = new Date()
+        const cairoNow = getCairoNowFields(now)
+
+        let targetHour = cairoNow.hour + (2 - (cairoNow.hour % 2))
+        let targetMinute = 0
+        let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, targetMinute, 0)
+
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
+        const startTime = formatCairoDate(targetDate)
+        const stopDate = new Date(targetDate.getTime() + 110 * 60 * 1000)
+        const stopTime = formatCairoDate(stopDate)
+
+        const result = await db.streamSlot.updateMany({
+          where: { ...userFilter, isRunning: false },
+          data: {
+            schedStart: startTime,
+            schedStop: stopTime,
+            isScheduled: true,
+            manuallyStopped: false,
+            nextRunTime: startTime,
+            status: 'Scheduled',
+            hourly: false,
+            daily: false,
+            weekly: false
+          }
+        })
+
+        return NextResponse.json({
+          success: true,
+          count: result.count,
+          message: locale === 'ar'
+            ? `تم ضبط أوقات البدء والإيقاف لأقرب ساعتين وبث ساعة و50 دقيقة للكل (${startTime})`
+            : `Set all slots to nearest 2 hours (stream 1h 50m) at ${startTime}`
+        })
       }
 
       case 'resetAll': {
@@ -891,7 +1043,7 @@ export async function POST(request: NextRequest) {
 
         // Find channels that are ALREADY in use by active or scheduled slots
         const usedChannelsInActiveSlots = new Set<string>()
-        const freeSlots = []
+        const freeSlots: any[] = []
 
         for (const slot of availableSlots) {
           const isBusy = slot.isRunning || slot.isScheduled || slot.status !== 'Stopped'
@@ -912,7 +1064,7 @@ export async function POST(request: NextRequest) {
         }
 
         let assignedCount = 0
-        const assignedSlots = []
+        const assignedSlots: any[] = []
 
         // Assign channels to free slots
         for (let i = 0; i < Math.min(freeSlots.length, availableChannels.length); i++) {

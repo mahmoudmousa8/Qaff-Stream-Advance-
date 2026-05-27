@@ -1,0 +1,377 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { getAuthUser } from '@/lib/auth-helper'
+
+// Local helper to execute tools on behalf of the AI agent
+async function executeTool(name: string, args: any, origin: string, cookieHeader: string): Promise<any> {
+  console.log(`[AI Tool Exec] Running ${name} with args:`, JSON.stringify(args))
+  try {
+    switch (name) {
+      case 'getSlotsStatus': {
+        const slots = await db.streamSlot.findMany({
+          orderBy: { slotIndex: 'asc' }
+        })
+        return {
+          slots: slots.map(s => ({
+            slotIndex: s.slotIndex,
+            channelName: s.channelName,
+            status: s.status,
+            inputType: s.inputType,
+            filePath: s.filePath,
+            schedStart: s.schedStart,
+            schedStop: s.schedStop,
+            youtubeTitle: s.youtubeTitle,
+            youtubeDescription: s.youtubeDescription,
+            isScheduled: s.isScheduled,
+            isRunning: s.isRunning
+          }))
+        }
+      }
+      
+      case 'updateSlotConfig': {
+        const { slotIndex, updates } = args
+        // Call local PUT API to run all validations, overlap checks, and database updates
+        const res = await fetch(`${origin}/api/slots/${slotIndex}`, {
+          method: 'PUT',
+          headers: {
+            'Cookie': cookieHeader,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updates)
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to update slot' }
+        }
+        return { success: true, slot: data }
+      }
+
+      case 'startStream': {
+        const { slotIndex } = args
+        // Call local Start API
+        const res = await fetch(`${origin}/api/slots/${slotIndex}/start`, {
+          method: 'POST',
+          headers: {
+            'Cookie': cookieHeader
+          }
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to start stream' }
+        }
+        return { success: true, message: data.message || 'Stream started' }
+      }
+
+      case 'stopStream': {
+        const { slotIndex } = args
+        // Call local Stop API
+        const res = await fetch(`${origin}/api/slots/${slotIndex}/stop`, {
+          method: 'POST',
+          headers: {
+            'Cookie': cookieHeader
+          }
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to stop stream' }
+        }
+        return { success: true, message: data.message || 'Stream stopped' }
+      }
+
+      case 'getSystemLogs': {
+        const limit = args.limit || 20
+        const logs = await db.systemLog.findMany({
+          orderBy: { timestamp: 'desc' },
+          take: limit
+        })
+        return {
+          logs: logs.map(l => ({
+            timestamp: l.timestamp,
+            message: l.message
+          }))
+        }
+      }
+
+      case 'getYouTubeChannels': {
+        const channels = await db.youtubeChannel.findMany({
+          orderBy: { createdAt: 'desc' }
+        })
+        return {
+          channels: channels.map(c => ({
+            id: c.id,
+            channelId: c.channelId,
+            name: c.name,
+            channelTitle: c.channelTitle,
+            expiryDate: c.expiryDate
+          }))
+        }
+      }
+
+      case 'applyBulkAction': {
+        const { actionType } = args
+        let bulkAction = ''
+        if (actionType === 'file_only_all') bulkAction = 'setFileOnlyAll'
+        else if (actionType === 'closest_30_all') bulkAction = 'setClosest30m24mAll'
+        else if (actionType === 'closest_1h_all') bulkAction = 'setClosestHour50mAll'
+        else if (actionType === 'closest_2h_all') bulkAction = 'setClosest2h110mAll'
+        else {
+          return { success: false, error: `Invalid bulk action: ${actionType}` }
+        }
+
+        const res = await fetch(`${origin}/api/slots/bulk`, {
+          method: 'POST',
+          headers: {
+            'Cookie': cookieHeader,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: bulkAction, locale: 'ar' })
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to apply bulk action' }
+        }
+        return { success: true, message: data.message }
+      }
+
+      case 'navigateUI': {
+        return { success: true, message: `Will navigate client UI to target: ${args.target}` }
+      }
+
+      default:
+        return { error: `Function ${name} not found` }
+    }
+  } catch (err: any) {
+    console.error(`Error executing tool ${name}:`, err)
+    return { success: false, error: err.message || 'Internal execution error' }
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const user = await getAuthUser(request)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { apiKey, model = 'gemini-2.5-flash', messages } = await request.json()
+
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+      return NextResponse.json({ error: 'Gemini API Key is required' }, { status: 400 })
+    }
+
+    if (!messages || !Array.isArray(messages)) {
+      return NextResponse.json({ error: 'Messages history is required' }, { status: 400 })
+    }
+
+    const cookieHeader = request.headers.get('cookie') || ''
+    const origin = request.nextUrl.origin
+
+    const systemInstructionText = `You are the AI Assistant for Qaff Stream (كاف ستريم), a premium live streaming management panel. Your role is to help users manage their stream slots, generate engaging titles and descriptions for their broadcasts, and guide them on how to link/authorize YouTube channels.
+You have tools available to control the streaming panel on behalf of the user. You can read slot configurations, start or stop streaming, view system logs, list linked YouTube channels, apply bulk configuration actions, and navigate the user interface.
+
+Whenever the user asks you to do something that corresponds to a tool (like listing slots, starting/stopping streams, updating title/description/video file/thumbnail file paths, viewing logs, showing channels, running bulk scheduling, or navigating to tabs), you MUST call the appropriate function tool.
+After a tool is executed, summarize the results to the user in a friendly, conversational tone (in Arabic if the user speaks Arabic).
+
+If the user asks you to generate titles, descriptions, or ideas for their videos/streams:
+1. Provide a friendly conversational explanation of your suggestions.
+2. In addition, you MUST output a single valid JSON block containing the generated titles and descriptions. The JSON block should strictly follow this format:
+{
+  "titles": ["Title 1", "Title 2"],
+  "descriptions": ["Description 1", "Description 2"]
+}
+Ensure that the JSON is valid and easy for the system to parse.`
+
+    const toolsConfig = [{
+      functionDeclarations: [
+        {
+          name: 'getSlotsStatus',
+          description: 'احصل على حالة وإعدادات وتفاصيل جميع القنوات والمسارات (slots) في النظام بما في ذلك الحالة والجدولة والعناوين ومسارات الملفات.'
+        },
+        {
+          name: 'updateSlotConfig',
+          description: 'تحديث إعدادات قناة معينة (slot index). يمكنك تحديث العناوين، الأوصاف، مسار الفيديو، الصورة المصغرة، أوقات البدء والإيقاف، وتفعيل الجدولة أو تعطيلها.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              slotIndex: { type: 'INTEGER', description: 'رقم القناة أو المسار (0-indexed)' },
+              updates: {
+                type: 'OBJECT',
+                properties: {
+                  channelName: { type: 'STRING', description: 'اسم القناة في اللوحة' },
+                  inputType: { type: 'STRING', description: 'نوع البث: "file" (فيديو مسجل) أو "live" (إعادة بث)' },
+                  filePath: { type: 'STRING', description: 'مسار ملف الفيديو أو مجلد الفيديوهات' },
+                  youtubeThumbnailPath: { type: 'STRING', description: 'مسار الصورة المصغرة أو مجلد الصور المصغرة' },
+                  youtubeTitle: { type: 'STRING', description: 'عنوان البث على يوتيوب' },
+                  youtubeDescription: { type: 'STRING', description: 'وصف البث على يوتيوب' },
+                  schedStart: { type: 'STRING', description: 'وقت البدء (تنسيق MM-DD HH:MM)' },
+                  schedStop: { type: 'STRING', description: 'وقت الإيقاف (تنسيق MM-DD HH:MM أو DUR HH:MM)' },
+                  isScheduled: { type: 'BOOLEAN', description: 'تفعيل الجدولة تلقائياً' }
+                }
+              }
+            },
+            required: ['slotIndex', 'updates']
+          }
+        },
+        {
+          name: 'startStream',
+          description: 'بدء تشغيل بث قناة معينة (slot index) فوراً.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              slotIndex: { type: 'INTEGER', description: 'رقم المسار (0-indexed)' }
+            },
+            required: ['slotIndex']
+          }
+        },
+        {
+          name: 'stopStream',
+          description: 'إيقاف تشغيل بث قناة معينة (slot index) فوراً.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              slotIndex: { type: 'INTEGER', description: 'رقم المسار (0-indexed)' }
+            },
+            required: ['slotIndex']
+          }
+        },
+        {
+          name: 'getSystemLogs',
+          description: 'عرض آخر سجلات وأحداث النظام لمراقبة العمليات أو التحقق من أسباب الفشل.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              limit: { type: 'INTEGER', description: 'عدد السجلات المطلوبة (الافتراضي 20)' }
+            }
+          }
+        },
+        {
+          name: 'getYouTubeChannels',
+          description: 'الحصول على قائمة قنوات يوتيوب المربوطة والمصرحة في النظام لمعرفة أسمائها ومعرفاتها.'
+        },
+        {
+          name: 'applyBulkAction',
+          description: 'تطبيق إعداد أو إجراء جماعي على جميع القنوات غير الباثة دفعة واحدة.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              actionType: { 
+                type: 'STRING', 
+                description: 'نوع الإجراء الجماعي: "file_only_all" (بث مسجل فقط للكل)، "closest_30_all" (أقرب 30 دقيقة للكل)، "closest_1h_all" (أقرب ساعة للكل)، "closest_2h_all" (أقرب ساعتين للكل)' 
+              }
+            },
+            required: ['actionType']
+          }
+        },
+        {
+          name: 'navigateUI',
+          description: 'توجيه واجهة المستخدم إلى صفحة أو تبويب معين أو فتح نافذة ربط قناة يوتيوب جديدة.',
+          parameters: {
+            type: 'OBJECT',
+            properties: {
+              target: { 
+                type: 'STRING', 
+                description: 'الهدف: "slots" (شاشة اللوحة الرئيسية)، "channels" (إدارة القنوات)، "logs" (سجلات النظام)، "add_channel" (ربط قناة يوتيوب جديدة في المتصفح)' 
+              }
+            },
+            required: ['target']
+          }
+        }
+      ]
+    }]
+
+    let loopCount = 0
+    let clientAction: any = null
+    const maxLoops = 5
+    let currentHistory = [...messages]
+
+    while (loopCount < maxLoops) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: currentHistory.map(msg => ({
+              role: msg.role === 'user' ? 'user' : (msg.role === 'function' ? 'function' : 'model'),
+              parts: msg.parts || [{ text: msg.text || '' }]
+            })),
+            systemInstruction: {
+              parts: [
+                {
+                  text: systemInstructionText,
+                },
+              ],
+            },
+            tools: toolsConfig
+          }),
+        }
+      )
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Gemini API Error Response:', errorText)
+        return NextResponse.json(
+          { error: `Gemini API returned status ${response.status}: ${errorText}` },
+          { status: response.status }
+        )
+      }
+
+      const data = await response.json()
+      const candidate = data.candidates?.[0]
+      const modelContent = candidate?.content
+      const parts = modelContent?.parts || []
+
+      // Find any function call request
+      const functionCalls = parts.filter((p: any) => p.functionCall)
+
+      if (functionCalls.length > 0) {
+        // Append model's message containing functionCalls to currentHistory
+        currentHistory.push({
+          role: 'model',
+          parts: parts
+        })
+
+        // Execute functions
+        const functionResponseParts: any[] = []
+        for (const fc of functionCalls) {
+          const { name, args } = fc.functionCall
+          if (name === 'navigateUI') {
+            clientAction = args
+          }
+
+          const result = await executeTool(name, args, origin, cookieHeader)
+
+          functionResponseParts.push({
+            functionResponse: {
+              name,
+              response: { output: result }
+            }
+          })
+        }
+
+        // Append function response to history
+        currentHistory.push({
+          role: 'function',
+          parts: functionResponseParts
+        })
+
+        loopCount++
+      } else {
+        // No function calls, return final text reply
+        const replyText = parts[0]?.text || ''
+        return NextResponse.json({
+          reply: replyText,
+          history: currentHistory,
+          clientAction
+        })
+      }
+    }
+
+    return NextResponse.json({ error: 'Reached maximum tool loop iterations' }, { status: 500 })
+  } catch (error: any) {
+    console.error('Error in AI Chat Route:', error)
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 })
+  }
+}
