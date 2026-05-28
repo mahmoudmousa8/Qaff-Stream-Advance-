@@ -491,7 +491,10 @@ export default function Home() {
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
   const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [geminiModel, setGeminiModel] = useState('models/gemma-4-31b-it')
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'agentrouter' | 'openrouter'>('gemini')
+  const [aiModel, setAiModel] = useState('gemini-2.5-flash')
+  const [isCustomModel, setIsCustomModel] = useState(false)
+  const [customModelName, setCustomModelName] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'model' | 'function'; text?: string; parts?: any[] }[]>([])
 
   // YouTube stream keys state (for dropdown in settings dialog)
@@ -849,8 +852,14 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       const savedKey = localStorage.getItem('qaff_gemini_api_key') || ''
       setGeminiApiKey(savedKey)
-      const savedModel = localStorage.getItem('qaff_gemini_model') || 'models/gemma-4-31b-it'
-      setGeminiModel(savedModel)
+      const savedProvider = (localStorage.getItem('qaff_ai_provider') || 'gemini') as any
+      setAiProvider(savedProvider)
+      const savedModel = localStorage.getItem('qaff_gemini_model') || 'gemini-2.5-flash'
+      setAiModel(savedModel)
+      const savedIsCustom = localStorage.getItem('qaff_ai_is_custom') === 'true'
+      setIsCustomModel(savedIsCustom)
+      const savedCustomName = localStorage.getItem('qaff_ai_custom_name') || ''
+      setCustomModelName(savedCustomName)
     }
   }, [])
 
@@ -1403,10 +1412,12 @@ export default function Home() {
         parts: msg.parts || [{ text: msg.text || '' }]
       }))
 
+      const activeModel = isCustomModel ? customModelName : aiModel
+
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: key, model: geminiModel, messages: formattedContents })
+        body: JSON.stringify({ apiKey: key, provider: aiProvider, model: activeModel, messages: formattedContents })
       })
 
       const data = await res.json()
@@ -1438,11 +1449,18 @@ export default function Home() {
     }
   }
 
-  const handleSaveGeminiKey = (key: string, model: string) => {
+  const handleSaveGeminiKey = (key: string, provider: string, model: string, isCustom: boolean, customName: string) => {
     localStorage.setItem('qaff_gemini_api_key', key)
+    localStorage.setItem('qaff_ai_provider', provider)
     localStorage.setItem('qaff_gemini_model', model)
+    localStorage.setItem('qaff_ai_is_custom', String(isCustom))
+    localStorage.setItem('qaff_ai_custom_name', customName)
+    
     setGeminiApiKey(key)
-    setGeminiModel(model)
+    setAiProvider(provider as any)
+    setAiModel(model)
+    setIsCustomModel(isCustom)
+    setCustomModelName(customName)
     alert(locale === 'ar' ? 'تم حفظ الإعدادات بنجاح!' : 'Settings saved successfully!')
   }
 
@@ -4349,37 +4367,90 @@ export default function Home() {
           </DialogHeader>
 
           {/* Gemini API Key Section */}
-          <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col md:flex-row items-center gap-3 shrink-0">
+          <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col lg:flex-row items-center gap-3 shrink-0">
             <label className="text-xs font-semibold text-foreground shrink-0 flex items-center gap-1">
               🔑 {locale === 'ar' ? 'إعدادات المساعد الذكي:' : 'AI Settings:'}
             </label>
-            <div className="flex flex-col sm:flex-row w-full gap-2 items-center">
+            <div className="flex flex-col sm:flex-row w-full gap-2 items-center flex-wrap">
               <Input
                 type="password"
-                placeholder={locale === 'ar' ? 'مفتاح API (Gemini أو AgentRouter)' : 'API Key (Gemini or AgentRouter)'}
+                placeholder={locale === 'ar' ? 'مفتاح API (Gemini / AgentRouter / OpenRouter)' : 'API Key (Gemini / AgentRouter / OpenRouter)'}
                 value={geminiApiKey}
                 onChange={(e) => setGeminiApiKey(e.target.value)}
-                className="h-8 text-xs font-mono flex-1 w-full"
+                className="h-8 text-xs font-mono flex-1 min-w-[200px]"
               />
               <select
-                value={geminiModel}
-                onChange={(e) => setGeminiModel(e.target.value)}
+                value={aiProvider}
+                onChange={(e) => {
+                  const prov = e.target.value as any
+                  setAiProvider(prov)
+                  if (prov === 'gemini') {
+                    setAiModel('gemini-2.5-flash')
+                    setIsCustomModel(false)
+                  } else if (prov === 'agentrouter') {
+                    setAiModel('glm-5.1')
+                    setIsCustomModel(false)
+                  } else if (prov === 'openrouter') {
+                    setAiModel('z-ai/glm-5.1')
+                    setIsCustomModel(false)
+                  }
+                }}
+                className="h-8 text-xs border rounded bg-background px-2 py-1 font-semibold focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
+              >
+                <option value="gemini">Google Gemini</option>
+                <option value="agentrouter">AgentRouter</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+              <select
+                value={isCustomModel ? 'custom' : aiModel}
+                onChange={(e) => {
+                  const val = e.target.value
+                  if (val === 'custom') {
+                    setIsCustomModel(true)
+                  } else {
+                    setIsCustomModel(false)
+                    setAiModel(val)
+                  }
+                }}
                 className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
               >
-                <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                <option value="glm-5.1">glm-5.1 (AgentRouter)</option>
-                <option value="deepseek-v4-pro">deepseek-v4-pro (AgentRouter)</option>
-                <option value="deepseek-v4-flash">deepseek-v4-flash (AgentRouter)</option>
-                <option value="claude-haiku-4-5-20251001">claude-haiku (AgentRouter)</option>
-                <option value="claude-opus-4-6">claude-opus (AgentRouter)</option>
-                <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
+                {aiProvider === 'gemini' && (
+                  <>
+                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                    <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                    <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
+                  </>
+                )}
+                {aiProvider === 'agentrouter' && (
+                  <>
+                    <option value="glm-5.1">glm-5.1</option>
+                    <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                    <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+                    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                    <option value="claude-opus-4-6">claude-opus-4-6</option>
+                  </>
+                )}
+                {aiProvider === 'openrouter' && (
+                  <>
+                    <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
+                  </>
+                )}
+                <option value="custom">{locale === 'ar' ? 'نموذج مخصص...' : 'Custom Model...'}</option>
               </select>
+              {isCustomModel && (
+                <Input
+                  type="text"
+                  placeholder={locale === 'ar' ? 'اسم النموذج المخصص' : 'Custom Model Name'}
+                  value={customModelName}
+                  onChange={(e) => setCustomModelName(e.target.value)}
+                  className="h-8 text-xs font-mono w-full sm:w-40"
+                />
+              )}
               <Button
                 size="sm"
-                onClick={() => handleSaveGeminiKey(geminiApiKey, geminiModel)}
+                onClick={() => handleSaveGeminiKey(geminiApiKey, aiProvider, isCustomModel ? 'custom' : aiModel, isCustomModel, customModelName)}
                 className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold w-full sm:w-auto shrink-0"
               >
                 {locale === 'ar' ? 'حفظ' : 'Save'}

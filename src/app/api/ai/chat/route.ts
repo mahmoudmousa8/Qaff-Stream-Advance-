@@ -281,8 +281,19 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { apiKey, model = 'gemini-2.5-flash', messages } = await request.json()
+    const { apiKey, provider, model = 'gemini-2.5-flash', messages } = await request.json()
     const cleanModel = model.startsWith('models/') ? model.replace('models/', '') : model
+    
+    let activeProvider = provider
+    if (!activeProvider) {
+      if (isAgentRouterModel(cleanModel)) {
+        activeProvider = 'agentrouter'
+      } else if (cleanModel.includes('/') && !model.startsWith('models/')) {
+        activeProvider = 'openrouter'
+      } else {
+        activeProvider = 'gemini'
+      }
+    }
 
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
       return NextResponse.json({ error: 'API Key is required' }, { status: 400 })
@@ -417,7 +428,9 @@ Ensure that the JSON is valid and easy for the system to parse.`
       let data: any
       let parts: any[] = []
 
-      if (isAgentRouterModel(cleanModel)) {
+      const isOpenAICompatible = activeProvider === 'agentrouter' || activeProvider === 'openrouter'
+
+      if (isOpenAICompatible) {
         const openAITools = toolsConfig[0].functionDeclarations.map((fd: any) => {
           const tool: any = {
             type: 'function',
@@ -434,12 +447,23 @@ Ensure that the JSON is valid and easy for the system to parse.`
 
         const openAIMessages = geminiToOpenAIMessages(currentHistory)
 
-        const response = await fetch('https://agentrouter.org/v1/chat/completions', {
+        const endpoint = activeProvider === 'agentrouter'
+          ? 'https://agentrouter.org/v1/chat/completions'
+          : 'https://openrouter.ai/api/v1/chat/completions'
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        }
+
+        if (activeProvider === 'openrouter') {
+          headers['HTTP-Referer'] = 'https://qaff.stream'
+          headers['X-Title'] = 'Qaff Stream'
+        }
+
+        const response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
+          headers,
           body: JSON.stringify({
             model: cleanModel,
             messages: [
@@ -453,9 +477,9 @@ Ensure that the JSON is valid and easy for the system to parse.`
 
         if (!response.ok) {
           const errorText = await response.text()
-          console.error('AgentRouter API Error Response:', errorText)
+          console.error(`${activeProvider} API Error Response:`, errorText)
           return NextResponse.json(
-            { error: `AgentRouter API returned status ${response.status}: ${errorText}` },
+            { error: `${activeProvider} API returned status ${response.status}: ${errorText}` },
             { status: response.status }
           )
         }
@@ -463,7 +487,7 @@ Ensure that the JSON is valid and easy for the system to parse.`
         data = await response.json()
         const message = data.choices?.[0]?.message
         if (!message) {
-          throw new Error('Empty response from AgentRouter')
+          throw new Error(`Empty response from ${activeProvider}`)
         }
         parts = openAIToGeminiParts(message)
       } else {
