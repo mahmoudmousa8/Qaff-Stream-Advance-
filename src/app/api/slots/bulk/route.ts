@@ -1420,6 +1420,23 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      case 'setMainVideoAll': {
+        const { filePath } = body
+        if (!filePath) {
+          return NextResponse.json({ error: 'Missing filePath' }, { status: 400 })
+        }
+
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            filePath,
+            inputType: 'file'
+          }
+        })
+
+        return NextResponse.json({ success: true, count: result.count, message: `Set main video path for all ${result.count} slots` })
+      }
+
       case 'setSwapVideoAll': {
         const { swapVideoPath } = body
         if (!swapVideoPath) {
@@ -1448,6 +1465,62 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json({ success: true, count: result.count, message: `Cleared swap path from all ${result.count} slots` })
+      }
+
+      case 'refreshStreamKeysAll': {
+        const { refreshAccessToken } = await import('@/lib/youtube-helper')
+
+        const slotsToRefresh = await db.streamSlot.findMany({
+          where: {
+            outputType: 'youtube',
+            youtubeChannelId: { not: null, not: '' },
+            ...userFilter
+          }
+        })
+
+        let count = 0;
+        const errors: string[] = []
+
+        for (const slot of slotsToRefresh) {
+          try {
+            const channelId = slot.youtubeChannelId!
+            const accessToken = await refreshAccessToken(channelId)
+            const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true&maxResults=50'
+            const streamsResponse = await fetch(streamsListUrl, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: AbortSignal.timeout(10000)
+            })
+            if (!streamsResponse.ok) {
+              errors.push(`Slot ${slot.slotIndex + 1}: Failed to fetch from YouTube API`)
+              continue
+            }
+            const streamsData = await streamsResponse.json()
+            const items: any[] = streamsData.items || []
+            const validStreams = items.filter((item: any) => item.cdn?.ingestionInfo?.streamName)
+            
+            if (validStreams.length > 0) {
+              const streamKey = validStreams[0].cdn.ingestionInfo.streamName
+              const rtmpServer = validStreams[0].cdn.ingestionInfo.ingestionAddress || 'rtmp://a.rtmp.youtube.com/live2'
+              
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: { streamKey, rtmpServer }
+              })
+              count++
+            } else {
+              errors.push(`Slot ${slot.slotIndex + 1}: No valid stream keys found`)
+            }
+          } catch (e: any) {
+            errors.push(`Slot ${slot.slotIndex + 1}: ${e.message}`)
+          }
+        }
+        
+        return NextResponse.json({
+          success: true,
+          count,
+          errors: errors.length > 0 ? errors : undefined,
+          message: `Refreshed stream keys for ${count} slots.`
+        })
       }
 
       case 'setTitleDescAll': {

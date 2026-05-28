@@ -567,6 +567,7 @@ export default function Home() {
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
+  const [bulkMainVideoSelectorOpen, setBulkMainVideoSelectorOpen] = useState(false)
   const [geminiApiKey, setGeminiApiKey] = useState('')
   const [aiProvider, setAiProvider] = useState<'gemini' | 'agentrouter' | 'openrouter' | 'nvidia'>('gemini')
   const [aiModel, setAiModel] = useState('gemini-2.5-flash')
@@ -1873,6 +1874,11 @@ export default function Home() {
               onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
               <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسجل للكل' : 'File Only'}
             </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-blue-500 dark:text-blue-400 hover:bg-blue-600 hover:text-white font-medium"
+              onClick={() => setBulkMainVideoSelectorOpen(true)}
+              title={locale === 'ar' ? 'تعيين فيديو أو مجلد كمصدر البث الأساسي لكافة القنوات' : 'Set a video file or folder as the main stream source for all slots'}>
+              <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين بث أساسى للكل' : 'Set Main Video All'}
+            </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
               onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
               <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
@@ -1886,9 +1892,9 @@ export default function Home() {
               <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'هل تريد إلغاء التبديل لكافة القنوات؟' : 'Clear swap video/folder from all slots?')}
-              title={locale === 'ar' ? 'إلغاء التبديل لكافة القنوات' : 'Disable swap for all slots'}>
-              <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إلغاء التبديل للكل' : 'Disable Swap'}
+              onClick={() => confirmBulkAction('refreshStreamKeysAll', locale === 'ar' ? 'هل تريد تحديث وتعيين مفاتيح البث من يوتيوب لكافة القنوات؟' : 'Refresh and assign YouTube stream keys for all slots?')}
+              title={locale === 'ar' ? 'تحديث وتعيين مفاتيح البث من يوتيوب لكافة القنوات' : 'Refresh and assign YouTube stream keys for all slots'}>
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تحديث مفاتيح البث للكل' : 'Refresh Keys All'}
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
               onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
@@ -3742,6 +3748,59 @@ export default function Home() {
           )}
         </DialogContent>
       </Dialog >
+
+      {/* ――― Bulk Main Video Selector Dialog ――― */}
+      <Dialog open={bulkMainVideoSelectorOpen} onOpenChange={setBulkMainVideoSelectorOpen}>
+        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[95vh] h-[90vh] flex flex-col">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-blue-500" />
+              {locale === 'ar' ? 'تعيين بث أساسى للكل' : 'Set Main Video / Folder for All Slots'}
+            </DialogTitle>
+            <DialogDescription>
+              {locale === 'ar'
+                ? 'اختر فيديو أو مجلد ليتم تعيينه كمصدر البث الأساسي لكافة القنوات. إذا اخترت مجلداً سيتم اختيار فيديو عشوائي منه عند كل بث.'
+                : 'Select a video file or folder to assign as the main stream source for all slots. Selecting a folder will pick a random video from it on each stream.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <VideoManager
+              mode="select"
+              onVideoSelect={(path) => {
+                setBulkMainVideoSelectorOpen(false)
+                setConfirmDialog({
+                  open: true,
+                  action: locale === 'ar'
+                    ? `هل تريد تعيين "${path.split(/[/\\]/).pop()}" كمصدر البث الأساسي لكافة القنوات؟`
+                    : `Set "${path.split(/[/\\]/).pop()}" as the main stream source for all slots?`,
+                  onConfirm: async () => {
+                    setConfirmDialog(null)
+                    try {
+                      const res = await fetch('/api/slots/bulk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'setMainVideoAll', filePath: path })
+                      })
+                      const data = await res.json()
+                      if (data.success) {
+                        addLog(locale === 'ar'
+                          ? `تم تعيين مصدر البث الأساسي لـ ${data.count} قناة بنجاح`
+                          : `Set main video for ${data.count} slots successfully`)
+                        fetchSlots()
+                      } else {
+                        addLog(data.error || 'Failed to set main video for all slots')
+                      }
+                    } catch {
+                      addLog(locale === 'ar' ? 'فشل الاتصال بالخادم' : 'Network error')
+                    }
+                  }
+                })
+              }}
+              onClose={() => setBulkMainVideoSelectorOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ――― Confirm Dialog ――― */}
       < Dialog open={confirmDialog?.open} onOpenChange={(open) => !open && setConfirmDialog(null)}>
