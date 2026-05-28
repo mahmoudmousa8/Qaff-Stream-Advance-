@@ -15,7 +15,7 @@ import {
   Sun, Moon, Calendar, AlertCircle, Activity,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
   Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
-  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download
+  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download, ChevronDown, RepeatIcon
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -26,6 +26,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { VideoManager } from '@/components/video-manager'
 import { DateTimePicker } from '@/components/date-time-picker'
 import { t, getLocale, setLocale, isRTL, type Locale } from '@/lib/i18n'
@@ -1838,14 +1846,13 @@ export default function Home() {
                   }
                 </Badge>
               )}
+              {serverTime && (
+                <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest shrink-0">
+                  <Clock className="w-3.5 h-3.5 mr-1" />
+                  {serverTime}
+                </Badge>
+              )}
             </div>
-            
-            {serverTime && (
-              <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest mr-2 shrink-0">
-                <Clock className="w-3.5 h-3.5 mr-1" />
-                {serverTime}
-              </Badge>
-            )}
             
             <div className="flex items-center gap-1 flex-wrap justify-center flex-1">
               <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
@@ -1877,6 +1884,11 @@ export default function Home() {
                 <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'هل تريد إلغاء التبديل لكافة القنوات؟' : 'Clear swap video/folder from all slots?')}
+                title={locale === 'ar' ? 'إلغاء التبديل لكافة القنوات' : 'Disable swap for all slots'}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إلغاء التبديل للكل' : 'Disable Swap'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
                 <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
               </Button>
@@ -1887,67 +1899,107 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Top Bar Row 2: Schedules & Repeats */}
-          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-max mx-auto">
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosest10m6mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق وبث 6 دقائق؟' : 'Set all slots to nearest 10 minutes (stream 6 mins)?')} title={locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosest15m9mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 9 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 9 mins)?')} title={locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set all slots to nearest 30 minutes (stream 24 mins)?')} title={locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وبث 50 دقيقة؟' : 'Set all slots to nearest hour (stream 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}>
-              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
-            </Button>
+          {/* Top Bar Row 2: Schedules & Repeats — now as dropdowns */}
+          <div className="flex items-center gap-1.5 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-max mx-auto">
 
-            <div className="w-px h-5 bg-border/50 mx-1" />
+            {/* ── Dropdown 1: Set Closest ── */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2.5 text-muted-foreground hover:text-foreground font-medium gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  {locale === 'ar' ? 'أقرب موعد للكل' : 'Set Closest'}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52 text-sm">
+                <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">
+                  {locale === 'ar' ? '⏱ ضبط أقرب موعد للكل' : '⏱ Set Closest Start Time'}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosest10m6mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق وبث 6 دقائق؟' : 'Set all slots to nearest 10 minutes (stream 6 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{locale === 'ar' ? 'أقرب 10 دقائق' : 'Nearest 10 min'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(6 د بث)' : '(6m stream)'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosest15m9mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 9 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 9 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-teal-500" />
+                  <span>{locale === 'ar' ? 'أقرب 15 دقيقة' : 'Nearest 15 min'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(9 د بث)' : '(9m stream)'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-orange-500" />
+                  <span>{locale === 'ar' ? 'أقرب 20 دقيقة' : 'Nearest 20 min'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(13 د بث)' : '(13m stream)'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set all slots to nearest 30 minutes (stream 24 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{locale === 'ar' ? 'أقرب 30 دقيقة' : 'Nearest 30 min'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(24 د بث)' : '(24m stream)'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وبث 50 دقيقة؟' : 'Set all slots to nearest hour (stream 50 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>{locale === 'ar' ? 'أقرب ساعة' : 'Nearest 1 hour'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(50 د بث)' : '(50m stream)'}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-purple-500" />
+                  <span>{locale === 'ar' ? 'أقرب ساعتين' : 'Nearest 2 hours'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(ساعة و50 د)' : '(1h 50m stream)'}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('repeat10mAll', locale === 'ar' ? 'تفعيل تكرار 10 للكل؟' : 'Toggle 10-min repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '10 للكل' : '10m Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('repeat15mAll', locale === 'ar' ? 'تفعيل تكرار 15 للكل؟' : 'Toggle 15-min repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '15 للكل' : '15m Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 للكل؟' : 'Toggle 20-min repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 للكل' : '20m Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 للكل؟' : 'Toggle 30-min repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 للكل' : '30m Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للكل؟' : 'Toggle 1-hour repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعة للكل' : '1h Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')}>
-              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعتين للكل' : '2h Repeat All'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
-              <Sun className="w-3.5 h-3.5 mr-1" />{t('dailyAll')}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-              onClick={() => confirmBulkAction('weeklyAll', locale === 'ar' ? 'تفعيل/إلغاء التكرار الأسبوعي لكافة القنوات؟' : 'Toggle weekly repeat for all slots?')}>
-              <Sun className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إسبوعي للكل' : 'Weekly All'}
-            </Button>
+            <div className="w-px h-5 bg-border/50" />
+
+            {/* ── Dropdown 2: Repeat Schedule ── */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2.5 text-muted-foreground hover:text-foreground font-medium gap-1.5">
+                  <Sun className="w-3.5 h-3.5" />
+                  {locale === 'ar' ? 'التكرار للكل' : 'Repeat Schedule'}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52 text-sm">
+                <DropdownMenuLabel className="text-xs text-muted-foreground pb-1">
+                  {locale === 'ar' ? '🔁 ضبط التكرار التلقائي للكل' : '🔁 Set Auto-Repeat for All'}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat10mAll', locale === 'ar' ? 'تفعيل تكرار 10 للكل؟' : 'Toggle 10-min repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-sky-500" />
+                  {locale === 'ar' ? '10 للكل' : '10 min repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat15mAll', locale === 'ar' ? 'تفعيل تكرار 15 للكل؟' : 'Toggle 15-min repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-teal-500" />
+                  {locale === 'ar' ? '15 للكل' : '15 min repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 للكل؟' : 'Toggle 20-min repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-orange-500" />
+                  {locale === 'ar' ? '20 للكل' : '20 min repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 للكل؟' : 'Toggle 30-min repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-blue-500" />
+                  {locale === 'ar' ? '30 للكل' : '30 min repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للكل؟' : 'Toggle 1-hour repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-indigo-500" />
+                  {locale === 'ar' ? 'ساعة للكل' : '1 hour repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-purple-500" />
+                  {locale === 'ar' ? 'ساعتين للكل' : '2 hours repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))} className="gap-2 cursor-pointer">
+                  <Calendar className="w-3.5 h-3.5 text-green-500" />
+                  {locale === 'ar' ? 'يومي للكل' : 'Daily repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('weeklyAll', locale === 'ar' ? 'تفعيل/إلغاء التكرار الأسبوعي لكافة القنوات؟' : 'Toggle weekly repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                  {locale === 'ar' ? 'إسبوعي للكل' : 'Weekly repeat'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
               onClick={() => {
                 setTargetSlotsForAction(undefined)
