@@ -1387,7 +1387,7 @@ export default function Home() {
 
     const key = geminiApiKey.trim()
     if (!key) {
-      alert(locale === 'ar' ? 'يرجى إدخال مفتاح API الخاص بـ Gemini أولاً.' : 'Please enter Gemini API key first.')
+      alert(locale === 'ar' ? 'يرجى إدخال مفتاح API أولاً.' : 'Please enter API key first.')
       return
     }
 
@@ -4339,24 +4339,24 @@ export default function Home() {
           <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-border/80">
             <DialogTitle className="flex items-center gap-2 text-xl font-bold">
               <Sparkles className="w-6 h-6 text-purple-500 animate-pulse" />
-              {locale === 'ar' ? 'مساعد الذكاء الاصطناعي (Google Gemini)' : 'AI Assistant (Google Gemini)'}
+              {locale === 'ar' ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant'}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">
               {locale === 'ar'
-                ? 'استعن بذكاء Gemini الاصطناعي لصياغة العناوين وتنسيق قوائم البثوث وتوليدها تلقائياً وحفظها بضغطة زر.'
-                : 'Leverage Google Gemini AI to compose video titles, generate stream descriptions, and save structured lists directly.'}
+                ? 'استعن بالذكاء الاصطناعي لصياغة العناوين وتنسيق قوائم البثوث وتوليدها تلقائياً وحفظها بضغطة زر.'
+                : 'Leverage AI to compose video titles, generate stream descriptions, and save structured lists directly.'}
             </DialogDescription>
           </DialogHeader>
 
           {/* Gemini API Key Section */}
           <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col md:flex-row items-center gap-3 shrink-0">
             <label className="text-xs font-semibold text-foreground shrink-0 flex items-center gap-1">
-              🔑 {locale === 'ar' ? 'إعدادات Gemini:' : 'Gemini Settings:'}
+              🔑 {locale === 'ar' ? 'إعدادات المساعد الذكي:' : 'AI Settings:'}
             </label>
             <div className="flex flex-col sm:flex-row w-full gap-2 items-center">
               <Input
                 type="password"
-                placeholder={locale === 'ar' ? 'مفتاح Google Gemini API' : 'Google Gemini API Key'}
+                placeholder={locale === 'ar' ? 'مفتاح API (Gemini أو AgentRouter)' : 'API Key (Gemini or AgentRouter)'}
                 value={geminiApiKey}
                 onChange={(e) => setGeminiApiKey(e.target.value)}
                 className="h-8 text-xs font-mono flex-1 w-full"
@@ -4366,11 +4366,16 @@ export default function Home() {
                 onChange={(e) => setGeminiModel(e.target.value)}
                 className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
               >
-                <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                 <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                 <option value="gemini-1.5-flash">gemini-1.5-flash</option>
                 <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                <option value="glm-5.1">glm-5.1 (AgentRouter)</option>
+                <option value="deepseek-v4-pro">deepseek-v4-pro (AgentRouter)</option>
+                <option value="deepseek-v4-flash">deepseek-v4-flash (AgentRouter)</option>
+                <option value="claude-haiku-4-5-20251001">claude-haiku (AgentRouter)</option>
+                <option value="claude-opus-4-6">claude-opus (AgentRouter)</option>
+                <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
               </select>
               <Button
                 size="sm"

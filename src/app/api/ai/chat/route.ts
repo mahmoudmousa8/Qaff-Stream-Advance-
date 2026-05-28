@@ -146,6 +146,134 @@ async function executeTool(name: string, args: any, origin: string, cookieHeader
   }
 }
 
+const AGENT_ROUTER_MODELS = [
+  'glm-5.1',
+  'deepseek-v4-pro',
+  'deepseek-v4-flash',
+  'claude-haiku-4-5-20251001',
+  'claude-opus-4-6'
+]
+
+function isAgentRouterModel(model: string): boolean {
+  const clean = model.startsWith('models/') ? model.replace('models/', '') : model
+  return AGENT_ROUTER_MODELS.includes(clean)
+}
+
+function convertSchemaToLowerCaseTypes(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema
+  
+  const result = Array.isArray(schema) ? [] : {} as any
+  
+  for (const key in schema) {
+    if (Object.prototype.hasOwnProperty.call(schema, key)) {
+      const val = schema[key]
+      if (key === 'type' && typeof val === 'string') {
+        result[key] = val.toLowerCase()
+      } else if (typeof val === 'object' && val !== null) {
+        result[key] = convertSchemaToLowerCaseTypes(val)
+      } else {
+        result[key] = val
+      }
+    }
+  }
+  return result
+}
+
+function geminiToOpenAIMessages(messages: any[]): any[] {
+  const openAIMessages: any[] = []
+  let toolCallIdCounter = 0
+  const pendingToolCalls: { name: string; id: string }[] = []
+  
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]
+    const role = msg.role
+    const parts = msg.parts || []
+    
+    if (role === 'user') {
+      const text = parts.find((p: any) => p.text)?.text || msg.text || ''
+      openAIMessages.push({
+        role: 'user',
+        content: text
+      })
+    } else if (role === 'model') {
+      const text = parts.find((p: any) => p.text)?.text || ''
+      const functionCalls = parts.filter((p: any) => p.functionCall)
+      
+      if (functionCalls.length > 0) {
+        const tool_calls = functionCalls.map((fc: any) => {
+          const id = `call_${toolCallIdCounter++}`
+          pendingToolCalls.push({ name: fc.functionCall.name, id })
+          return {
+            id,
+            type: 'function',
+            function: {
+              name: fc.functionCall.name,
+              arguments: JSON.stringify(fc.functionCall.args || {})
+            }
+          }
+        })
+        
+        openAIMessages.push({
+          role: 'assistant',
+          content: text || null,
+          tool_calls
+        })
+      } else {
+        openAIMessages.push({
+          role: 'assistant',
+          content: text
+        })
+      }
+    } else if (role === 'function') {
+      const responses = parts.filter((p: any) => p.functionResponse)
+      
+      for (const resp of responses) {
+        const { name, response } = resp.functionResponse
+        
+        let matchedId = `call_unknown_${toolCallIdCounter++}`
+        const matchIdx = pendingToolCalls.findIndex(tc => tc.name === name)
+        if (matchIdx !== -1) {
+          matchedId = pendingToolCalls[matchIdx].id
+          pendingToolCalls.splice(matchIdx, 1)
+        }
+        
+        openAIMessages.push({
+          role: 'tool',
+          tool_call_id: matchedId,
+          name: name,
+          content: JSON.stringify(response || {})
+        })
+      }
+    }
+  }
+  
+  return openAIMessages
+}
+
+function openAIToGeminiParts(message: any): any[] {
+  const parts: any[] = []
+  if (message.content) {
+    parts.push({ text: message.content })
+  }
+  if (message.tool_calls && Array.isArray(message.tool_calls)) {
+    for (const tc of message.tool_calls) {
+      let args = {}
+      try {
+        args = JSON.parse(tc.function.arguments || '{}')
+      } catch (e) {
+        console.error('Failed to parse tool call arguments:', tc.function.arguments, e)
+      }
+      parts.push({
+        functionCall: {
+          name: tc.function.name,
+          args: args
+        }
+      })
+    }
+  }
+  return parts
+}
+
 export async function POST(request: NextRequest) {
   const user = await getAuthUser(request)
   if (!user) {
@@ -157,7 +285,7 @@ export async function POST(request: NextRequest) {
     const cleanModel = model.startsWith('models/') ? model.replace('models/', '') : model
 
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
-      return NextResponse.json({ error: 'Gemini API Key is required' }, { status: 400 })
+      return NextResponse.json({ error: 'API Key is required' }, { status: 400 })
     }
 
     if (!messages || !Array.isArray(messages)) {
@@ -286,43 +414,97 @@ Ensure that the JSON is valid and easy for the system to parse.`
     let currentHistory = [...messages]
 
     while (loopCount < maxLoops) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
-        {
+      let data: any
+      let parts: any[] = []
+
+      if (isAgentRouterModel(cleanModel)) {
+        const openAITools = toolsConfig[0].functionDeclarations.map((fd: any) => {
+          const tool: any = {
+            type: 'function',
+            function: {
+              name: fd.name,
+              description: fd.description
+            }
+          }
+          if (fd.parameters) {
+            tool.function.parameters = convertSchemaToLowerCaseTypes(fd.parameters)
+          }
+          return tool
+        })
+
+        const openAIMessages = geminiToOpenAIMessages(currentHistory)
+
+        const response = await fetch('https://agentrouter.org/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            contents: currentHistory.map(msg => ({
-              role: msg.role === 'user' ? 'user' : (msg.role === 'function' ? 'function' : 'model'),
-              parts: msg.parts || [{ text: msg.text || '' }]
-            })),
-            systemInstruction: {
-              parts: [
-                {
-                  text: systemInstructionText,
-                },
-              ],
-            },
-            tools: toolsConfig
-          }),
+            model: cleanModel,
+            messages: [
+              { role: 'system', content: systemInstructionText },
+              ...openAIMessages
+            ],
+            tools: openAITools,
+            tool_choice: 'auto'
+          })
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('AgentRouter API Error Response:', errorText)
+          return NextResponse.json(
+            { error: `AgentRouter API returned status ${response.status}: ${errorText}` },
+            { status: response.status }
+          )
         }
-      )
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Gemini API Error Response:', errorText)
-        return NextResponse.json(
-          { error: `Gemini API returned status ${response.status}: ${errorText}` },
-          { status: response.status }
+        data = await response.json()
+        const message = data.choices?.[0]?.message
+        if (!message) {
+          throw new Error('Empty response from AgentRouter')
+        }
+        parts = openAIToGeminiParts(message)
+      } else {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: currentHistory.map(msg => ({
+                role: msg.role === 'user' ? 'user' : (msg.role === 'function' ? 'function' : 'model'),
+                parts: msg.parts || [{ text: msg.text || '' }]
+              })),
+              systemInstruction: {
+                parts: [
+                  {
+                    text: systemInstructionText,
+                  },
+                ],
+              },
+              tools: toolsConfig
+            }),
+          }
         )
-      }
 
-      const data = await response.json()
-      const candidate = data.candidates?.[0]
-      const modelContent = candidate?.content
-      const parts = modelContent?.parts || []
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Gemini API Error Response:', errorText)
+          return NextResponse.json(
+            { error: `Gemini API returned status ${response.status}: ${errorText}` },
+            { status: response.status }
+          )
+        }
+
+        data = await response.json()
+        const candidate = data.candidates?.[0]
+        const modelContent = candidate?.content
+        parts = modelContent?.parts || []
+      }
 
       // Find any function call request
       const functionCalls = parts.filter((p: any) => p.functionCall)
