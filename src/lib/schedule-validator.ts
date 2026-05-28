@@ -38,7 +38,8 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   const startWeekday = startFields.weekday
 
   let intervalMins = 0
-  if (slot.repeat15m) intervalMins = 15
+  if (slot.repeat10m) intervalMins = 10
+  else if (slot.repeat15m) intervalMins = 15
   else if (slot.hourly) intervalMins = 20
   else if (slot.repeat30m) intervalMins = 30
   else if (slot.repeat1h) intervalMins = 60
@@ -190,8 +191,8 @@ export function areSlotsOverlapping(slotA: any, slotB: any, now: Date = new Date
 
   if (!stopA || !stopB) return false
 
-  const isRecurringA = slotA.daily || slotA.weekly || slotA.hourly || slotA.repeat15m || slotA.repeat30m || slotA.repeat1h || slotA.repeat2h
-  const isRecurringB = slotB.daily || slotB.weekly || slotB.hourly || slotB.repeat15m || slotB.repeat30m || slotB.repeat1h || slotB.repeat2h
+  const isRecurringA = slotA.daily || slotA.weekly || slotA.hourly || slotA.repeat10m || slotA.repeat15m || slotA.repeat30m || slotA.repeat1h || slotA.repeat2h
+  const isRecurringB = slotB.daily || slotB.weekly || slotB.hourly || slotB.repeat10m || slotB.repeat15m || slotB.repeat30m || slotB.repeat1h || slotB.repeat2h
 
   if (isRecurringA && isRecurringB) {
     // Both are recurring. Check over an 8-day window starting now.
