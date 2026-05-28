@@ -1614,7 +1614,7 @@ export default function Home() {
     <div className="min-h-screen xl:h-screen flex flex-col xl:overflow-hidden bg-background" dir="ltr">
       {/* â€•â€•â€• Header â€•â€•â€• */}
       <header className="border-b bg-card shrink-0 z-50">
-        <div className="px-4 py-2">
+        <div className="px-4 py-1">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <a href="https://streamer.qaff.net" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -1667,9 +1667,9 @@ export default function Home() {
               </Badge>
             )}
 
-          <div className="flex flex-col items-center justify-center gap-2.5 w-full mt-3">
+          <div className="flex flex-col items-center justify-center gap-1.5 w-full mt-1.5">
             {/* Top Bar Row 1: Controls */}
-            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
               <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
                 onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
                 <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
@@ -1701,7 +1701,7 @@ export default function Home() {
             </div>
 
             {/* Top Bar Row 2: Schedules & Repeats */}
-            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
                 <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
@@ -1773,7 +1773,7 @@ export default function Home() {
             </div>
 
             {/* Top Bar 2: Navigation & Settings */}
-            <div className="flex items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all text-muted-foreground hover:text-foreground font-medium" onClick={() => setAiAssistantOpen(true)}>
                 <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-500 animate-pulse" />
                 {locale === 'ar' ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant'}
@@ -2202,7 +2202,7 @@ export default function Home() {
             <CardContent className="flex-1 p-0 overflow-y-auto xl:overflow-hidden min-h-0">
               {/* ── Desktop Table (xl+) ── */}
               <div className="hidden xl:block h-full overflow-auto">
-                <table className="w-full border-collapse" style={{ minWidth: 1555, tableLayout: 'fixed' }}>
+                <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>
@@ -2223,9 +2223,9 @@ export default function Home() {
                           <span>#</span>
                         </div>
                       </th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 130 }}>{t('colDetails')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>{t('colDetails')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 160 }}>{t('colStreamKey')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colStreamKey')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
                       <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 580 }}>
                         <div className="flex items-end gap-2 h-full">
@@ -2240,8 +2240,8 @@ export default function Home() {
                       </th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colActions')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colStatus')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 90 }}>{t('colPlatform')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colOutputSettings')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colPlatform')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 75 }}>{t('colOutputSettings')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3221,9 +3221,9 @@ export default function Home() {
         </main>
       )}
 
-      <footer className="w-full border-t bg-card py-4 shrink-0 mt-auto shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
+      <footer className="w-full border-t bg-card py-2 shrink-0 mt-auto shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)]">
         <div className="container mx-auto w-full overflow-hidden">
-          <div className="flex flex-col items-center justify-center gap-3 px-4 text-center w-full">
+          <div className="flex flex-col items-center justify-center gap-2 px-4 text-center w-full">
 
             {/* Copyright & WhatsApp Group */}
             <div className={`flex items-center justify-center gap-2 ${dir === 'rtl' ? 'flex-row-reverse' : 'flex-row'}`}>
