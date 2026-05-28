@@ -2202,7 +2202,7 @@ export default function Home() {
             <CardContent className="flex-1 p-0 overflow-y-auto xl:overflow-hidden min-h-0">
               {/* ── Desktop Table (xl+) ── */}
               <div className="hidden xl:block h-full overflow-auto">
-                <table className="w-full border-collapse" style={{ minWidth: 1405, tableLayout: 'fixed' }}>
+                <table className="w-full border-collapse" style={{ minWidth: 1475, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>
@@ -2227,13 +2227,13 @@ export default function Home() {
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colStreamKey')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
-                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 580 }}>
+                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 650 }}>
                         <div className="flex items-end gap-2 h-full">
-                          <div className="w-[140px] text-center shrink-0">{t('stopStream')}</div>
-                          <div className="w-[245px] flex items-center justify-center shrink-0 pb-[1px]">
+                          <div className="w-[110px] text-center shrink-0">{t('stopStream')}</div>
+                          <div className="w-[220px] flex items-center justify-center shrink-0 pb-[1px]">
                             <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
                           </div>
-                          <div className="w-[195px] flex items-center justify-center shrink-0 pb-[1px]">
+                          <div className="w-[320px] flex items-center justify-center shrink-0 pb-[1px]">
                             <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{locale === 'ar' ? 'تكرار البث' : 'Repeat Options'}</span>
                           </div>
                         </div>
@@ -2428,33 +2428,47 @@ export default function Home() {
                                 </div>
                                 <select
                                   disabled={isLocked}
-                                  value={durH >= 0 ? durH : 0}
+                                  value={durH}
                                   onChange={(e) => {
                                     const newH = parseInt(e.target.value)
-                                    const currentM = durM >= 0 ? durM : 0
-                                    const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
-                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                    if (newH === -1) {
+                                      handleSlotChange(slot.slotIndex, 'schedStop', '')
+                                    } else {
+                                      const currentM = durM >= 0 ? durM : 0
+                                      const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
+                                      handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                    }
                                   }}
                                   className={`appearance-none bg-background/50 hover:bg-background text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 text-foreground/80 text-center w-[36px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
+                                  <option value={-1} className="bg-background text-foreground">--</option>
                                   {Array.from({ length: 24 }).map((_, i) => (
-                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'س' : 'h'}</option>
+                                    <option key={i} value={i} className="bg-background text-foreground">
+                                      {String(i).padStart(2, '0')}
+                                    </option>
                                   ))}
                                 </select>
                                 <span className="text-[10px] text-muted-foreground">:</span>
                                 <select
                                   disabled={isLocked}
-                                  value={durM >= 0 ? durM : 0}
+                                  value={durM}
                                   onChange={(e) => {
                                     const newM = parseInt(e.target.value)
-                                    const currentH = durH >= 0 ? durH : 0
-                                    const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
-                                    handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                    if (newM === -1) {
+                                      handleSlotChange(slot.slotIndex, 'schedStop', '')
+                                    } else {
+                                      const currentH = durH >= 0 ? durH : 0
+                                      const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
+                                      handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
+                                    }
                                   }}
                                   className={`appearance-none bg-background/50 hover:bg-background text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 text-foreground/80 text-center w-[36px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
+                                  <option value={-1} className="bg-background text-foreground">--</option>
                                   {Array.from({ length: 60 }).map((_, i) => (
-                                    <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'د' : 'm'}</option>
+                                    <option key={i} value={i} className="bg-background text-foreground">
+                                      {String(i).padStart(2, '0')}
+                                    </option>
                                   ))}
                                 </select>
                                 
@@ -2516,96 +2530,90 @@ export default function Home() {
                               </div>
 
                               {/* Recurrence Checkboxes */}
-                              <div className={`flex flex-col gap-1 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
-                                {/* Row 1 */}
-                                <div className="flex justify-center items-center gap-2">
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: !!c,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: !!c,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: !!c,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`hourly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
-                                  </div>
+                              <div className={`flex flex-row items-center gap-2.5 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: !!c,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
                                 </div>
-                                {/* Row 2 */}
-                                <div className="flex justify-center items-center gap-2">
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: !!c,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`repeat30m-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`repeat30m-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: !!c,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`repeat1h-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`repeat1h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: !!c,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`repeat2h-${slot.slotIndex}`} className="w-3 h-3" />
-                                    <label htmlFor={`repeat2h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
-                                  </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: !!c,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: !!c,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`hourly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: !!c,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`repeat30m-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`repeat30m-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: !!c,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`repeat1h-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`repeat1h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: !!c,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`repeat2h-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`repeat2h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
                                 </div>
                               </div>
 
@@ -3052,96 +3060,90 @@ export default function Home() {
                               </div>
 
                               {/* Recurrence Checkboxes */}
-                              <div className={`flex flex-col gap-1 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
-                                {/* Row 1 */}
-                                <div className="flex items-center gap-2.5">
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: !!c,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: !!c,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: !!c,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-hourly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
-                                  </div>
+                              <div className={`flex flex-row flex-wrap items-center gap-2 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: !!c,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
                                 </div>
-                                {/* Row 2 */}
-                                <div className="flex items-center gap-2.5">
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: !!c,
-                                        repeat1h: false,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-repeat30m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-repeat30m-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: !!c,
-                                        repeat2h: false,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-repeat1h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-repeat1h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
-                                      handleSlotMultipleChange(slot.slotIndex, {
-                                        weekly: false,
-                                        daily: false,
-                                        hourly: false,
-                                        repeat30m: false,
-                                        repeat1h: false,
-                                        repeat2h: !!c,
-                                        nextRunTime: ''
-                                      })
-                                    }} id={`m-repeat2h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                    <label htmlFor={`m-repeat2h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
-                                  </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: !!c,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.hourly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: !!c,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-hourly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblHourly')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat30m} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: !!c,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-repeat30m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-repeat30m-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat30m')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat1h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: !!c,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-repeat1h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-repeat1h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat1h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat2h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: !!c,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-repeat2h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-repeat2h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
                                 </div>
                               </div>
 
