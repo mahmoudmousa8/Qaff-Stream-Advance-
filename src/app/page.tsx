@@ -579,6 +579,7 @@ export default function Home() {
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false)
   const [aiInputValue, setAiInputValue] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [showAiSettings, setShowAiSettings] = useState(false)
 
   // YouTube channels manager state
   const [ytManagerOpen, setYtManagerOpen] = useState(false)
@@ -1839,7 +1840,7 @@ export default function Home() {
               )}
             </div>
             
-            <div className="flex items-center gap-1 flex-wrap justify-end flex-1">
+            <div className="flex items-center gap-1 flex-wrap justify-center flex-1">
               <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
                 onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
                 <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
@@ -1878,108 +1879,107 @@ export default function Home() {
           </div>
 
           {/* Top Bar Row 2: Schedules & Repeats */}
-            <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
-                onClick={() => confirmBulkAction('setClosest10m6mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق وبث 6 دقائق؟' : 'Set all slots to nearest 10 minutes (stream 6 mins)?')} title={locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setClosest15m9mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 9 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 9 mins)?')} title={locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set all slots to nearest 30 minutes (stream 24 mins)?')} title={locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وبث 50 دقيقة؟' : 'Set all slots to nearest hour (stream 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}>
-                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
-              </Button>
+          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-max mx-auto">
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosest10m6mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق وبث 6 دقائق؟' : 'Set all slots to nearest 10 minutes (stream 6 mins)?')} title={locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosest15m9mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 9 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 9 mins)?')} title={locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosestHourAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 20 دقيقة وبث 13 دقيقة؟' : 'Set all slots to nearest 20 minutes (stream 13 mins)?')} title={locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 20 للكل' : 'Set 20m All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosest30m24mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب نصف ساعة وبث 24 دقيقة؟' : 'Set all slots to nearest 30 minutes (stream 24 mins)?')} title={locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 30 للكل' : 'Set 30m All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosestHour50mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعة وبث 50 دقيقة؟' : 'Set all slots to nearest hour (stream 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعة للكل' : 'Set Hour All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}>
+              <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
+            </Button>
 
-              <div className="w-px h-5 bg-border/50 mx-1" />
+            <div className="w-px h-5 bg-border/50 mx-1" />
 
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
-                onClick={() => confirmBulkAction('repeat10mAll', locale === 'ar' ? 'تفعيل تكرار 10 دقائق للكل؟' : 'Toggle 10-min repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '10 للكل' : '10m Repeat All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('repeat15mAll', locale === 'ar' ? 'تفعيل تكرار 15 دقيقة للكل؟' : 'Toggle 15-min repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '15 للكل' : '15m Repeat All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للكل؟' : 'Toggle 20-min repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 دقيقة للكل' : '20m Repeat All'}
-              </Button>
-
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 دقيقة للكل؟' : 'Toggle 30-min repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 دقيقة للكل' : '30m Repeat All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للكل؟' : 'Toggle 1-hour repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعة للكل' : '1h Repeat All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')}>
-                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعتين للكل' : '2h Repeat All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
-                <Sun className="w-3.5 h-3.5 mr-1" />{t('dailyAll')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('weeklyAll', locale === 'ar' ? 'تفعيل/إلغاء التكرار الأسبوعي لكافة القنوات؟' : 'Toggle weekly repeat for all slots?')}>
-                <Sun className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إسبوعي للكل' : 'Weekly All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => {
-                  setTargetSlotsForAction(undefined)
-                  setBulkTitleDescOpen(true)
-                }}
-                title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
-                <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عنوان ووصف للكل' : 'Title & Desc All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => {
-                  setTargetSlotsForAction(undefined)
-                  setBulkEpisodeOpen(true)
-                }}
-                title={locale === 'ar' ? 'تعيين رقم بداية الحلقة لجميع القنوات' : 'Set starting episode number for all channels'}>
-                <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => {
-                  setTargetSlotsForAction(undefined)
-                  setBulkRandomTitleDescOpen(true)
-                }}
-                title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
-                <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية' : 'Random All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => { setTargetSlotsForAction(undefined); setBulkThumbnailSelectorOpen(true); }} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
-                <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف للكل' : 'Thumbnail All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
-                onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف' : 'Clear Cover'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => { setTargetSlotsForAction(undefined); setBulkSwapSelectorOpen(true); }} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
-                <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تبديل للكل' : 'Swap All'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
-                onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
-              </Button>
-            </div>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('repeat10mAll', locale === 'ar' ? 'تفعيل تكرار 10 للكل؟' : 'Toggle 10-min repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '10 للكل' : '10m Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('repeat15mAll', locale === 'ar' ? 'تفعيل تكرار 15 للكل؟' : 'Toggle 15-min repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '15 للكل' : '15m Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 للكل؟' : 'Toggle 20-min repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 للكل' : '20m Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 للكل؟' : 'Toggle 30-min repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 للكل' : '30m Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('repeat1hAll', locale === 'ar' ? 'تفعيل تكرار ساعة للكل؟' : 'Toggle 1-hour repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعة للكل' : '1h Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')}>
+              <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'ساعتين للكل' : '2h Repeat All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
+              <Sun className="w-3.5 h-3.5 mr-1" />{t('dailyAll')}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('weeklyAll', locale === 'ar' ? 'تفعيل/إلغاء التكرار الأسبوعي لكافة القنوات؟' : 'Toggle weekly repeat for all slots?')}>
+              <Sun className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إسبوعي للكل' : 'Weekly All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => {
+                setTargetSlotsForAction(undefined)
+                setBulkTitleDescOpen(true)
+              }}
+              title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
+              <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عنوان ووصف للكل' : 'Title & Desc All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => {
+                setTargetSlotsForAction(undefined)
+                setBulkEpisodeOpen(true)
+              }}
+              title={locale === 'ar' ? 'تعيين رقم بداية الحلقة لجميع القنوات' : 'Set starting episode number for all channels'}>
+              <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => {
+                setTargetSlotsForAction(undefined)
+                setBulkRandomTitleDescOpen(true)
+              }}
+              title={locale === 'ar' ? 'تعيين عناوين وأوصاف عشوائية للكل من القائمة' : 'Set random Titles and Descriptions for all channels from list'}>
+              <RotateCcw className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عناوين عشوائية' : 'Random All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => { setTargetSlotsForAction(undefined); setBulkThumbnailSelectorOpen(true); }} title={locale === 'ar' ? 'ضبط صورة غلاف موحدة أو مجلد لكافة القنوات' : 'Set unified thumbnail or folder for all slots'}>
+              <ImageIcon className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'غلاف للكل' : 'Thumbnail All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
+              onClick={() => confirmBulkAction('clearThumbnailAll', locale === 'ar' ? 'حذف صورة الغلاف من كافة القنوات؟' : 'Clear thumbnail from all slots?')} title={locale === 'ar' ? 'مسح غلاف الكل' : 'Clear Thumbnail All'}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح الغلاف' : 'Clear Cover'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => { setTargetSlotsForAction(undefined); setBulkSwapSelectorOpen(true); }} title={locale === 'ar' ? 'تعيين مجلد/فيديو تبديل موحد لكافة البثوث' : 'Set unified swap video/folder for all slots'}>
+              <FolderOpen className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تبديل للكل' : 'Swap All'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-red-500 font-semibold"
+              onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف فيديو/مجلد التبديل من كافة القنوات؟' : 'Clear swap video/folder from all slots?')} title={locale === 'ar' ? 'مسح تبديل الكل' : 'Clear Swap All'}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
+            </Button>
+          </div>
 
             {/* Top Bar 2: Navigation & Settings */}
             <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
@@ -2398,22 +2398,20 @@ export default function Home() {
                           <span>#</span>
                         </div>
                       </th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>{t('colDetails')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colDetails')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colStreamKey')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
-                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 650 }}>
-                        <div className="flex items-end gap-2 h-full">
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 110 }}>{t('startStream')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 330 }}>
+                        <div className="flex items-end gap-2 h-full justify-center">
                           <div className="w-[110px] text-center shrink-0">{t('stopStream')}</div>
-                          <div className="w-[220px] flex items-center justify-center shrink-0 pb-[1px]">
+                          <div className="w-[210px] text-center shrink-0 pb-[1px]">
                             <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
-                          </div>
-                          <div className="w-[320px] flex items-center justify-center shrink-0 pb-[1px]">
-                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{locale === 'ar' ? 'تكرار البث' : 'Repeat Options'}</span>
                           </div>
                         </div>
                       </th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colActions')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 320 }}>{locale === 'ar' ? 'تكرار البث' : 'Repeat Options'}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colStatus')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colPlatform')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 75 }}>{t('colOutputSettings')}</th>
@@ -2571,9 +2569,9 @@ export default function Home() {
 
                           {/* Start Schedule */}
                           <td className="px-2 py-1" style={{ overflow: 'hidden' }}>
-                            <div className="flex flex-row items-center justify-center gap-2 flex-nowrap">
+                            <div className="flex flex-row items-center justify-center gap-1.5 flex-nowrap">
                               {/* Start Group */}
-                              <div className="flex gap-1.5 items-center px-1 py-0.5 shrink-0">
+                              <div className="flex gap-1 items-center px-1 py-0.5 shrink-0">
                                 <div className="flex items-center justify-center w-[18px] h-[18px] bg-green-500/15 text-green-600 rounded-[4px] shrink-0 border border-green-500/20">
                                   <svg viewBox="0 0 24 24" fill="currentColor" className="w-2.5 h-2.5 ml-[1px]">
                                     <path d="M5.5 3.5l14 8.5-14 8.5v-17z" />
@@ -2585,7 +2583,7 @@ export default function Home() {
                                   value={slot.schedStart || ''}
                                   placeholder="00-00 00:00"
                                   onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStart', e.target.value)}
-                                  className={`w-[85px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  className={`w-[72px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                   dir="ltr"
                                 />
                                 <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
@@ -2670,8 +2668,8 @@ export default function Home() {
                                   type="button"
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest10Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold text-pink-500 bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30 rounded hover:text-pink-600 transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '10 دقائق (مدة 6 دقائق)' : '10 mins (6m duration)'}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '10 (مدة 6 د)' : '10 mins (6m duration)'}
                                 >
                                   {locale === 'ar' ? '10' : '10'}
                                 </button>
@@ -2680,7 +2678,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '15 دقيقة (مدة 9 دقائق)' : '15 mins (9m duration)'}
+                                  title={locale === 'ar' ? '15 (مدة 9 د)' : '15 mins (9m duration)'}
                                 >
                                   {locale === 'ar' ? '15' : '15'}
                                 </button>
@@ -2689,7 +2687,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest20Schedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '20 دقيقة (مدة 13 دقيقة)' : '20 mins (13m duration)'}
+                                  title={locale === 'ar' ? '20 (مدة 13 د)' : '20 mins (13m duration)'}
                                 >
                                   {locale === 'ar' ? '20' : '20'}
                                 </button>
@@ -2698,7 +2696,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest30Schedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '30 دقيقة (مدة 24 دقيقة)' : '30 mins (24m duration)'}
+                                  title={locale === 'ar' ? '30 (مدة 24 د)' : '30 mins (24m duration)'}
                                 >
                                   {locale === 'ar' ? '30' : '30'}
                                 </button>
@@ -2707,7 +2705,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosestHourSchedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعة (مدة 50 دقيقة)' : 'Hour (50m duration)'}
+                                  title={locale === 'ar' ? 'ساعة (مدة 50 د)' : 'Hour (50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعة' : '1h'}
                                 </button>
@@ -2716,13 +2714,61 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعتين (مدة ساعة و50 دقيقة)' : '2 hours (1h 50m duration)'}
+                                  title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعتين' : '2h'}
                                 </button>
                               </div>
+                            </div>
+                          </td>
 
-                              {/* Recurrence Checkboxes */}
+                          {/* Actions */}
+                          <td className="px-2 py-1">
+                            <div className="flex gap-2 justify-center flex-nowrap">
+                              <Button size="sm" variant="default" className="h-7 w-7 p-0 rounded-md shadow-sm bg-green-600 hover:bg-green-500 hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-green-500/40 relative z-0 hover:z-10 transition-all duration-200"
+                                disabled={slot.isRunning}
+                                onClick={() => handlePlayButton(slot.slotIndex)}
+                                title={slot.schedStart ? t('scheduleStream') : t('startStream')}>
+                                <Play className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="destructive" className="h-7 w-7 p-0 rounded-md shadow-sm hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-500/40 relative z-0 hover:z-10 transition-all duration-200"
+                                disabled={!slot.isRunning && !slot.isScheduled}
+                                onClick={() => stopStream(slot.slotIndex)}
+                                title={t('stopStream')}>
+                                <Square className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
+                                onClick={() => resetSlot(slot.slotIndex)}
+                                title={t('resetSlot')}>
+                                <RotateCcw className="w-3.5 h-3.5 animate-spin-reverse" />
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
+                                onClick={() => {
+                                  setSettingsSlot(slot.slotIndex)
+                                  setSettingsData({
+                                    swapVideoPath: slot.swapVideoPath ?? '',
+                                    swapVideoEnabled: slot.swapVideoEnabled ?? false,
+                                    youtubeChannelId: slot.youtubeChannelId ?? '',
+                                    youtubeTitle: slot.youtubeTitle ?? '',
+                                    youtubeDescription: slot.youtubeDescription ?? '',
+                                    youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
+                                    streamKey: slot.streamKey ?? '',
+                                    rtmpServer: slot.rtmpServer ?? '',
+                                    titleDescListId: slot.titleDescListId ?? null,
+                                    episodeNumber: slot.episodeNumber ?? 1,
+                                  })
+                                  // Pre-fetch stream keys if channel is already linked
+                                  if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
+                                }}
+                                title={t('advancedSettings')}>
+                                <Settings className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+
+                          {/* Recurrence Checkboxes */}
+                          <td className="px-2 py-1">
+                            <div className="flex flex-row items-center gap-2.5 justify-center flex-nowrap">
                               <div className={`flex flex-row items-center gap-2.5 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
@@ -2737,8 +2783,8 @@ export default function Home() {
                                       repeat2h: false,
                                       nextRunTime: ''
                                     })
-                                  }} id={`repeat10m-${slot.slotIndex}`} className="w-3 h-3 data-[state=checked]:bg-pink-500 data-[state=checked]:border-pink-500" />
-                                  <label htmlFor={`repeat10m-${slot.slotIndex}`} className="text-[10px] text-pink-500 font-medium cursor-pointer select-none">{locale === 'ar' ? '10 دقائق' : '10m'}</label>
+                                  }} id={`repeat10m-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`repeat10m-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{locale === 'ar' ? '10' : '10m'}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat15m} onCheckedChange={(c) => {
@@ -2853,54 +2899,9 @@ export default function Home() {
                                   <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
                                 </div>
                               </div>
-
                               {slot.nextRunTime && (
                                 <div className="text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
                               )}
-                            </div>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-2 py-1">
-                            <div className="flex gap-2 justify-center flex-nowrap">
-                              <Button size="sm" variant="default" className="h-7 w-7 p-0 rounded-md shadow-sm bg-green-600 hover:bg-green-500 hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-green-500/40 relative z-0 hover:z-10 transition-all duration-200"
-                                disabled={slot.isRunning}
-                                onClick={() => handlePlayButton(slot.slotIndex)}
-                                title={slot.schedStart ? t('scheduleStream') : t('startStream')}>
-                                <Play className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="sm" variant="destructive" className="h-7 w-7 p-0 rounded-md shadow-sm hover:scale-110 hover:-translate-y-0.5 hover:shadow-md hover:shadow-red-500/40 relative z-0 hover:z-10 transition-all duration-200"
-                                disabled={!slot.isRunning && !slot.isScheduled}
-                                onClick={() => stopStream(slot.slotIndex)}
-                                title={t('stopStream')}>
-                                <Square className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
-                                onClick={() => resetSlot(slot.slotIndex)}
-                                title={t('resetSlot')}>
-                                <RotateCcw className="w-3.5 h-3.5 animate-spin-reverse" />
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 w-7 p-0 rounded-md bg-background hover:bg-muted hover:scale-110 hover:-translate-y-0.5 hover:shadow-md relative z-0 hover:z-10 transition-all duration-200"
-                                onClick={() => {
-                                  setSettingsSlot(slot.slotIndex)
-                                  setSettingsData({
-                                    swapVideoPath: slot.swapVideoPath ?? '',
-                                    swapVideoEnabled: slot.swapVideoEnabled ?? false,
-                                    youtubeChannelId: slot.youtubeChannelId ?? '',
-                                    youtubeTitle: slot.youtubeTitle ?? '',
-                                    youtubeDescription: slot.youtubeDescription ?? '',
-                                    youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
-                                    streamKey: slot.streamKey ?? '',
-                                    rtmpServer: slot.rtmpServer ?? '',
-                                    titleDescListId: slot.titleDescListId ?? null,
-                                    episodeNumber: slot.episodeNumber ?? 1,
-                                  })
-                                  // Pre-fetch stream keys if channel is already linked
-                                  if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
-                                }}
-                                title={t('advancedSettings')}>
-                                <Settings className="w-3.5 h-3.5" />
-                              </Button>
                             </div>
                           </td>
 
@@ -3263,8 +3264,8 @@ export default function Home() {
                                   type="button"
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest10Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold text-pink-500 bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30 rounded hover:text-pink-600 transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '10 دقائق (مدة 6 دقائق)' : '10 mins (6m duration)'}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '10 (مدة 6 د)' : '10 mins (6m duration)'}
                                 >
                                   {locale === 'ar' ? '10' : '10'}
                                 </button>
@@ -3273,7 +3274,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '15 دقيقة (مدة 9 دقائق)' : '15 mins (9m duration)'}
+                                  title={locale === 'ar' ? '15 (مدة 9 د)' : '15 mins (9m duration)'}
                                 >
                                   {locale === 'ar' ? '15' : '15'}
                                 </button>
@@ -3282,7 +3283,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest20Schedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '20 دقيقة (مدة 13 دقيقة)' : '20 mins (13m duration)'}
+                                  title={locale === 'ar' ? '20 (مدة 13 د)' : '20 mins (13m duration)'}
                                 >
                                   {locale === 'ar' ? '20' : '20'}
                                 </button>
@@ -3291,7 +3292,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest30Schedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '30 دقيقة (مدة 24 دقيقة)' : '30 mins (24m duration)'}
+                                  title={locale === 'ar' ? '30 (مدة 24 د)' : '30 mins (24m duration)'}
                                 >
                                   {locale === 'ar' ? '30' : '30'}
                                 </button>
@@ -3300,7 +3301,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosestHourSchedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعة (مدة 50 دقيقة)' : 'Hour (50m duration)'}
+                                  title={locale === 'ar' ? 'ساعة (مدة 50 د)' : 'Hour (50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعة' : '1h'}
                                 </button>
@@ -3309,7 +3310,7 @@ export default function Home() {
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعتين (مدة ساعة و50 دقيقة)' : '2 hours (1h 50m duration)'}
+                                  title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعتين' : '2h'}
                                 </button>
@@ -3330,8 +3331,8 @@ export default function Home() {
                                       repeat2h: false,
                                       nextRunTime: ''
                                     })
-                                  }} id={`m-repeat10m-${slot.slotIndex}`} className="w-3.5 h-3.5 data-[state=checked]:bg-pink-500 data-[state=checked]:border-pink-500" />
-                                  <label htmlFor={`m-repeat10m-${slot.slotIndex}`} className="text-xs text-pink-500 font-medium cursor-pointer select-none">{locale === 'ar' ? '10 دقائق' : '10m'}</label>
+                                  }} id={`m-repeat10m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-repeat10m-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{locale === 'ar' ? '10' : '10m'}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat15m} onCheckedChange={(c) => {
@@ -4026,7 +4027,7 @@ export default function Home() {
                         <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <div className="flex justify-between items-center">
                             <label className="text-sm font-bold text-foreground">
-                              {locale === 'ar' ? 'رقم الحلقة (يستبدل {Add})' : 'Episode Number (replaces {Add})'}
+                              {locale === 'ar' ? 'رقم الحلقة يستبدل ب {Add}' : 'Episode Number replaces {Add}'}
                             </label>
                           </div>
                           <Input
@@ -4652,120 +4653,153 @@ export default function Home() {
       </Dialog>
 
       {/* ── AI Assistant (Gemini) Dialog ── */}
-      <Dialog open={aiAssistantOpen} onOpenChange={(open) => !open && setAiAssistantOpen(false)}>
+      <Dialog open={aiAssistantOpen} onOpenChange={(open) => {
+        if (!open) {
+          setAiAssistantOpen(false)
+          setShowAiSettings(false)
+        }
+      }}>
         <DialogContent className="sm:max-w-3xl w-[95vw] h-[80vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
           <DialogHeader className="shrink-0 px-6 pt-6 pb-4 border-b border-border/80">
-            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-              <Sparkles className="w-6 h-6 text-purple-500 animate-pulse" />
-              {locale === 'ar' ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground mt-1">
-              {locale === 'ar'
-                ? 'استعن بالذكاء الاصطناعي لصياغة العناوين وتنسيق قوائم البثوث وتوليدها تلقائياً وحفظها بضغطة زر.'
-                : 'Leverage AI to compose video titles, generate stream descriptions, and save structured lists directly.'}
-            </DialogDescription>
+            <div className="flex justify-between items-start w-full">
+              <div className="space-y-1">
+                <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+                  <Sparkles className="w-6 h-6 text-purple-500 animate-pulse" />
+                  {locale === 'ar' ? 'مساعد الذكاء الاصطناعي' : 'AI Assistant'}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
+                  {locale === 'ar'
+                    ? 'استعن بالذكاء الاصطناعي لصياغة العناوين وتنسيق قوائم البثوث وتوليدها تلقائياً وحفظها بضغطة زر.'
+                    : 'Leverage AI to compose video titles, generate stream descriptions, and save structured lists directly.'}
+                </DialogDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowAiSettings(p => !p)}
+                  className="h-8 text-xs flex items-center gap-1 shrink-0"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  {locale === 'ar' ? 'إعدادات API' : 'API Settings'}
+                </Button>
+                {chatMessages.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setChatMessages([])}
+                    className="h-8 text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 flex items-center gap-1 shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {locale === 'ar' ? 'مسح الرسائل' : 'Clear Chat'}
+                  </Button>
+                )}
+              </div>
+            </div>
           </DialogHeader>
 
           {/* Gemini API Key Section */}
-          <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col lg:flex-row items-center gap-3 shrink-0">
-            <label className="text-xs font-semibold text-foreground shrink-0 flex items-center gap-1">
-              🔑 {locale === 'ar' ? 'إعدادات المساعد الذكي:' : 'AI Settings:'}
-            </label>
-            <div className="flex flex-col sm:flex-row w-full gap-2 items-center flex-wrap">
-              <Input
-                type="password"
-                placeholder={locale === 'ar' ? 'مفتاح API (Gemini / AgentRouter / OpenRouter / Nvidia)' : 'API Key (Gemini / AgentRouter / OpenRouter / Nvidia)'}
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                className="h-8 text-xs font-mono flex-1 min-w-[200px]"
-              />
-              <select
-                value={aiProvider}
-                onChange={(e) => {
-                  const prov = e.target.value as any
-                  setAiProvider(prov)
-                  if (prov === 'gemini') {
-                    setAiModel('gemini-2.5-flash')
-                    setIsCustomModel(false)
-                  } else if (prov === 'agentrouter') {
-                    setAiModel('glm-5.1')
-                    setIsCustomModel(false)
-                  } else if (prov === 'openrouter') {
-                    setAiModel('z-ai/glm-5.1')
-                    setIsCustomModel(false)
-                  } else if (prov === 'nvidia') {
-                    setAiModel('z-ai/glm-5.1')
-                    setIsCustomModel(false)
-                  }
-                }}
-                className="h-8 text-xs border rounded bg-background px-2 py-1 font-semibold focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
-              >
-                <option value="gemini">Google Gemini</option>
-                <option value="agentrouter">AgentRouter</option>
-                <option value="openrouter">OpenRouter</option>
-                <option value="nvidia">Nvidia integrate</option>
-              </select>
-              <select
-                value={isCustomModel ? 'custom' : aiModel}
-                onChange={(e) => {
-                  const val = e.target.value
-                  if (val === 'custom') {
-                    setIsCustomModel(true)
-                  } else {
-                    setIsCustomModel(false)
-                    setAiModel(val)
-                  }
-                }}
-                className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
-              >
-                {aiProvider === 'gemini' && (
-                  <>
-                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                    <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
-                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
-                    <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
-                  </>
-                )}
-                {aiProvider === 'agentrouter' && (
-                  <>
-                    <option value="glm-5.1">glm-5.1</option>
-                    <option value="deepseek-v4-pro">deepseek-v4-pro</option>
-                    <option value="deepseek-v4-flash">deepseek-v4-flash</option>
-                    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
-                    <option value="claude-opus-4-6">claude-opus-4-6</option>
-                  </>
-                )}
-                {aiProvider === 'openrouter' && (
-                  <>
-                    <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
-                  </>
-                )}
-                {aiProvider === 'nvidia' && (
-                  <>
-                    <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
-                  </>
-                )}
-                <option value="custom">{locale === 'ar' ? 'نموذج مخصص...' : 'Custom Model...'}</option>
-              </select>
-              {isCustomModel && (
+          {showAiSettings && (
+            <div className="px-6 py-3 border-b border-border/60 bg-muted/20 flex flex-col lg:flex-row items-center gap-3 shrink-0">
+              <label className="text-xs font-semibold text-foreground shrink-0 flex items-center gap-1">
+                🔑 {locale === 'ar' ? 'إعدادات المساعد الذكي:' : 'AI Settings:'}
+              </label>
+              <div className="flex flex-col sm:flex-row w-full gap-2 items-center flex-wrap">
                 <Input
-                  type="text"
-                  placeholder={locale === 'ar' ? 'اسم النموذج المخصص' : 'Custom Model Name'}
-                  value={customModelName}
-                  onChange={(e) => setCustomModelName(e.target.value)}
-                  className="h-8 text-xs font-mono w-full sm:w-40"
+                  type="password"
+                  placeholder={locale === 'ar' ? 'مفتاح API (Gemini / AgentRouter / OpenRouter / Nvidia)' : 'API Key (Gemini / AgentRouter / OpenRouter / Nvidia)'}
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  className="h-8 text-xs font-mono flex-1 min-w-[200px]"
                 />
-              )}
-              <Button
-                size="sm"
-                onClick={() => handleSaveGeminiKey(geminiApiKey, aiProvider, isCustomModel ? 'custom' : aiModel, isCustomModel, customModelName)}
-                className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold w-full sm:w-auto shrink-0"
-              >
-                {locale === 'ar' ? 'حفظ' : 'Save'}
-              </Button>
+                <select
+                  value={aiProvider}
+                  onChange={(e) => {
+                    const prov = e.target.value as any
+                    setAiProvider(prov)
+                    if (prov === 'gemini') {
+                      setAiModel('gemini-2.5-flash')
+                      setIsCustomModel(false)
+                    } else if (prov === 'agentrouter') {
+                      setAiModel('glm-5.1')
+                      setIsCustomModel(false)
+                    } else if (prov === 'openrouter') {
+                      setAiModel('z-ai/glm-5.1')
+                      setIsCustomModel(false)
+                    } else if (prov === 'nvidia') {
+                      setAiModel('z-ai/glm-5.1')
+                      setIsCustomModel(false)
+                    }
+                  }}
+                  className="h-8 text-xs border rounded bg-background px-2 py-1 font-semibold focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="agentrouter">AgentRouter</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="nvidia">Nvidia integrate</option>
+                </select>
+                <select
+                  value={isCustomModel ? 'custom' : aiModel}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val === 'custom') {
+                      setIsCustomModel(true)
+                    } else {
+                      setIsCustomModel(false)
+                      setAiModel(val)
+                    }
+                  }}
+                  className="h-8 text-xs border rounded bg-background px-2 py-1 font-mono focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
+                >
+                  {aiProvider === 'gemini' && (
+                    <>
+                      <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                      <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+                      <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                      <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                      <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
+                    </>
+                  )}
+                  {aiProvider === 'agentrouter' && (
+                    <>
+                      <option value="glm-5.1">glm-5.1</option>
+                      <option value="deepseek-v4-pro">deepseek-v4-pro</option>
+                      <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+                      <option value="claude-haiku-4-5-20251001">claude-haiku-4-5-20251001</option>
+                      <option value="claude-opus-4-6">claude-opus-4-6</option>
+                    </>
+                  )}
+                  {aiProvider === 'openrouter' && (
+                    <>
+                      <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
+                    </>
+                  )}
+                  {aiProvider === 'nvidia' && (
+                    <>
+                      <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
+                    </>
+                  )}
+                  <option value="custom">{locale === 'ar' ? 'نموذج مخصص...' : 'Custom Model...'}</option>
+                </select>
+                {isCustomModel && (
+                  <Input
+                    type="text"
+                    placeholder={locale === 'ar' ? 'اسم النموذج المخصص' : 'Custom Model Name'}
+                    value={customModelName}
+                    onChange={(e) => setCustomModelName(e.target.value)}
+                    className="h-8 text-xs font-mono w-full sm:w-40"
+                  />
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveGeminiKey(geminiApiKey, aiProvider, isCustomModel ? 'custom' : aiModel, isCustomModel, customModelName)}
+                  className="h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold w-full sm:w-auto shrink-0"
+                >
+                  {locale === 'ar' ? 'حفظ' : 'Save'}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Chat Messages scroll area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-muted/10 flex flex-col min-h-0">
@@ -4938,6 +4972,16 @@ export default function Home() {
 
           {/* Chat message input */}
           <div className="shrink-0 p-4 border-t border-border/80 bg-background flex gap-2">
+            {chatMessages.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={() => setChatMessages([])}
+                className="h-9 w-9 p-0 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 shrink-0"
+                title={locale === 'ar' ? 'مسح الرسائل' : 'Clear Chat'}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
             <Input
               value={aiInputValue}
               onChange={(e) => setAiInputValue(e.target.value)}
@@ -4948,12 +4992,12 @@ export default function Home() {
                 }
               }}
               placeholder={locale === 'ar' ? 'اسأل مساعد الذكاء الاصطناعي...' : 'Ask the AI Assistant...'}
-              className="text-xs bg-muted/30"
+              className="text-xs bg-muted/30 flex-1"
             />
             <Button
               onClick={() => handleSendAiMessage()}
               disabled={aiLoading || !aiInputValue.trim()}
-              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-5 h-9 shrink-0"
             >
               {locale === 'ar' ? 'إرسال' : 'Send'}
             </Button>
@@ -5130,6 +5174,54 @@ export default function Home() {
               onClick={() => {
                 bulkAction('setTitleDescAll', undefined, { youtubeTitle: bulkTitle, youtubeDescription: bulkDesc }, targetSlotsForAction)
                 setBulkTitleDescOpen(false)
+              }}
+            >
+              {locale === 'ar' ? 'تعيين' : 'Apply'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Episode Dialog ── */}
+      <Dialog open={bulkEpisodeOpen} onOpenChange={(open) => !open && setBulkEpisodeOpen(false)}>
+        <DialogContent className="sm:max-w-md w-[95vw] bg-card border border-border shadow-2xl rounded-xl" dir={dir}>
+          <DialogHeader className="px-6 pt-6 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Dices className="w-5 h-5 text-primary" />
+              {targetSlotsForAction 
+                ? (locale === 'ar' ? `تعيين رقم الحلقة للمحدد (${targetSlotsForAction.length} قناة)` : `Set Episode Number for Selected (${targetSlotsForAction.length} slots)`)
+                : (locale === 'ar' ? 'تعيين رقم الحلقة لكافة القنوات' : 'Set Episode Number for All Slots')}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'أدخل الرقم التمهيدي/البدائي لجميع القنوات المختارة. سيتم زيادة هذا الرقم تلقائياً في كل مرة يبدأ فيها البث.'
+                : 'Enter the starting episode number for all selected slots. This number will increment automatically upon stream start.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-6 space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-muted-foreground block">
+                {locale === 'ar' ? 'رقم الحلقة' : 'Episode Number'}
+              </label>
+              <Input
+                type="number"
+                min={0}
+                value={bulkEpisode}
+                onChange={(e) => setBulkEpisode(parseInt(e.target.value) || 0)}
+                placeholder="1"
+                className="w-full bg-background"
+              />
+            </div>
+          </div>
+          <DialogFooter className="px-6 py-4 bg-muted/40 border-t border-border/80">
+            <Button variant="outline" onClick={() => setBulkEpisodeOpen(false)}>
+              {locale === 'ar' ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                bulkAction('setEpisodeNumberAll', undefined, { episodeNumber: bulkEpisode }, targetSlotsForAction)
+                setBulkEpisodeOpen(false)
               }}
             >
               {locale === 'ar' ? 'تعيين' : 'Apply'}
@@ -5709,6 +5801,20 @@ export default function Home() {
             >
               <X className="w-3.5 h-3.5" />
               {locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
+            </Button>
+
+            {/* Episode Number Selected */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => {
+                setTargetSlotsForAction(selectedSlots)
+                setBulkEpisodeOpen(true)
+              }}
+            >
+              <Dices className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
             </Button>
 
             {/* Reset Selected */}
