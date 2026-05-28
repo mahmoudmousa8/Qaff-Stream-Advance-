@@ -2202,7 +2202,7 @@ export default function Home() {
             <CardContent className="flex-1 p-0 overflow-y-auto xl:overflow-hidden min-h-0">
               {/* ── Desktop Table (xl+) ── */}
               <div className="hidden xl:block h-full overflow-auto">
-                <table className="w-full border-collapse" style={{ minWidth: 1265, tableLayout: 'fixed' }}>
+                <table className="w-full border-collapse" style={{ minWidth: 1555, tableLayout: 'fixed' }}>
                   <thead className="sticky top-0 bg-card z-10 shadow-sm">
                     <tr className="bg-muted/50 border-b">
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 65 }}>
@@ -2227,14 +2227,14 @@ export default function Home() {
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 160 }}>{t('colStreamKey')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 140 }}>{t('startStream')}</th>
-                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 440 }}>
+                      <th className="text-start text-xs font-semibold px-2 py-1.5 align-middle" style={{ width: 580 }}>
                         <div className="flex items-end gap-2 h-full">
-                          <div className="w-[185px] text-center shrink-0">{t('stopStream')}</div>
-                          <div className="w-[155px] flex items-center justify-center shrink-0 pb-[1px]">
+                          <div className="w-[140px] text-center shrink-0">{t('stopStream')}</div>
+                          <div className="w-[245px] flex items-center justify-center shrink-0 pb-[1px]">
                             <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
                           </div>
-                          <div className="w-[66px] flex items-center justify-center shrink-0 pb-[1px]">
-                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblNext12')}</span>
+                          <div className="w-[195px] flex items-center justify-center shrink-0 pb-[1px]">
+                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{locale === 'ar' ? 'تكرار البث' : 'Repeat Options'}</span>
                           </div>
                         </div>
                       </th>
@@ -2435,7 +2435,7 @@ export default function Home() {
                                     const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
                                     handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
                                   }}
-                                  className={`bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                  className={`appearance-none bg-background/50 hover:bg-background text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 text-foreground/80 text-center w-[36px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                   {Array.from({ length: 24 }).map((_, i) => (
                                     <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'س' : 'h'}</option>
@@ -2451,7 +2451,7 @@ export default function Home() {
                                     const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
                                     handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
                                   }}
-                                  className={`bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                  className={`appearance-none bg-background/50 hover:bg-background text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 text-foreground/80 text-center w-[36px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                   {Array.from({ length: 60 }).map((_, i) => (
                                     <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'د' : 'm'}</option>
@@ -2987,7 +2987,7 @@ export default function Home() {
                                     const stopStr = "DUR " + String(newH).padStart(2, '0') + ":" + String(currentM).padStart(2, '0')
                                     handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
                                   }}
-                                  className={`bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                  className={`appearance-none bg-background/50 hover:bg-background text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1.5 py-0.5 text-foreground/80 text-center w-[38px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                   {Array.from({ length: 24 }).map((_, i) => (
                                     <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'س' : 'h'}</option>
@@ -3003,7 +3003,7 @@ export default function Home() {
                                     const stopStr = "DUR " + String(currentH).padStart(2, '0') + ":" + String(newM).padStart(2, '0')
                                     handleSlotChange(slot.slotIndex, 'schedStop', stopStr)
                                   }}
-                                  className={`bg-transparent border-none text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-0.5 text-foreground/80 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                  className={`appearance-none bg-background/50 hover:bg-background text-xs font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1.5 py-0.5 text-foreground/80 text-center w-[38px] transition-colors border border-border/40 ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                 >
                                   {Array.from({ length: 60 }).map((_, i) => (
                                     <option key={i} value={i} className="bg-background text-foreground">{i}{locale === 'ar' ? 'د' : 'm'}</option>
