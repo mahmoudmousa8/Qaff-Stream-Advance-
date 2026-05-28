@@ -428,7 +428,7 @@ Ensure that the JSON is valid and easy for the system to parse.`
       let data: any
       let parts: any[] = []
 
-      const isOpenAICompatible = activeProvider === 'agentrouter' || activeProvider === 'openrouter'
+      const isOpenAICompatible = activeProvider === 'agentrouter' || activeProvider === 'openrouter' || activeProvider === 'nvidia'
 
       if (isOpenAICompatible) {
         const openAITools = toolsConfig[0].functionDeclarations.map((fd: any) => {
@@ -447,9 +447,14 @@ Ensure that the JSON is valid and easy for the system to parse.`
 
         const openAIMessages = geminiToOpenAIMessages(currentHistory)
 
-        const endpoint = activeProvider === 'agentrouter'
-          ? 'https://agentrouter.org/v1/chat/completions'
-          : 'https://openrouter.ai/api/v1/chat/completions'
+        let endpoint = ''
+        if (activeProvider === 'agentrouter') {
+          endpoint = 'https://agentrouter.org/v1/chat/completions'
+        } else if (activeProvider === 'openrouter') {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions'
+        } else if (activeProvider === 'nvidia') {
+          endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions'
+        }
 
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
@@ -461,18 +466,29 @@ Ensure that the JSON is valid and easy for the system to parse.`
           headers['X-Title'] = 'Qaff Stream'
         }
 
+        const requestPayload: any = {
+          model: cleanModel,
+          messages: [
+            { role: 'system', content: systemInstructionText },
+            ...openAIMessages
+          ],
+          tools: openAITools,
+          tool_choice: 'auto'
+        }
+
+        if (activeProvider === 'nvidia') {
+          requestPayload.extra_body = {
+            chat_template_kwargs: {
+              enable_thinking: true,
+              clear_thinking: false
+            }
+          }
+        }
+
         const response = await fetch(endpoint, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            model: cleanModel,
-            messages: [
-              { role: 'system', content: systemInstructionText },
-              ...openAIMessages
-            ],
-            tools: openAITools,
-            tool_choice: 'auto'
-          })
+          body: JSON.stringify(requestPayload)
         })
 
         if (!response.ok) {

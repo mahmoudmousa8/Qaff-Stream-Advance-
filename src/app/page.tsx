@@ -491,7 +491,7 @@ export default function Home() {
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
   const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [aiProvider, setAiProvider] = useState<'gemini' | 'agentrouter' | 'openrouter'>('gemini')
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'agentrouter' | 'openrouter' | 'nvidia'>('gemini')
   const [aiModel, setAiModel] = useState('gemini-2.5-flash')
   const [isCustomModel, setIsCustomModel] = useState(false)
   const [customModelName, setCustomModelName] = useState('')
@@ -4374,7 +4374,7 @@ export default function Home() {
             <div className="flex flex-col sm:flex-row w-full gap-2 items-center flex-wrap">
               <Input
                 type="password"
-                placeholder={locale === 'ar' ? 'مفتاح API (Gemini / AgentRouter / OpenRouter)' : 'API Key (Gemini / AgentRouter / OpenRouter)'}
+                placeholder={locale === 'ar' ? 'مفتاح API (Gemini / AgentRouter / OpenRouter / Nvidia)' : 'API Key (Gemini / AgentRouter / OpenRouter / Nvidia)'}
                 value={geminiApiKey}
                 onChange={(e) => setGeminiApiKey(e.target.value)}
                 className="h-8 text-xs font-mono flex-1 min-w-[200px]"
@@ -4393,6 +4393,9 @@ export default function Home() {
                   } else if (prov === 'openrouter') {
                     setAiModel('z-ai/glm-5.1')
                     setIsCustomModel(false)
+                  } else if (prov === 'nvidia') {
+                    setAiModel('z-ai/glm-5.1')
+                    setIsCustomModel(false)
                   }
                 }}
                 className="h-8 text-xs border rounded bg-background px-2 py-1 font-semibold focus:outline-none w-full sm:w-auto shrink-0 text-foreground cursor-pointer"
@@ -4400,6 +4403,7 @@ export default function Home() {
                 <option value="gemini">Google Gemini</option>
                 <option value="agentrouter">AgentRouter</option>
                 <option value="openrouter">OpenRouter</option>
+                <option value="nvidia">Nvidia integrate</option>
               </select>
               <select
                 value={isCustomModel ? 'custom' : aiModel}
@@ -4433,6 +4437,11 @@ export default function Home() {
                   </>
                 )}
                 {aiProvider === 'openrouter' && (
+                  <>
+                    <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
+                  </>
+                )}
+                {aiProvider === 'nvidia' && (
                   <>
                     <option value="z-ai/glm-5.1">z-ai/glm-5.1</option>
                   </>
