@@ -15,7 +15,7 @@ import {
   Sun, Moon, Calendar, AlertCircle, Activity,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
   Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
-  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo
+  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -75,6 +75,7 @@ interface StreamSlot {
   youtubeDescription?: string | null
   youtubeThumbnailPath?: string | null
   titleDescListId?: string | null
+  episodeNumber?: number
 }
 
 export interface TitleDescList {
@@ -331,6 +332,8 @@ export default function Home() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [selectedSlots, setSelectedSlots] = useState<number[]>([])
   const [bulkTitleDescOpen, setBulkTitleDescOpen] = useState(false)
+  const [bulkEpisodeOpen, setBulkEpisodeOpen] = useState(false)
+  const [bulkEpisode, setBulkEpisode] = useState(1)
   const [titleDescManagerOpen, setTitleDescManagerOpen] = useState(false)
   const [editingList, setEditingList] = useState<{ id?: string, name: string, pairs: { id: string, title: string, description: string }[] } | null>(null)
   const [editingListError, setEditingListError] = useState('')
@@ -357,6 +360,69 @@ export default function Home() {
   useEffect(() => {
     fetchTitleDescLists()
   }, [fetchTitleDescLists])
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !editingList) return
+    try {
+      const XLSX = await import('xlsx')
+      const reader = new FileReader()
+      reader.onload = (evt) => {
+        try {
+          const bstr = evt.target?.result
+          const wb = XLSX.read(bstr, { type: 'binary' })
+          const wsname = wb.SheetNames[0]
+          const ws = wb.Sheets[wsname]
+          const data = XLSX.utils.sheet_to_json(ws) as any[]
+          
+          const newPairs = data.map((row) => {
+            const title = row['العنوان'] || row['Title'] || row['title'] || row['عنوان'] || ''
+            const description = row['الوصف'] || row['Description'] || row['description'] || row['وصف'] || ''
+            if (title || description) {
+              return {
+                id: Math.random().toString(36).substring(7),
+                title: String(title).substring(0, 100),
+                description: String(description).substring(0, 4500)
+              }
+            }
+            return null
+          }).filter(Boolean) as { id: string, title: string, description: string }[]
+
+          if (newPairs.length > 0) {
+            setEditingList({
+              ...editingList,
+              pairs: [...editingList.pairs, ...newPairs]
+            })
+          }
+        } catch (err) {
+          console.error(err)
+          setEditingListError('فشل قراءة الملف. تأكد من أنه بصيغة Excel صالحة.')
+        }
+      }
+      reader.readAsBinaryString(file)
+    } catch (err) {
+      console.error('Failed to load xlsx library', err)
+      setEditingListError('تعذر تحميل مكتبة معالجة ملفات Excel')
+    }
+    e.target.value = ''
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const XLSX = await import('xlsx')
+      const ws = XLSX.utils.json_to_sheet([
+        { 'العنوان': 'عنوان تجريبي 1', 'الوصف': 'وصف تجريبي 1 يكتب هنا...' },
+        { 'العنوان': 'عنوان تجريبي 2', 'الوصف': 'وصف تجريبي 2 يكتب هنا...' },
+        { 'العنوان': 'عنوان تجريبي 3', 'الوصف': 'وصف تجريبي 3 يكتب هنا...' }
+      ])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, "العناوين والأوصاف")
+      XLSX.writeFile(wb, "Titles_Descriptions_Template.xlsx")
+    } catch (err) {
+      console.error('Failed to load xlsx library', err)
+    }
+  }
+
 
   const handleSaveList = async () => {
     if (!editingList || !editingList.name.trim()) return
@@ -486,6 +552,7 @@ export default function Home() {
     streamKey: string
     rtmpServer: string
     titleDescListId?: string | null
+    episodeNumber: number
   } | null>(null)
   const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
@@ -1386,6 +1453,48 @@ export default function Home() {
     })
   }
 
+  const handleClosest10Schedule = (index: number) => {
+    const now = new Date()
+    const target = new Date(now)
+    const minutes = now.getMinutes()
+    let targetMin = 0
+    let targetHour = now.getHours()
+
+    if (minutes < 10) {
+      targetMin = 10
+    } else if (minutes < 20) {
+      targetMin = 20
+    } else if (minutes < 30) {
+      targetMin = 30
+    } else if (minutes < 40) {
+      targetMin = 40
+    } else if (minutes < 50) {
+      targetMin = 50
+    } else {
+      targetMin = 0
+      targetHour += 1
+    }
+
+    target.setHours(targetHour, targetMin, 0, 0)
+
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":" + String(target.getMinutes()).padStart(2,'0')
+    const stopStr = "DUR 00:06"  // 6 minutes duration
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: false,
+      daily: false,
+      weekly: false,
+      repeat10m: true,
+      repeat15m: false,
+      repeat30m: false,
+      repeat1h: false,
+      repeat2h: false,
+      isScheduled: true,
+      nextRunTime: ''
+    })
+  }
+
   const handleClosest15Schedule = (index: number) => {
     const now = new Date()
     const target = new Date(now)
@@ -1523,7 +1632,7 @@ export default function Home() {
       })
       const data = await res.json()
       addLog(data.message)
-      if (['setTitleDescListAll', 'setTitleDescAll', 'setThumbnailAll', 'assignChannelsToSlots'].includes(action)) {
+      if (['setTitleDescListAll', 'setTitleDescAll', 'setThumbnailAll', 'assignChannelsToSlots', 'setEpisodeNumberAll'].includes(action)) {
         alert(data.message)
       }
       if (action === 'assignChannelsToSlots' && data.assignedSlots) {
@@ -1682,40 +1791,8 @@ export default function Home() {
     <div className="min-h-screen xl:h-screen flex flex-col xl:overflow-hidden bg-background" dir="ltr">
       {/* â€•â€•â€• Header â€•â€•â€• */}
       <header className="border-b bg-card shrink-0 z-50">
-        {/* ── Top-most Row: Main Controls (centered, full width) ── */}
-        <div className="flex items-center justify-center gap-1 bg-muted/40 border-b border-border/50 py-1 px-2 flex-wrap w-full">
-          <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-            onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
-            <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-            onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
-            <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
-            onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
-            <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح البدء والإيقاف' : 'Clear Times'}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-            onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
-            <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-            onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
-            <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
-            onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-            <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
-          </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-            onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
-            <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات للمسارات' : 'Assign Channels to Slots'}
-          </Button>
-        </div>
-
-        <div className="px-4 py-1 flex flex-col items-center justify-center gap-1.5 w-full mt-0.5">
-          {/* Logo, Badges & Server Time Row */}
+        <div className="px-4 py-1.5 flex flex-col gap-2 w-full">
+          {/* Logo, Badges & Main Controls Row */}
           <div className="flex items-center justify-between flex-wrap gap-2 w-full">
             <div className="flex items-center gap-2">
               <a href="https://streamer.qaff.net" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
@@ -1761,16 +1838,51 @@ export default function Home() {
                 </Badge>
               )}
             </div>
-            {serverTime && (
-              <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest ml-1">
-                <Clock className="w-3 h-3 mr-1" />
-                {serverTime}
-              </Badge>
-            )}
+            
+            <div className="flex items-center gap-1 flex-wrap justify-end flex-1">
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
+                <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+                onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
+                <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
+                onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
+                <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
+                <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسجل للكل' : 'File Only'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
+                <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
+                <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
+              </Button>
+              {serverTime && (
+                <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest ml-1">
+                  <Clock className="w-3 h-3 mr-1" />
+                  {serverTime}
+                </Badge>
+              )}
+            </div>
           </div>
 
-            {/* Top Bar Row 2: Schedules & Repeats */}
+          {/* Top Bar Row 2: Schedules & Repeats */}
             <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
+              <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
+                onClick={() => confirmBulkAction('setClosest10m6mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 10 دقائق وبث 6 دقائق؟' : 'Set all slots to nearest 10 minutes (stream 6 mins)?')} title={locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}>
+                <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 10 للكل' : 'Set 10m All'}
+              </Button>
               <Button size="sm" variant="ghost" className="h-7 text-[10px] hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('setClosest15m9mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 15 دقيقة وبث 9 دقائق؟' : 'Set all slots to nearest 15 minutes (stream 9 mins)?')} title={locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}>
                 <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب 15 للكل' : 'Set 15m All'}
@@ -1791,6 +1903,13 @@ export default function Home() {
                 onClick={() => confirmBulkAction('setClosest2h110mAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب ساعتين وبث ساعة و50 دقيقة؟' : 'Set all slots to nearest 2 hours (stream 1 hour 50 mins)?')} title={locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}>
                 <Clock className="w-3 h-3 mr-0.5" />{locale === 'ar' ? 'أقرب ساعتين للكل' : 'Set 2h All'}
               </Button>
+
+              <div className="w-px h-5 bg-border/50 mx-1" />
+
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-pink-600 dark:text-pink-400 font-semibold"
+                onClick={() => confirmBulkAction('repeat10mAll', locale === 'ar' ? 'تفعيل تكرار 10 دقائق للكل؟' : 'Toggle 10-min repeat for all slots?')}>
+                <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '10 للكل' : '10m Repeat All'}
+              </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('repeat15mAll', locale === 'ar' ? 'تفعيل تكرار 15 دقيقة للكل؟' : 'Toggle 15-min repeat for all slots?')}>
                 <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '15 للكل' : '15m Repeat All'}
@@ -1799,6 +1918,24 @@ export default function Home() {
                 onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للكل؟' : 'Toggle 20-min repeat for all slots?')}>
                 <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 دقيقة للكل' : '20m Repeat All'}
               </Button>
+              <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/40"
+                onClick={() => {
+                  setTargetSlotsForAction(undefined)
+                  setBulkTitleDescOpen(true)
+                }}
+                title={locale === 'ar' ? 'وضع عنوان ووصف موحد لجميع القنوات' : 'Set unified Title and Description for all channels'}>
+                <FileText className="w-4 h-4" />
+                <span className="truncate">{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Desc All'}</span>
+              </button>
+              <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/40"
+                onClick={() => {
+                  setTargetSlotsForAction(undefined)
+                  setBulkEpisodeOpen(true)
+                }}
+                title={locale === 'ar' ? 'تعيين رقم بداية الحلقة لجميع القنوات' : 'Set starting episode number for all channels'}>
+                <Dices className="w-4 h-4" />
+                <span className="truncate">{locale === 'ar' ? 'تعيين أرقام البث' : 'Set Episode Number All'}</span>
+              </button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 دقيقة للكل؟' : 'Toggle 30-min repeat for all slots?')}>
                 <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 دقيقة للكل' : '30m Repeat All'}
@@ -1814,6 +1951,10 @@ export default function Home() {
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))}>
                 <Sun className="w-3.5 h-3.5 mr-1" />{t('dailyAll')}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => confirmBulkAction('weeklyAll', locale === 'ar' ? 'تفعيل/إلغاء التكرار الأسبوعي لكافة القنوات؟' : 'Toggle weekly repeat for all slots?')}>
+                <Sun className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إسبوعي للكل' : 'Weekly All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => {
@@ -2537,6 +2678,15 @@ export default function Home() {
                                 <button
                                   type="button"
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest10Schedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold text-pink-500 bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30 rounded hover:text-pink-600 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '10 دقائق (مدة 6 دقائق)' : '10 mins (6m duration)'}
+                                >
+                                  {locale === 'ar' ? '10' : '10'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                   className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                                   title={locale === 'ar' ? '15 دقيقة (مدة 9 دقائق)' : '15 mins (9m duration)'}
@@ -2584,34 +2734,20 @@ export default function Home() {
                               {/* Recurrence Checkboxes */}
                               <div className={`flex flex-row items-center gap-2.5 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                    handleSlotMultipleChange(slot.slotIndex, {
-                                      weekly: !!c,
-                                      daily: false,
-                                      hourly: false,
-                                      repeat15m: false,
-                                      repeat30m: false,
-                                      repeat1h: false,
-                                      repeat2h: false,
-                                      nextRunTime: ''
-                                    })
-                                  }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
-                                  <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                  <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
                                     handleSlotMultipleChange(slot.slotIndex, {
                                       weekly: false,
-                                      daily: !!c,
+                                      daily: false,
                                       hourly: false,
+                                      repeat10m: !!c,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
                                       repeat2h: false,
                                       nextRunTime: ''
                                     })
-                                  }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
-                                  <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                  }} id={`repeat10m-${slot.slotIndex}`} className="w-3 h-3 data-[state=checked]:bg-pink-500 data-[state=checked]:border-pink-500" />
+                                  <label htmlFor={`repeat10m-${slot.slotIndex}`} className="text-[10px] text-pink-500 font-medium cursor-pointer select-none">{locale === 'ar' ? '10 دقائق' : '10m'}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat15m} onCheckedChange={(c) => {
@@ -2619,6 +2755,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: !!c,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -2634,6 +2771,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: !!c,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -2649,6 +2787,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: !!c,
                                       repeat1h: false,
@@ -2664,6 +2803,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: !!c,
@@ -2679,6 +2819,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -2687,6 +2828,38 @@ export default function Home() {
                                     })
                                   }} id={`repeat2h-${slot.slotIndex}`} className="w-3 h-3" />
                                   <label htmlFor={`repeat2h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: !!c,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`weekly-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: !!c,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`daily-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
                                 </div>
                               </div>
 
@@ -2729,6 +2902,7 @@ export default function Home() {
                                     streamKey: slot.streamKey ?? '',
                                     rtmpServer: slot.rtmpServer ?? '',
                                     titleDescListId: slot.titleDescListId ?? null,
+                                    episodeNumber: slot.episodeNumber ?? 1,
                                   })
                                   // Pre-fetch stream keys if channel is already linked
                                   if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
@@ -3097,6 +3271,15 @@ export default function Home() {
                                 <button
                                   type="button"
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest10Schedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold text-pink-500 bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30 rounded hover:text-pink-600 transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '10 دقائق (مدة 6 دقائق)' : '10 mins (6m duration)'}
+                                >
+                                  {locale === 'ar' ? '10' : '10'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
                                   onClick={() => handleClosest15Schedule(slot.slotIndex)}
                                   className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                                   title={locale === 'ar' ? '15 دقيقة (مدة 9 دقائق)' : '15 mins (9m duration)'}
@@ -3144,34 +3327,20 @@ export default function Home() {
                               {/* Recurrence Checkboxes */}
                               <div className={`flex flex-row flex-wrap items-center gap-2 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
-                                    handleSlotMultipleChange(slot.slotIndex, {
-                                      weekly: !!c,
-                                      daily: false,
-                                      hourly: false,
-                                      repeat15m: false,
-                                      repeat30m: false,
-                                      repeat1h: false,
-                                      repeat2h: false,
-                                      nextRunTime: ''
-                                    })
-                                  }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                  <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                  <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
                                     handleSlotMultipleChange(slot.slotIndex, {
                                       weekly: false,
-                                      daily: !!c,
+                                      daily: false,
                                       hourly: false,
+                                      repeat10m: !!c,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
                                       repeat2h: false,
                                       nextRunTime: ''
                                     })
-                                  }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
-                                  <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
+                                  }} id={`m-repeat10m-${slot.slotIndex}`} className="w-3.5 h-3.5 data-[state=checked]:bg-pink-500 data-[state=checked]:border-pink-500" />
+                                  <label htmlFor={`m-repeat10m-${slot.slotIndex}`} className="text-xs text-pink-500 font-medium cursor-pointer select-none">{locale === 'ar' ? '10 دقائق' : '10m'}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat15m} onCheckedChange={(c) => {
@@ -3179,6 +3348,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: !!c,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -3194,6 +3364,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: !!c,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -3209,6 +3380,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: !!c,
                                       repeat1h: false,
@@ -3224,6 +3396,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: !!c,
@@ -3239,6 +3412,7 @@ export default function Home() {
                                       weekly: false,
                                       daily: false,
                                       hourly: false,
+                                      repeat10m: false,
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
@@ -3247,6 +3421,38 @@ export default function Home() {
                                     })
                                   }} id={`m-repeat2h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
                                   <label htmlFor={`m-repeat2h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: !!c,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-weekly-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblWeekly')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.daily} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: !!c,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
                                 </div>
                               </div>
 
@@ -3306,6 +3512,7 @@ export default function Home() {
                                       streamKey: slot.streamKey ?? '',
                                       rtmpServer: slot.rtmpServer ?? '',
                                       titleDescListId: slot.titleDescListId ?? null,
+                                      episodeNumber: slot.episodeNumber ?? 1,
                                     })
                                     if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
                                   }}
@@ -3824,6 +4031,22 @@ export default function Home() {
                           )}
                         </div>
 
+                        {/* Episode Number Input */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-bold text-foreground">
+                              {locale === 'ar' ? 'رقم الحلقة (يستبدل {Add})' : 'Episode Number (replaces {Add})'}
+                            </label>
+                          </div>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={settingsData.episodeNumber}
+                            onChange={(e) => setSettingsData(p => p ? { ...p, episodeNumber: parseInt(e.target.value) || 1 } : p)}
+                            className="w-full"
+                          />
+                        </div>
+
                         {/* Title character counter & validation */}
                         <div className={`space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl transition-opacity ${settingsData.titleDescListId ? 'opacity-50' : ''}`}>
                           <div className="flex justify-between items-center">
@@ -3939,6 +4162,7 @@ export default function Home() {
                     youtubeDescription: settingsData.youtubeDescription,
                     youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
                     titleDescListId: settingsData.titleDescListId || null,
+                    episodeNumber: settingsData.episodeNumber,
                   }
                   // Always save streamKey when a YouTube channel is linked
                   // (empty string = auto-fetch mode, non-empty = specific key chosen)
@@ -5033,6 +5257,26 @@ export default function Home() {
                         <span className="font-bold text-foreground tabular-nums">{editingList.pairs.length}</span>
                         {' '}{locale === 'ar' ? 'عنوان/وصف' : 'pairs'}
                       </span>
+                      <div className="flex items-center gap-2">
+                        <input type="file" id="excel-upload" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleExcelUpload} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={handleDownloadTemplate}
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          {locale === 'ar' ? 'تحميل قالب Excel' : 'Download Template'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10"
+                          onClick={() => document.getElementById('excel-upload')?.click()}
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          {locale === 'ar' ? 'رفع Excel' : 'Upload Excel'}
+                        </Button>
                         <Button
                           size="sm"
                           variant="secondary"
@@ -5055,7 +5299,8 @@ export default function Home() {
                         >
                           <Plus className="w-3.5 h-3.5" />
                           {locale === 'ar' ? 'إضافة عنصر' : 'Add Item'}
-                      </Button>
+                        </Button>
+                      </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 min-h-0 custom-scrollbar">
                       <div id="title-desc-pairs-container" className="space-y-3 pb-4">

@@ -28,6 +28,7 @@ export async function PUT(
       'weekly',
       'hourly',
       'repeat15m',
+      'repeat10m',
       'repeat30m',
       'repeat1h',
       'repeat2h',
@@ -68,7 +69,7 @@ export async function PUT(
     const extraUpdates: any = {}
     if (!slot.isRunning && !updates.isRunning) {
       extraUpdates.manuallyStopped = true
-      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates || 'hourly' in updates || 'repeat15m' in updates || 'repeat30m' in updates || 'repeat1h' in updates || 'repeat2h' in updates) {
+      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates || 'hourly' in updates || 'repeat15m' in updates || 'repeat10m' in updates || 'repeat30m' in updates || 'repeat1h' in updates || 'repeat2h' in updates) {
         extraUpdates.isScheduled = false
         extraUpdates.nextRunTime = ''
         extraUpdates.status = 'Stopped'

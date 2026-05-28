@@ -23,7 +23,7 @@ function getOccurrences(slot: any, windowStart: Date, windowEnd: Date): Array<{ 
   if (!baselineStop) return []
   const durationMs = baselineStop.getTime() - baselineStart.getTime()
 
-  const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h
+  const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat15m || slot.repeat10m || slot.repeat30m || slot.repeat1h || slot.repeat2h
   if (!isRecurring) {
     // One-time occurrence
     if (baselineStart.getTime() < windowEnd.getTime() && windowStart.getTime() < baselineStop.getTime()) {

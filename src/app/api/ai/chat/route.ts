@@ -201,7 +201,7 @@ function geminiToOpenAIMessages(messages: any[]): any[] {
       
       if (functionCalls.length > 0) {
         const tool_calls = functionCalls.map((fc: any) => {
-          const id = `call_${toolCallIdCounter++}`
+          const id = fc.functionCall.id || `call_${toolCallIdCounter++}`
           pendingToolCalls.push({ name: fc.functionCall.name, id })
           return {
             id,
@@ -228,13 +228,15 @@ function geminiToOpenAIMessages(messages: any[]): any[] {
       const responses = parts.filter((p: any) => p.functionResponse)
       
       for (const resp of responses) {
-        const { name, response } = resp.functionResponse
+        const { name, response, id } = resp.functionResponse
         
-        let matchedId = `call_unknown_${toolCallIdCounter++}`
-        const matchIdx = pendingToolCalls.findIndex(tc => tc.name === name)
-        if (matchIdx !== -1) {
-          matchedId = pendingToolCalls[matchIdx].id
-          pendingToolCalls.splice(matchIdx, 1)
+        let matchedId = id || `call_unknown_${toolCallIdCounter++}`
+        if (!id) {
+          const matchIdx = pendingToolCalls.findIndex(tc => tc.name === name)
+          if (matchIdx !== -1) {
+            matchedId = pendingToolCalls[matchIdx].id
+            pendingToolCalls.splice(matchIdx, 1)
+          }
         }
         
         openAIMessages.push({
@@ -265,6 +267,7 @@ function openAIToGeminiParts(message: any): any[] {
       }
       parts.push({
         functionCall: {
+          id: tc.id,
           name: tc.function.name,
           args: args
         }
@@ -595,15 +598,18 @@ Ensure that the JSON is valid and easy for the system to parse.`
         // Execute functions
         const functionResponseParts: any[] = []
         for (const fc of functionCalls) {
-          const { name, args } = fc.functionCall
+          const { name, args, id } = fc.functionCall
           if (name === 'navigateUI') {
             clientAction = args
+          } else if (['updateSlotConfig', 'startStream', 'stopStream', 'applyBulkAction'].includes(name)) {
+            clientAction = { name: 'navigateUI', target: 'slots' }
           }
 
           const result = await executeTool(name, args, origin, cookieHeader)
 
           functionResponseParts.push({
             functionResponse: {
+              id,
               name,
               response: { output: result }
             }
@@ -620,6 +626,11 @@ Ensure that the JSON is valid and easy for the system to parse.`
       } else {
         // No function calls, return final text reply
         const replyText = parts[0]?.text || ''
+        currentHistory.push({
+          role: 'model',
+          parts: parts,
+          text: replyText
+        })
         return NextResponse.json({
           reply: replyText,
           history: currentHistory,

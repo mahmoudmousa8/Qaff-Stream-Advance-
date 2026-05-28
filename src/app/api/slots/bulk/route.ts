@@ -406,7 +406,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, count: slots.length, message: `Set alternating 12 AM/PM schedule for all ${slots.length} slots` })
       }
 
-      case 'setClosest10MinAll': {
+      case 'setClosest10m6mAll': {
         const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
         const now = new Date()
         const cairoNow = getCairoNowFields(now)
@@ -431,23 +431,14 @@ export async function POST(request: NextRequest) {
         }
 
         for (const slot of slots) {
-          const isAM = slot.slotIndex % 2 === 0
-
-          let targetHour = h
-          if (isAM) {
-            targetHour = (h12 === 12 ? 0 : h12)
-          } else {
-            targetHour = (h12 === 12 ? 12 : h12 + 12)
-          }
-
-          let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, targetHour, m, 0)
-
+          let targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, h, m, 0)
+          
           if (targetDate.getTime() <= now.getTime()) {
-            targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + 1, targetHour, m, 0)
+            targetDate = getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day, h, m + 10, 0)
           }
 
           const startTime = formatCairoDate(targetDate)
-          const stopDate = new Date(targetDate.getTime() + (11 * 60 + 45) * 60 * 1000)
+          const stopDate = new Date(targetDate.getTime() + 6 * 60 * 1000) // 6 mins duration
           const stopTime = formatCairoDate(stopDate)
 
           await db.streamSlot.update({
@@ -463,7 +454,7 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        return NextResponse.json({ success: true, count: slots.length, message: `Set alternating closest 10-min schedule for all ${slots.length} slots` })
+        return NextResponse.json({ success: true, count: slots.length, message: `Set closest 10-min schedule (6m duration) for all ${slots.length} slots` })
       }
 
       case 'clearTimesAll': {
@@ -747,6 +738,79 @@ export async function POST(request: NextRequest) {
 
         const actionText = targetState ? 'Enabled' : 'Disabled'
         return NextResponse.json({ success: true, count, message: actionText + " 15-min repeat and updated schedules for all slots" })
+      }
+
+      case 'repeat10mAll': {
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
+        const safeFilter = { ...userFilter, isRunning: false }
+        const matchedCount = await db.streamSlot.count({
+          where: { repeat10m: true, ...safeFilter }
+        })
+        const total = await db.streamSlot.count({
+          where: safeFilter
+        })
+        const targetState = matchedCount < total / 2
+
+        let count = 0
+        if (targetState) {
+          const slots = await db.streamSlot.findMany({ where: safeFilter })
+          for (const slot of slots) {
+            if (slot.schedStart) {
+              const nextRunTime = calculateNextRun(slot.schedStart, false, false, false, false, false, false, false, true)
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: false,
+                  daily: false,
+                  weekly: false,
+                  repeat15m: false,
+                  repeat10m: true,
+                  repeat30m: false,
+                  repeat1h: false,
+                  repeat2h: false,
+                  isScheduled: true,
+                  manuallyStopped: false,
+                  nextRunTime,
+                  status: 'Scheduled'
+                }
+              })
+            } else {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: false,
+                  daily: false,
+                  weekly: false,
+                  repeat15m: false,
+                  repeat10m: true,
+                  repeat30m: false,
+                  repeat1h: false,
+                  repeat2h: false,
+                  isScheduled: false,
+                  manuallyStopped: true,
+                  nextRunTime: '',
+                  status: 'Stopped'
+                }
+              })
+            }
+            count++
+          }
+        } else {
+          const res = await db.streamSlot.updateMany({
+            where: safeFilter,
+            data: {
+              repeat10m: false,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
+          })
+          count = res.count
+        }
+
+        const actionText = targetState ? 'Enabled' : 'Disabled'
+        return NextResponse.json({ success: true, count, message: actionText + " 10-min repeat and updated schedules for all slots" })
       }
 
       case 'repeat30mAll': {
@@ -1397,6 +1461,21 @@ export async function POST(request: NextRequest) {
         })
 
         return NextResponse.json({ success: true, count: result.count, message: `تم تعيين العنوان والوصف لـ ${result.count} قناة بنجاح` })
+      }
+
+      case 'setEpisodeNumberAll': {
+        const { episodeNumber } = body
+        const parsedEp = parseInt(episodeNumber)
+        if (isNaN(parsedEp) || parsedEp < 1) {
+          return NextResponse.json({ error: 'invalidEpisodeNumber' }, { status: 400 })
+        }
+        const result = await db.streamSlot.updateMany({
+          where: userFilter,
+          data: {
+            episodeNumber: parsedEp
+          }
+        })
+        return NextResponse.json({ success: true, count: result.count, message: `تم تعيين رقم الحلقة إلى ${parsedEp} في ${result.count} قناة بنجاح` })
       }
 
       case 'setTitleDescListAll': {

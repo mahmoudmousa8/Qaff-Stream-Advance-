@@ -1323,6 +1323,22 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               }
             }
 
+            // Auto-increment Episode Number if {Add} exists
+            const epNum = (slot as any).episodeNumber || 1;
+            const episodeRegex = /\{add\}/gi;
+            const titleHasEp = episodeRegex.test(finalTitle);
+            const descHasEp = episodeRegex.test(finalDescription);
+            
+            if (titleHasEp || descHasEp) {
+              finalTitle = finalTitle.replace(episodeRegex, epNum.toString());
+              finalDescription = finalDescription.replace(episodeRegex, epNum.toString());
+              
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: { episodeNumber: { increment: 1 } }
+              });
+            }
+
             const yt = await setupYoutubeLiveStream(
               slot.youtubeChannelId,
               finalTitle,
