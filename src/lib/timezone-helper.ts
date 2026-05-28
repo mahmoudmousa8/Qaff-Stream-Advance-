@@ -172,7 +172,8 @@ export function calculateNextRun(
   hourly?: boolean,
   repeat30m?: boolean,
   repeat1h?: boolean,
-  repeat2h?: boolean
+  repeat2h?: boolean,
+  repeat15m?: boolean
 ): string {
   if (!schedStart) return ''
   const now = new Date()
@@ -182,7 +183,8 @@ export function calculateNextRun(
     const { month, day, hour, minute } = parsed
 
     let intervalMins = 0
-    if (hourly) intervalMins = 20
+    if (repeat15m) intervalMins = 15
+    else if (hourly) intervalMins = 20
     else if (repeat30m) intervalMins = 30
     else if (repeat1h) intervalMins = 60
     else if (repeat2h) intervalMins = 120

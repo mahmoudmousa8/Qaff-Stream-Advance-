@@ -485,11 +485,29 @@ Ensure that the JSON is valid and easy for the system to parse.`
           }
         }
 
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestPayload)
-        })
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 25000)
+
+        let response;
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(requestPayload),
+            signal: controller.signal
+          })
+        } catch (fetchErr: any) {
+          if (fetchErr.name === 'AbortError') {
+            console.error(`${activeProvider} request timed out after 25s`)
+            return NextResponse.json(
+              { error: `AI request timed out after 25 seconds. Please try again or switch model.` },
+              { status: 408 }
+            )
+          }
+          throw fetchErr
+        } finally {
+          clearTimeout(timeoutId)
+        }
 
         if (!response.ok) {
           const errorText = await response.text()
@@ -507,29 +525,47 @@ Ensure that the JSON is valid and easy for the system to parse.`
         }
         parts = openAIToGeminiParts(message)
       } else {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              contents: currentHistory.map(msg => ({
-                role: msg.role === 'user' ? 'user' : (msg.role === 'function' ? 'function' : 'model'),
-                parts: msg.parts || [{ text: msg.text || '' }]
-              })),
-              systemInstruction: {
-                parts: [
-                  {
-                    text: systemInstructionText,
-                  },
-                ],
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 25000)
+
+        let response;
+        try {
+          response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
               },
-              tools: toolsConfig
-            }),
+              body: JSON.stringify({
+                contents: currentHistory.map(msg => ({
+                  role: msg.role === 'user' ? 'user' : (msg.role === 'function' ? 'function' : 'model'),
+                  parts: msg.parts || [{ text: msg.text || '' }]
+                })),
+                systemInstruction: {
+                  parts: [
+                    {
+                      text: systemInstructionText,
+                    },
+                  ],
+                },
+                tools: toolsConfig
+              }),
+              signal: controller.signal
+            }
+          )
+        } catch (fetchErr: any) {
+          if (fetchErr.name === 'AbortError') {
+            console.error(`Gemini request timed out after 25s`)
+            return NextResponse.json(
+              { error: `Gemini API request timed out after 25 seconds. Please try again or switch model.` },
+              { status: 408 }
+            )
           }
-        )
+          throw fetchErr
+        } finally {
+          clearTimeout(timeoutId)
+        }
 
         if (!response.ok) {
           const errorText = await response.text()
