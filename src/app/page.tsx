@@ -1918,24 +1918,7 @@ export default function Home() {
                 onClick={() => confirmBulkAction('hourlyAll', locale === 'ar' ? 'تفعيل تكرار 20 دقيقة للكل؟' : 'Toggle 20-min repeat for all slots?')}>
                 <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '20 دقيقة للكل' : '20m Repeat All'}
               </Button>
-              <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/40"
-                onClick={() => {
-                  setTargetSlotsForAction(undefined)
-                  setBulkTitleDescOpen(true)
-                }}
-                title={locale === 'ar' ? 'وضع عنوان ووصف موحد لجميع القنوات' : 'Set unified Title and Description for all channels'}>
-                <FileText className="w-4 h-4" />
-                <span className="truncate">{locale === 'ar' ? 'تعيين عنوان ووصف للكل' : 'Set Title & Desc All'}</span>
-              </button>
-              <button className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b border-border/40"
-                onClick={() => {
-                  setTargetSlotsForAction(undefined)
-                  setBulkEpisodeOpen(true)
-                }}
-                title={locale === 'ar' ? 'تعيين رقم بداية الحلقة لجميع القنوات' : 'Set starting episode number for all channels'}>
-                <Dices className="w-4 h-4" />
-                <span className="truncate">{locale === 'ar' ? 'تعيين أرقام البث' : 'Set Episode Number All'}</span>
-              </button>
+
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('repeat30mAll', locale === 'ar' ? 'تفعيل تكرار 30 دقيقة للكل؟' : 'Toggle 30-min repeat for all slots?')}>
                 <Sun className="w-3 h-3 mr-0.5" />{locale === 'ar' ? '30 دقيقة للكل' : '30m Repeat All'}
@@ -1963,6 +1946,14 @@ export default function Home() {
                 }}
                 title={locale === 'ar' ? 'تعيين عنوان ووصف لكافة البثوث دفعة واحدة' : 'Set unified Title and Description for all channels'}>
                 <Edit3 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'عنوان ووصف للكل' : 'Title & Desc All'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => {
+                  setTargetSlotsForAction(undefined)
+                  setBulkEpisodeOpen(true)
+                }}
+                title={locale === 'ar' ? 'تعيين رقم بداية الحلقة لجميع القنوات' : 'Set starting episode number for all channels'}>
+                <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number All'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => {
