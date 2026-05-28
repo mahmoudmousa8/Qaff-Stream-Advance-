@@ -1869,6 +1869,14 @@ export default function Home() {
                 <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
               </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+                onClick={() => {
+                  setTargetSlotsForAction(null)
+                  setBulkEpisodeOpen(true)
+                }}
+                title={locale === 'ar' ? 'تعيين رقم الحلقة لكافة القنوات' : 'Set Episode Number for All Slots'}>
+                <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
                 <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
               </Button>
@@ -5668,7 +5676,7 @@ export default function Home() {
               }}
             >
               <FolderOpen className="w-3 h-3" />
-              {locale === 'ar' ? 'مجلد تبديل' : 'Swap Folder'}
+              {locale === 'ar' ? 'تبديل للكل' : 'Swap Selected'}
             </Button>
 
             {/* Clear Swap */}
@@ -5677,10 +5685,10 @@ export default function Home() {
               variant="outline"
               className="h-8 border-red-500/20 bg-red-500/5 hover:bg-red-500/10 text-red-500 font-medium gap-1 text-xs btn-premium"
               onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'حذف مجلد/فيديو التبديل للمحدد؟' : 'Clear swap for selected slots?', undefined, selectedSlots)}
-              title={locale === 'ar' ? 'مسح تبديل المحدد' : 'Clear Swap'}
+              title={locale === 'ar' ? 'إلغاء التبديل للمحدد' : 'Clear Swap'}
             >
               <Trash2 className="w-3 h-3" />
-              {locale === 'ar' ? 'مسح التبديل' : 'Clear Swap'}
+              {locale === 'ar' ? 'إلغاء التبديل للكل' : 'Disable Swap'}
             </Button>
 
             {/* Set File Only */}
@@ -5804,19 +5812,6 @@ export default function Home() {
               {locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
             </Button>
 
-            {/* Episode Number Selected */}
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium gap-1 text-xs btn-premium"
-              onClick={() => {
-                setTargetSlotsForAction(selectedSlots)
-                setBulkEpisodeOpen(true)
-              }}
-            >
-              <Dices className="w-3.5 h-3.5" />
-              {locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
-            </Button>
 
             {/* Reset Selected */}
             <Button
