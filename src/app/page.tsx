@@ -2836,7 +2836,7 @@ export default function Home() {
 
                           {/* Recurrence Checkboxes */}
                           <td className="px-2 py-1">
-                            <div className="flex flex-col items-center gap-1 w-full">
+                            <div className="flex items-center justify-center gap-2 flex-wrap w-full">
                               <div className={`flex flex-row flex-wrap items-center justify-center gap-2.5 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
@@ -2968,7 +2968,7 @@ export default function Home() {
                                 </div>
                               </div>
                               {slot.nextRunTime && (
-                                <div className="text-[10px] text-blue-500 font-mono text-center w-full">{slot.nextRunTime}</div>
+                                <span className="text-[10px] text-blue-500 font-mono whitespace-nowrap border-l border-blue-500/30 pl-2">{slot.nextRunTime}</span>
                               )}
                             </div>
                           </td>
@@ -3514,6 +3514,9 @@ export default function Home() {
                                   }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
                                   <label htmlFor={`m-daily-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblDaily')}</label>
                                 </div>
+                                {slot.nextRunTime && (
+                                  <span className="text-[10px] text-blue-500 font-mono whitespace-nowrap border-l border-blue-500/30 pl-2">{slot.nextRunTime}</span>
+                                )}
                               </div>
 
 
@@ -3533,9 +3536,7 @@ export default function Home() {
                             </div>
 
                             {/* Next run time */}
-                            {slot.nextRunTime && (
-                              <div className="text-[10px] text-blue-500 font-mono text-center w-full">{slot.nextRunTime}</div>
-                            )}
+
 
                             {/* Action Buttons */}
                             <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
