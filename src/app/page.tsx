@@ -1840,6 +1840,13 @@ export default function Home() {
               )}
             </div>
             
+            {serverTime && (
+              <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest mr-2 shrink-0">
+                <Clock className="w-3.5 h-3.5 mr-1" />
+                {serverTime}
+              </Badge>
+            )}
+            
             <div className="flex items-center gap-1 flex-wrap justify-center flex-1">
               <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
                 onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
@@ -1861,20 +1868,14 @@ export default function Home() {
                 onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
                 <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
               </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
-                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
-              </Button>
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
                 onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
                 <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
               </Button>
-              {serverTime && (
-                <Badge className="bg-slate-700 text-white text-xs font-mono tracking-widest ml-1">
-                  <Clock className="w-3 h-3 mr-1" />
-                  {serverTime}
-                </Badge>
-              )}
+              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
+                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+              </Button>
             </div>
           </div>
 
@@ -2401,7 +2402,7 @@ export default function Home() {
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colDetails')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colStreamKey')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 110 }}>{t('startStream')}</th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('startStream')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 330 }}>
                         <div className="flex items-end gap-2 h-full justify-center">
                           <div className="w-[110px] text-center shrink-0">{t('stopStream')}</div>
@@ -2583,7 +2584,7 @@ export default function Home() {
                                   value={slot.schedStart || ''}
                                   placeholder="00-00 00:00"
                                   onChange={(e) => handleSlotChange(slot.slotIndex, 'schedStart', e.target.value)}
-                                  className={`w-[72px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  className={`w-[82px] bg-transparent border-none text-[10px] font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-ring rounded px-1 ${slot.schedStart ? 'text-foreground/80' : 'text-muted-foreground/50'} ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                                   dir="ltr"
                                 />
                                 <DateTimePicker disabled={isLocked} value={slot.schedStart || ''} onChange={(v) => handleSlotChange(slot.slotIndex, 'schedStart', v)} className={`h-6 w-6 ${isLocked ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`} />
@@ -2768,7 +2769,7 @@ export default function Home() {
 
                           {/* Recurrence Checkboxes */}
                           <td className="px-2 py-1">
-                            <div className="flex flex-row items-center gap-2.5 justify-center flex-nowrap">
+                            <div className="flex flex-row-reverse items-center justify-between flex-nowrap w-full px-2">
                               <div className={`flex flex-row items-center gap-2.5 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
