@@ -1853,50 +1853,51 @@ export default function Home() {
                 </Badge>
               )}
             </div>
-            
-            <div className="flex items-center gap-1 flex-wrap justify-center flex-1">
-              <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-                onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
-                <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
-                onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
-                <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
-                onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
-                <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
-                <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسجل للكل' : 'File Only'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
-                <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => {
-                  setTargetSlotsForAction(null)
-                  setBulkEpisodeOpen(true)
-                }}
-                title={locale === 'ar' ? 'تعيين رقم الحلقة لكافة القنوات' : 'Set Episode Number for All Slots'}>
-                <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'هل تريد إلغاء التبديل لكافة القنوات؟' : 'Clear swap video/folder from all slots?')}
-                title={locale === 'ar' ? 'إلغاء التبديل لكافة القنوات' : 'Disable swap for all slots'}>
-                <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إلغاء التبديل للكل' : 'Disable Swap'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
-                onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
-                <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
-              </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
-                onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
-                <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
-              </Button>
-            </div>
+          </div>
+
+          {/* Top Bar Row 1.5: Core Bulk Actions */}
+          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-max mx-auto">
+            <Button size="sm" variant="ghost" className="h-7 text-xs text-green-600 dark:text-green-400 font-semibold hover:bg-green-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+              onClick={() => confirmBulkAction('startAll', t('confirmStartAll'))}>
+              <Play className="w-3 h-3 mr-0.5 fill-current" />{t('startAll')}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 dark:text-red-400 font-semibold hover:bg-red-600 hover:text-white hover:scale-105 active:scale-95 transition-all px-2.5"
+              onClick={() => confirmBulkAction('stopAll', t('confirmStopAll'))}>
+              <Square className="w-3 h-3 mr-0.5 fill-current" />{t('stopAll')}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold hover:scale-105 active:scale-95 transition-all px-2.5 text-red-500 border border-red-500/20 bg-red-500/10 dark:bg-red-500/5 hover:bg-red-600 hover:text-white"
+              onClick={() => confirmBulkAction('clearTimesAll', locale === 'ar' ? 'مسح تواريخ البدء والإيقاف لكل القنوات؟' : 'Clear start/stop times for all slots?')} title={locale === 'ar' ? 'مسح التواريخ للكل' : 'Clear Times All'}>
+              <X className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسح التواريخ' : 'Clear Times'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setFileOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى بث مسجل فقط (ملف) وإيقاف التبديل؟' : 'Set all slots to recorded stream only (file input) and disable swap?')} title={locale === 'ar' ? 'بث مسجل فقط للكل' : 'File Only All'}>
+              <FileVideo className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'مسجل للكل' : 'File Only'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('setObsOnlyAll', locale === 'ar' ? 'هل تريد ضبط كافة المسارات إلى إعادة بث OBS وإيقاف التبديل؟' : 'Set all slots to live OBS ingest and disable swap?')} title={locale === 'ar' ? 'بث OBS للكل' : 'OBS Only All'}>
+              <Wifi className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'OBS للكل' : 'OBS Only'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => {
+                setTargetSlotsForAction(null)
+                setBulkEpisodeOpen(true)
+              }}
+              title={locale === 'ar' ? 'تعيين رقم الحلقة لكافة القنوات' : 'Set Episode Number for All Slots'}>
+              <Dices className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'أرقام البث' : 'Episode Number'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('clearSwapVideoAll', locale === 'ar' ? 'هل تريد إلغاء التبديل لكافة القنوات؟' : 'Clear swap video/folder from all slots?')}
+              title={locale === 'ar' ? 'إلغاء التبديل لكافة القنوات' : 'Disable swap for all slots'}>
+              <Trash2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'إلغاء التبديل للكل' : 'Disable Swap'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
+              onClick={() => confirmBulkAction('assignChannelsToSlots', locale === 'ar' ? 'هل تريد ربط القنوات الصالحة تلقائياً بالمسارات؟' : 'Automatically assign valid channels to slots?')} title={locale === 'ar' ? 'ربط القنوات تلقائياً' : 'Auto Assign Channels'}>
+              <Link2 className="w-3.5 h-3.5 mr-1" />{locale === 'ar' ? 'تعيين القنوات' : 'Assign Channels'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs font-semibold text-red-500 hover:text-red-600 hover:bg-red-500/10 hover:scale-105 active:scale-95 transition-all px-2"
+              onClick={() => confirmBulkAction('resetAll', t('confirmResetAll'))}>
+              <RotateCcw className="w-3 h-3 mr-0.5" />{t('resetAll')}
+            </Button>
           </div>
 
           {/* Top Bar Row 2: Schedules & Repeats — now as dropdowns */}
