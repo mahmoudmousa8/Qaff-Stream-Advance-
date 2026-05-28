@@ -286,7 +286,7 @@ export function verifyStreamStatusAfterDelay(
 
           await db.streamSlot.update({
             where: { slotIndex },
-            data: { isRunning: false, status: slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h ? 'Scheduled' : 'Stopped' }
+            data: { isRunning: false, status: slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h ? 'Scheduled' : 'Stopped' }
           })
         } else {
           console.log(`[Verification SUCCESS] Slot ${slotIndex + 1} is stopped successfully after 10s.`)
@@ -301,7 +301,7 @@ export function verifyStreamStatusAfterDelay(
           const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
           state.crashCount++
           
-          const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat30m || slot.repeat1h || slot.repeat2h
+          const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h
           if (state.crashCount >= MAX_CRASH_COUNT) {
             recoveryStates.delete(stateKey)
             
@@ -687,8 +687,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       }
       if (typeof data.uptimeMs === 'number') {
         streamManagerUptimeMs = data.uptimeMs
-        // Startup grace reduced to 5s to avoid complete race conditions, but effectively boots instantly
-        isManagerInStartupGrace = data.isInStartupGrace === true && data.uptimeMs < 5000
+        // Respect stream-manager's own 90-second startup grace (it needs time to auto-resume)
+        isManagerInStartupGrace = data.isInStartupGrace === true
       }
     } else {
       console.warn(`[Scheduler] stream-manager /status returned HTTP ${res.status}`)
