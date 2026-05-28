@@ -2836,8 +2836,8 @@ export default function Home() {
 
                           {/* Recurrence Checkboxes */}
                           <td className="px-2 py-1">
-                            <div className="flex flex-row-reverse items-center justify-between flex-nowrap w-full px-2">
-                              <div className={`flex flex-row items-center gap-2.5 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
+                            <div className="flex flex-col items-center gap-1 w-full">
+                              <div className={`flex flex-row flex-wrap items-center justify-center gap-2.5 ${isLocked ? 'opacity-50' : ''}`}>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.repeat10m} onCheckedChange={(c) => {
                                     handleSlotMultipleChange(slot.slotIndex, {
@@ -2968,7 +2968,7 @@ export default function Home() {
                                 </div>
                               </div>
                               {slot.nextRunTime && (
-                                <div className="flex-1 flex justify-center text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
+                                <div className="text-[10px] text-blue-500 font-mono text-center w-full">{slot.nextRunTime}</div>
                               )}
                             </div>
                           </td>
@@ -3534,7 +3534,7 @@ export default function Home() {
 
                             {/* Next run time */}
                             {slot.nextRunTime && (
-                              <div className="text-[10px] text-blue-500 font-mono">{slot.nextRunTime}</div>
+                              <div className="text-[10px] text-blue-500 font-mono text-center w-full">{slot.nextRunTime}</div>
                             )}
 
                             {/* Action Buttons */}
