@@ -2968,7 +2968,7 @@ export default function Home() {
                                 </div>
                               </div>
                               {slot.nextRunTime && (
-                                <div className="text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
+                                <div className="flex-1 flex justify-center text-[10px] text-blue-500 font-mono shrink-0">{slot.nextRunTime}</div>
                               )}
                             </div>
                           </td>
