@@ -321,11 +321,22 @@ async function processStaggerQueue() {
 function findOrphanPid(streamKey: string): number | null {
   if (!streamKey || streamKey.length < 4) return null
   try {
-    const keySnippet = streamKey.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '.')
-    const result = execSync(`pgrep -f "${keySnippet}"`, { encoding: 'utf-8', timeout: 2000 }).trim()
-    if (!result) return null
-    const pid = parseInt(result.split('\n')[0])
-    return isNaN(pid) ? null : pid
+    if (process.platform === 'win32') {
+      const wmicSnippet = streamKey.substring(0, 20)
+      const result = execSync(`wmic process where "name='ffmpeg.exe' and commandline like '%${wmicSnippet}%'" get processid`, { encoding: 'utf-8', timeout: 2000 }).trim()
+      const lines = result.split(/\r?\n/).map(l => l.trim()).filter(l => l && l.toLowerCase() !== 'processid')
+      if (lines.length > 0) {
+        const pid = parseInt(lines[0])
+        return isNaN(pid) ? null : pid
+      }
+      return null
+    } else {
+      const keySnippet = streamKey.substring(0, 20).replace(/[^a-zA-Z0-9]/g, '.')
+      const result = execSync(`pgrep -f "${keySnippet}"`, { encoding: 'utf-8', timeout: 2000 }).trim()
+      if (!result) return null
+      const pid = parseInt(result.split(/\r?\n/)[0])
+      return isNaN(pid) ? null : pid
+    }
   } catch { return null }
 }
 
@@ -564,9 +575,13 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
 
   try {
     stream.isStopping = true // Tell watchdog to NOT restart
-    if (stream.process) {
-      stream.process.kill('SIGTERM')
-      setTimeout(() => { try { stream?.process?.kill('SIGKILL') } catch { } }, 3000)
+    if (stream.process && stream.process.pid) {
+      if (process.platform === 'win32') {
+        try { execSync(`taskkill /pid ${stream.process.pid} /t /f`, { stdio: 'ignore' }) } catch {}
+      } else {
+        stream.process.kill('SIGTERM')
+        setTimeout(() => { try { stream?.process?.kill('SIGKILL') } catch { } }, 3000)
+      }
     }
     activeStreams.delete(slotIndex)
     updateDbSlotStatus(slotIndex, false, 'Stopped')
@@ -856,8 +871,12 @@ setInterval(() => {
       if (runDurationMs > 45000 && msSinceProgress > 45000) {
         log(`[HUNG WATCHDOG] Slot ${slotIndex + 1} has hung (no progress updates for ${Math.round(msSinceProgress / 1000)}s). Terminating to trigger watchdog recovery...`)
         try {
-          info.process.kill('SIGTERM')
-          setTimeout(() => { try { info.process?.kill('SIGKILL') } catch {} }, 3000)
+          if (process.platform === 'win32' && info.process.pid) {
+            execSync(`taskkill /pid ${info.process.pid} /t /f`, { stdio: 'ignore' })
+          } else {
+            info.process.kill('SIGTERM')
+            setTimeout(() => { try { info.process?.kill('SIGKILL') } catch {} }, 3000)
+          }
         } catch (e) {
           log(`Failed to terminate hung process for slot ${slotIndex + 1}: ${e instanceof Error ? e.message : e}`)
         }
@@ -949,9 +968,13 @@ async function startServer() {
               if (orphanPid) {
                 log(`Slot ${slot.slotIndex + 1}: Found orphan FFmpeg (PID ${orphanPid}). Terminating before restart...`)
                 try {
-                  process.kill(orphanPid, 'SIGTERM')
-                  await new Promise(r => setTimeout(r, 500))
-                  try { process.kill(orphanPid, 'SIGKILL') } catch { }
+                  if (process.platform === 'win32') {
+                    execSync(`taskkill /pid ${orphanPid} /t /f`, { stdio: 'ignore' })
+                  } else {
+                    process.kill(orphanPid, 'SIGTERM')
+                    await new Promise(r => setTimeout(r, 500))
+                    try { process.kill(orphanPid, 'SIGKILL') } catch { }
+                  }
                 } catch { }
               }
 
