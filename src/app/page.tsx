@@ -4604,9 +4604,9 @@ export default function Home() {
                     </TableHeader>
                     <TableBody>
                       {filteredChannels.map(ch => {
-                        // Calculate 7-day expiry countdown from updatedAt (since re-auth updates the token)
-                        const updatedMs = ch.updatedAt ? new Date(ch.updatedAt).getTime() : (ch.createdAt ? new Date(ch.createdAt).getTime() : Date.now())
-                        const expiryMs = updatedMs + 7 * 24 * 60 * 60 * 1000
+                        // Calculate 7-day expiry countdown from createdAt (which is updated upon successful manual re-auth)
+                        const createdMs = ch.createdAt ? new Date(ch.createdAt).getTime() : Date.now()
+                        const expiryMs = createdMs + 7 * 24 * 60 * 60 * 1000
                         const remainMs = expiryMs - Date.now()
                         const remainDays = Math.floor(remainMs / (24 * 60 * 60 * 1000))
                         const remainHours = Math.floor((remainMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000))

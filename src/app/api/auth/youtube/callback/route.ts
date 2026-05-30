@@ -89,7 +89,8 @@ export async function GET(request: NextRequest) {
           accessToken: access_token,
           // Only update refresh token if Google returned it (usually on the first prompt)
           ...(refresh_token ? { refreshToken: refresh_token } : {}),
-          expiryDate
+          expiryDate,
+          createdAt: new Date() // Reset the 7-day manual authorization countdown
         }
       })
       console.log(`[YouTube Auth Callback] Updated existing channel: ${channelTitle}`)
