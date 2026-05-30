@@ -45,7 +45,11 @@ export async function PUT(
     })
 
     if (proposedSlot.isScheduled && hasSchedulingChanges) {
-      if (!proposedSlot.youtubeChannelId && (!proposedSlot.streamKey || proposedSlot.streamKey.trim() === '')) {
+      const ytId = proposedSlot.youtubeChannelId
+      const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+      const hasStreamKey = proposedSlot.streamKey && proposedSlot.streamKey.trim() !== ''
+
+      if (!hasYtChannel && !hasStreamKey) {
         return NextResponse.json({
           error: 'عذراً، لا يمكن الجدولة بدون تحديد مفتاح البث أو اختيار قناة اليوتيوب'
         }, { status: 400 })

@@ -27,8 +27,12 @@ export async function POST(
       return NextResponse.json({ error: 'Please fill File Path' }, { status: 400 })
     }
     
-    if (!slot.youtubeChannelId && !slot.streamKey) {
-      return NextResponse.json({ error: 'Please fill Stream Key' }, { status: 400 })
+    const ytId = slot.youtubeChannelId
+    const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+    const hasStreamKey = slot.streamKey && slot.streamKey.trim() !== ''
+
+    if (!hasYtChannel && !hasStreamKey) {
+      return NextResponse.json({ error: 'عذراً، لا يمكن الجدولة بدون تحديد مفتاح البث أو اختيار قناة اليوتيوب' }, { status: 400 })
     }
 
     // Check for overlap before scheduling

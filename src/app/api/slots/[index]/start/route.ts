@@ -44,7 +44,11 @@ export async function POST(
     if (outputType === 'youtube' || outputType === 'facebook') {
       // If a youtubeChannelId is set, the stream key will be fetched automatically.
       // Otherwise, the user must provide a stream key manually.
-      if (!slot.youtubeChannelId && (!slot.streamKey || slot.streamKey.trim() === '')) {
+      const ytId = slot.youtubeChannelId
+      const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+      const hasStreamKey = slot.streamKey && slot.streamKey.trim() !== ''
+
+      if (!hasYtChannel && !hasStreamKey) {
         return NextResponse.json({ error: 'streamKeyRequired' }, { status: 400 })
       }
     } else {
