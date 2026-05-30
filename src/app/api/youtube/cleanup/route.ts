@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       const errorsList: string[] = []
       const detailMsg: string[] = []
 
-      for (const channel of channels) {
+      await Promise.all(channels.map(async (channel) => {
         try {
           const res = await cleanupUpcomingBroadcasts(channel.id)
           totalDeletedCount += res.deletedCount
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         } catch (err: any) {
           errorsList.push(`${channel.name}: ${err.message || String(err)}`)
         }
-      }
+      }))
 
       const msg = `تم بنجاح تنظيف وحذف إجمالي ${totalDeletedCount} من البثوث المجدولة على القنوات النشطة.`
       return NextResponse.json({
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       const errorsList: string[] = []
       const detailMsg: string[] = []
 
-      for (const channel of channels) {
+      await Promise.all(channels.map(async (channel) => {
         try {
           const res = await cleanupUpcomingBroadcasts(channel.id)
           totalDeletedCount += res.deletedCount
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
         } catch (err: any) {
           errorsList.push(`${channel.name}: ${err.message || String(err)}`)
         }
-      }
+      }))
 
       const msg = `تم بنجاح تنظيف وحذف إجمالي ${totalDeletedCount} من البثوث المجدولة على القنوات المحددة.`
       return NextResponse.json({
