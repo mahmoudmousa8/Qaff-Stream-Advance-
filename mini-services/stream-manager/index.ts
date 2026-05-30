@@ -398,7 +398,7 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
     log(`  FFmpeg cmd: ${FFMPEG_PATH} ${redactedArgs.join(' ')}`)
 
     const ffmpegProcess = spawn(FFMPEG_PATH, args, {
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe']
     })
 
     const streamInfo: StreamInfo = {
@@ -576,12 +576,21 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
   try {
     stream.isStopping = true // Tell watchdog to NOT restart
     if (stream.process && stream.process.pid) {
-      if (process.platform === 'win32') {
-        try { execSync(`taskkill /pid ${stream.process.pid} /t /f`, { stdio: 'ignore' }) } catch {}
-      } else {
-        stream.process.kill('SIGTERM')
-        setTimeout(() => { try { stream?.process?.kill('SIGKILL') } catch { } }, 3000)
-      }
+      try {
+        if (stream.process.stdin && stream.process.stdin.writable) {
+          stream.process.stdin.write('q\n')
+        }
+      } catch {}
+      
+      setTimeout(() => {
+        try {
+          if (process.platform === 'win32') {
+            execSync(`taskkill /pid ${stream.process.pid} /t /f`, { stdio: 'ignore' })
+          } else {
+            stream?.process?.kill('SIGKILL')
+          }
+        } catch {}
+      }, 2500)
     }
     activeStreams.delete(slotIndex)
     updateDbSlotStatus(slotIndex, false, 'Stopped')
@@ -871,12 +880,21 @@ setInterval(() => {
       if (runDurationMs > 45000 && msSinceProgress > 45000) {
         log(`[HUNG WATCHDOG] Slot ${slotIndex + 1} has hung (no progress updates for ${Math.round(msSinceProgress / 1000)}s). Terminating to trigger watchdog recovery...`)
         try {
-          if (process.platform === 'win32' && info.process.pid) {
-            execSync(`taskkill /pid ${info.process.pid} /t /f`, { stdio: 'ignore' })
-          } else {
-            info.process.kill('SIGTERM')
-            setTimeout(() => { try { info.process?.kill('SIGKILL') } catch {} }, 3000)
-          }
+          try {
+            if (info.process.stdin && info.process.stdin.writable) {
+              info.process.stdin.write('q\n')
+            }
+          } catch {}
+          
+          setTimeout(() => {
+            try {
+              if (process.platform === 'win32' && info.process.pid) {
+                execSync(`taskkill /pid ${info.process.pid} /t /f`, { stdio: 'ignore' })
+              } else {
+                info.process?.kill('SIGKILL')
+              }
+            } catch {}
+          }, 2500)
         } catch (e) {
           log(`Failed to terminate hung process for slot ${slotIndex + 1}: ${e instanceof Error ? e.message : e}`)
         }

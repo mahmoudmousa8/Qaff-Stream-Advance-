@@ -1047,8 +1047,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               body: JSON.stringify({ slotIndex: slot.slotIndex })
             }, 5000)
 
-            // Step 2: Wait 1.5s for clean FFmpeg shutdown
-            await new Promise(r => setTimeout(r, 1500))
+            // Step 2: Wait 3s for clean FFmpeg shutdown and YouTube RTMP disconnect
+            await new Promise(r => setTimeout(r, 3000))
 
             // Step 3: Start the swap video stream
             const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
