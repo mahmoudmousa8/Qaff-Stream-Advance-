@@ -44,7 +44,20 @@ export async function PUT(
       return updates[field] !== (slot as any)[field]
     })
 
-    if (proposedSlot.isScheduled && proposedSlot.schedStart && hasSchedulingChanges) {
+    if (proposedSlot.isScheduled && hasSchedulingChanges) {
+      if (!proposedSlot.youtubeChannelId && (!proposedSlot.streamKey || proposedSlot.streamKey.trim() === '')) {
+        return NextResponse.json({
+          error: 'عذراً، لا يمكن الجدولة بدون تحديد مفتاح البث أو اختيار قناة اليوتيوب'
+        }, { status: 400 })
+      }
+      
+      if (!proposedSlot.schedStart) {
+        return NextResponse.json({
+          error: 'عذراً، لا يمكن الجدولة بدون تحديد موعد البدء'
+        }, { status: 400 })
+      }
+
+      if (proposedSlot.schedStart) {
       const otherSlots = await db.streamSlot.findMany({
         where: {
           slotIndex: { not: slotIndex },
@@ -64,6 +77,7 @@ export async function PUT(
           }, { status: 400 })
         }
       }
+    }
     }
 
     const extraUpdates: any = {}
