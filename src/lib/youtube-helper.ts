@@ -213,6 +213,29 @@ export async function setupYoutubeLiveStream(
     console.log(`[YouTube Helper] Successfully created new YouTube Live Stream key: ${streamKey.substring(0, 4)}****`)
   }
 
+  // 3.5 Cleanup any existing active/upcoming broadcasts bound to this streamId
+  if (streamId) {
+    console.log(`[YouTube Helper] Checking for stuck broadcasts bound to stream ID ${streamId}...`)
+    try {
+      const statusList = ['active', 'upcoming']
+      for (const st of statusList) {
+        const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=${st}&part=id,snippet,contentDetails&maxResults=50`
+        const resp = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } }, 5000)
+        if (resp.ok) {
+          const data = await resp.json()
+          for (const item of (data.items || [])) {
+            if (item.contentDetails?.boundStreamId === streamId) {
+              console.log(`[YouTube Helper] Deleting stuck ${st} broadcast ${item.id} because it holds streamId ${streamId}`)
+              await deleteYoutubeBroadcast(channelId, item.id)
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[YouTube Helper] Non-fatal error cleaning up stuck broadcasts:`, e)
+    }
+  }
+
   // 4. Create Live Broadcast
   const truncatedTitle = title.substring(0, 100).trim() || 'Untitled Broadcast'
   const truncatedDesc = description.substring(0, 4500).trim() || 'Live stream powered by Qaff'
