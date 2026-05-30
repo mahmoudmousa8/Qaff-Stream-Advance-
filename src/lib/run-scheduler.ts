@@ -595,7 +595,7 @@ function isWithinActiveWindow(schedStart: string, schedStop: string): boolean {
   return result
 }
 
-function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false): boolean {
+function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, hasSwapEnabled = false): boolean {
   if (!sched || sched.startsWith('DUR')) return false
   const parsed = parseScheduleTime(sched)
   if (!parsed) {
@@ -611,7 +611,12 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false): b
   let hash = 0
   for (let i = 0; i < seedString.length; i++) hash = Math.imul(31, hash) + seedString.charCodeAt(i)
   hash = Math.abs(hash)
-  const jitterSecs = (hash % 301) - 150
+  let jitterSecs = (hash % 301) - 150
+  
+  if (isStopCheck && hasSwapEnabled && jitterSecs < 0) {
+    // Prevent stopping early if swap video is enabled to ensure the swap video gets its full 2 minutes
+    jitterSecs = 0 
+  }
   
   // Fully timezone-safe timestamp jitter adjustment
   target.setTime(target.getTime() + jitterSecs * 1000)
@@ -1086,7 +1091,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     // ── Auto-Stop ──────────────────────────────────────────
     // Uses shouldTrigger() which applies a deterministic jitter (-150s to +150s)
     // and a 5-minute grace window. This intentional behavior is preserved as-is.
-    if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true)) {
+    if (slot.isRunning && slot.schedStop && shouldTrigger(slot.schedStop, slot.slotIndex, true, slot.swapVideoEnabled)) {
       try {
         await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
           method: 'POST',
