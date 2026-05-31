@@ -60,6 +60,7 @@ interface StreamSlot {
   weekly: boolean
   hourly: boolean
   repeat15m?: boolean
+  repeat10m?: boolean
   repeat30m?: boolean
   repeat1h?: boolean
   repeat2h?: boolean
@@ -1885,7 +1886,7 @@ export default function Home() {
             </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all px-2 text-muted-foreground hover:text-foreground font-medium"
               onClick={() => {
-                setTargetSlotsForAction(null)
+                setTargetSlotsForAction(undefined)
                 setBulkEpisodeOpen(true)
               }}
               title={locale === 'ar' ? 'تعيين رقم الحلقة لكافة القنوات' : 'Set Episode Number for All Slots'}>

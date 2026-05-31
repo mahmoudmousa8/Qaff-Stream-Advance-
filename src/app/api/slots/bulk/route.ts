@@ -1550,7 +1550,8 @@ export async function POST(request: NextRequest) {
         const slotsToRefresh = await db.streamSlot.findMany({
           where: {
             outputType: 'youtube',
-            youtubeChannelId: { not: null, not: '' },
+            youtubeChannelId: { not: null },
+            NOT: { youtubeChannelId: '' },
             ...userFilter
           }
         })

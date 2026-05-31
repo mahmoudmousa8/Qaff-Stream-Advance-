@@ -585,7 +585,7 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
       setTimeout(() => {
         try {
           if (process.platform === 'win32') {
-            execSync(`taskkill /pid ${stream.process.pid} /t /f`, { stdio: 'ignore' })
+            execSync(`taskkill /pid ${stream.process!.pid} /t /f`, { stdio: 'ignore' })
           } else {
             stream?.process?.kill('SIGKILL')
           }
@@ -881,14 +881,14 @@ setInterval(() => {
         log(`[HUNG WATCHDOG] Slot ${slotIndex + 1} has hung (no progress updates for ${Math.round(msSinceProgress / 1000)}s). Terminating to trigger watchdog recovery...`)
         try {
           try {
-            if (info.process.stdin && info.process.stdin.writable) {
+            if (info.process && info.process.stdin && info.process.stdin.writable) {
               info.process.stdin.write('q\n')
             }
           } catch {}
           
           setTimeout(() => {
             try {
-              if (process.platform === 'win32' && info.process.pid) {
+              if (process.platform === 'win32' && info.process && info.process.pid) {
                 execSync(`taskkill /pid ${info.process.pid} /t /f`, { stdio: 'ignore' })
               } else {
                 info.process?.kill('SIGKILL')
