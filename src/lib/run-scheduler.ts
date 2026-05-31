@@ -408,7 +408,7 @@ export function verifyStreamStatusAfterDelay(
   }, 10000)
 }
 
-const BACKOFF_DELAYS_MS = [0, 10_000, 60_000, 300_000]  // 0s, 10s, 1m, 5m
+const BACKOFF_DELAYS_MS = [8_000, 15_000, 60_000, 300_000]  // 8s, 15s, 1m, 5m
 const MAX_CRASH_COUNT = BACKOFF_DELAYS_MS.length  // after 4 crashes → failed
 
 // Helper to execute fetch requests with a strict timeout to prevent thread lockup
@@ -1047,8 +1047,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               body: JSON.stringify({ slotIndex: slot.slotIndex })
             }, 5000)
 
-            // Step 2: Wait 3s for clean FFmpeg shutdown and YouTube RTMP disconnect
-            await new Promise(r => setTimeout(r, 3000))
+            // Step 2: Wait 6s for clean FFmpeg shutdown and YouTube RTMP disconnect
+            await new Promise(r => setTimeout(r, 6000))
 
             // Step 3: Start the swap video stream
             const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
@@ -1270,7 +1270,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           isRunning: true,
           isScheduled: false,
           manuallyStopped: false,
-          isSwapped: false,
+          isSwapped: slot.isScheduled ? false : slot.isSwapped,
           status: 'Streaming',
           ...(actualSchedStop !== slot.schedStop ? { schedStop: actualSchedStop } : {})
         }

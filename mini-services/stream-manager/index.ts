@@ -468,14 +468,19 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
         if (currentRestartCount < maxAttempts) {
           const nextAttempt = currentRestartCount + 1
           
-          // Exponential backoff for URLs
-          let restartDelay = 500
+          // Guard delay for both files and URLs to allow RTMP session reset on YouTube/Facebook
+          let restartDelay = 8000
           if (isUrl) {
-            if (nextAttempt === 1) restartDelay = 2000
-            else if (nextAttempt === 2) restartDelay = 5000
-            else if (nextAttempt === 3) restartDelay = 10000
+            if (nextAttempt === 1) restartDelay = 8000
+            else if (nextAttempt === 2) restartDelay = 12000
+            else if (nextAttempt === 3) restartDelay = 20000
             else if (nextAttempt === 4) restartDelay = 30000
             else restartDelay = 60000
+          } else {
+            // For files, wait 8 seconds on first attempt, then increase slightly
+            if (nextAttempt === 1) restartDelay = 8000
+            else if (nextAttempt === 2) restartDelay = 12000
+            else restartDelay = 15000
           }
           
           if (!isUrl || nextAttempt % 10 === 0 || nextAttempt === 1) {
@@ -578,19 +583,22 @@ function stopStream(slotIndex: number): { success: boolean; message: string } {
     if (stream.process && stream.process.pid) {
       try {
         if (stream.process.stdin && stream.process.stdin.writable) {
-          stream.process.stdin.write('q\n')
+          stream.process.stdin.write('q')
+          stream.process.stdin.end()
         }
       } catch {}
       
+      const pidToKill = stream.process.pid
+      const procToKill = stream.process
       setTimeout(() => {
         try {
           if (process.platform === 'win32') {
-            execSync(`taskkill /pid ${stream.process!.pid} /t /f`, { stdio: 'ignore' })
+            execSync(`taskkill /pid ${pidToKill} /t /f`, { stdio: 'ignore' })
           } else {
-            stream?.process?.kill('SIGKILL')
+            procToKill.kill('SIGKILL')
           }
         } catch {}
-      }, 2500)
+      }, 5000)
     }
     activeStreams.delete(slotIndex)
     updateDbSlotStatus(slotIndex, false, 'Stopped')
