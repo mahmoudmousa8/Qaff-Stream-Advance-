@@ -6,6 +6,19 @@ import { getAuthUser } from '@/lib/auth-helper'
 const BULK_STREAM_MANAGER = STREAM_MANAGER_URL
 
 // POST - Bulk operations
+function isSlotValidForSchedule(slot: any) {
+  if (slot.inputType !== 'live' && !slot.filePath) return false
+  const outputType = slot.outputType || 'youtube'
+  if (outputType === 'youtube' || outputType === 'facebook') {
+    const ytId = slot.youtubeChannelId
+    const hasYtChannel = ytId && ytId.trim() !== '' && ytId.toLowerCase() !== 'null' && ytId.toLowerCase() !== 'undefined'
+    const hasStreamKey = slot.streamKey && slot.streamKey.trim() !== ''
+    return !!(hasYtChannel || hasStreamKey)
+  } else {
+    return !!(slot.streamKey && slot.streamKey.trim() !== '')
+  }
+}
+
 export async function POST(request: NextRequest) {
   const user = await getAuthUser(request)
   if (!user) {
