@@ -1070,7 +1070,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               // (b) recovery logic above already handles swapVideoPath via isSwapped check.
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
-                data: { isSwapped: true }
+                data: { 
+                  isSwapped: true,
+                  isRunning: true,
+                  status: 'Streaming'
+                }
               })
               logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
               const token = Math.random().toString(36).substring(7)

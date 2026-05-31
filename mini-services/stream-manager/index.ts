@@ -616,7 +616,13 @@ function getStreamStatus(slotIndex: number): object {
   if (!stream) {
     const queuedPos = staggerQueue.findIndex(item => item.slotIndex === slotIndex)
     if (queuedPos >= 0) {
-      return { isRunning: true, status: 'queued', queuePosition: queuedPos + 1 }
+      const queuedItem = staggerQueue[queuedPos]
+      return { 
+        isRunning: true, 
+        status: 'queued', 
+        queuePosition: queuedPos + 1,
+        filePath: queuedItem.filePath
+      }
     }
     return { isRunning: false }
   }
