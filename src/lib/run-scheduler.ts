@@ -249,9 +249,16 @@ export function verifyStreamStatusAfterDelay(
           const data = await res.json()
           activeInManager = data.isRunning && (data.status === 'running' || data.status === 'connecting' || data.status === 'queued')
           currentFilePath = data.filePath || ''
+        } else {
+          await db.systemLog.create({
+            data: { message: `[Verification Error] Slot ${slotIndex + 1}: Stream manager status returned HTTP ${res.status}` }
+          })
         }
       } catch (err: any) {
         console.error(`[Verification] Cannot reach stream-manager for Slot ${slotIndex + 1}:`, err.message)
+        await db.systemLog.create({
+          data: { message: `[Verification Error] Slot ${slotIndex + 1}: Cannot reach stream-manager: ${err.message}` }
+        })
       }
 
       const slot = await db.streamSlot.findUnique({ where: { slotIndex } })
@@ -388,10 +395,18 @@ export function verifyStreamStatusAfterDelay(
       } 
       else if (action === 'swap') {
         const dbRunning = slot.isRunning
+        
+        // Detailed debug log written to DB to diagnose high-concurrency swap status
+        await db.systemLog.create({
+          data: { 
+            message: `[Verification Debug] Slot ${slotIndex + 1} swap check: dbRunning=${dbRunning}, activeInManager=${activeInManager}, expectedFilePath=${expectedFilePath ? path.basename(expectedFilePath) : 'none'}, currentFilePath=${currentFilePath ? path.basename(currentFilePath) : 'none'}` 
+          }
+        })
+
         if (!dbRunning || !activeInManager) {
           console.warn(`[Verification WARNING] Slot ${slotIndex + 1} was swapped but is NOT running after 10s!`)
           await db.systemLog.create({
-            data: { message: `[Verification Warning] Slot ${slotIndex + 1} was swapped but is NOT running after 10s.` }
+            data: { message: `[Verification Warning] Slot ${slotIndex + 1} was swapped but is NOT running after 10s. (Detail: dbRunning=${dbRunning}, activeInManager=${activeInManager})` }
           })
         } else if (expectedFilePath && path.resolve(currentFilePath) !== path.resolve(expectedFilePath)) {
           console.warn(`[Verification WARNING] Slot ${slotIndex + 1} swap file mismatch! Expected: ${expectedFilePath}, Got: ${currentFilePath}`)
