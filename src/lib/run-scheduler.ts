@@ -1052,57 +1052,60 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           activeSwapVideos.set(slot.slotIndex, resolvedPath)
 
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop swap triggered! ${minsRemaining.toFixed(2)}m remain. Swapping to ${resolvedPath}`)
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${resolvedPath}`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop swap triggered (${minsRemaining.toFixed(1)}m remaining). Swapping to ${resolvedPath}`);
 
-          try {
-            // Step 1: Stop current broadcast FIRST (before marking swapped to allow retry on failure)
-            await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slotIndex: slot.slotIndex })
-            }, 5000)
+          // Run swap transition in the background to avoid blocking the main scheduler loop
+          (async () => {
+            try {
+              // Step 1: Stop current broadcast FIRST (before marking swapped to allow retry on failure)
+              await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slotIndex: slot.slotIndex })
+              }, 5000)
 
-            // Step 2: Wait 6s for clean FFmpeg shutdown and YouTube RTMP disconnect
-            await new Promise(r => setTimeout(r, 6000))
+              // Step 2: Wait 6s for clean FFmpeg shutdown and YouTube RTMP disconnect
+              await new Promise(r => setTimeout(r, 6000))
 
-            // Step 3: Start the swap video stream
-            const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                slotIndex: slot.slotIndex,
-                outputType: slot.outputType,
-                rtmpServer: slot.rtmpServer,
-                streamKey: slot.streamKey,
-                filePath: resolvedPath
-              })
-            }, 5000)
+              // Step 3: Start the swap video stream
+              const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  slotIndex: slot.slotIndex,
+                  outputType: slot.outputType,
+                  rtmpServer: slot.rtmpServer,
+                  streamKey: slot.streamKey,
+                  filePath: resolvedPath
+                })
+              }, 5000)
 
-            const data = await res.json()
-            if (res.ok && data.success) {
-              // Step 4: ONLY mark isSwapped=true AFTER confirmed success.
-              // Do NOT update filePath in DB so: (a) next daily/weekly run uses original file,
-              // (b) recovery logic above already handles swapVideoPath via isSwapped check.
-              await db.streamSlot.update({
-                where: { slotIndex: slot.slotIndex },
-                data: { 
-                  isSwapped: true,
-                  isRunning: true,
-                  status: 'Streaming'
-                }
-              })
-              logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
-              const token = Math.random().toString(36).substring(7)
-              lastActionTokens.set(slot.slotIndex, token)
-              verifyStreamStatusAfterDelay(slot.slotIndex, 'swap', token, resolvedPath)
-            } else {
-              // Start failed — isSwapped stays false so next tick can retry
-              logs.push(`Slot ${slot.slotIndex + 1}: Swap start failed: ${data.error || data.message || 'Unknown'}. Will retry next tick.`)
+              const data = await res.json()
+              if (res.ok && data.success) {
+                // Step 4: ONLY mark isSwapped=true AFTER confirmed success.
+                // Do NOT update filePath in DB so: (a) next daily/weekly run uses original file,
+                // (b) recovery logic above already handles swapVideoPath via isSwapped check.
+                await db.streamSlot.update({
+                  where: { slotIndex: slot.slotIndex },
+                  data: { 
+                    isSwapped: true,
+                    isRunning: true,
+                    status: 'Streaming'
+                  }
+                })
+                logs.push(`Slot ${slot.slotIndex + 1}: Swapped stream to file successfully`)
+                const token = Math.random().toString(36).substring(7)
+                lastActionTokens.set(slot.slotIndex, token)
+                verifyStreamStatusAfterDelay(slot.slotIndex, 'swap', token, resolvedPath)
+              } else {
+                // Start failed — isSwapped stays false so next tick can retry
+                logs.push(`Slot ${slot.slotIndex + 1}: Swap start failed: ${data.error || data.message || 'Unknown'}. Will retry next tick.`)
+              }
+            } catch (e: any) {
+              // Exception — isSwapped stays false so next tick can retry
+              logs.push(`Slot ${slot.slotIndex + 1}: Swap process failed: ${e.message || 'Network error'}. Will retry next tick.`)
             }
-          } catch (e: any) {
-            // Exception — isSwapped stays false so next tick can retry
-            logs.push(`Slot ${slot.slotIndex + 1}: Swap process failed: ${e.message || 'Network error'}. Will retry next tick.`)
-          }
+          })();
         }
       }
     }
