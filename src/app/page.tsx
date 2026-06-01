@@ -64,6 +64,7 @@ interface StreamSlot {
   repeat30m?: boolean
   repeat1h?: boolean
   repeat2h?: boolean
+  repeat12h?: boolean
   isScheduled: boolean
   nextRunTime: string
   status: string
@@ -1463,6 +1464,43 @@ export default function Home() {
       nextRunTime: ''
     })
   }
+  const handleClosest12Schedule = (index: number) => {
+    const now = new Date()
+    const candidates: Date[] = []
+    for (let offset = 0; offset <= 2; offset++) {
+      const d1 = new Date(now)
+      d1.setDate(now.getDate() + offset)
+      d1.setHours(0, 0, 0, 0)
+      candidates.push(d1)
+
+      const d2 = new Date(now)
+      d2.setDate(now.getDate() + offset)
+      d2.setHours(12, 0, 0, 0)
+      candidates.push(d2)
+    }
+
+    const futureCandidates = candidates.filter(d => d.getTime() > now.getTime())
+    futureCandidates.sort((a, b) => a.getTime() - b.getTime())
+    const target = futureCandidates[0]
+
+    const startStr = String(target.getMonth()+1).padStart(2,'0') + "-" + String(target.getDate()).padStart(2,'0') + " " + String(target.getHours()).padStart(2,'0') + ":00"
+    const stopStr = "DUR 11:45"
+    handleSlotMultipleChange(index, {
+      schedStart: startStr,
+      schedStop: stopStr,
+      hourly: false,
+      daily: false,
+      weekly: false,
+      repeat15m: false,
+      repeat10m: false,
+      repeat30m: false,
+      repeat1h: false,
+      repeat2h: false,
+      repeat12h: true,
+      isScheduled: true,
+      nextRunTime: ''
+    })
+  }
 
   const handleClosest10Schedule = (index: number) => {
     const now = new Date()
@@ -1954,6 +1992,11 @@ export default function Home() {
                   <span>{locale === 'ar' ? 'أقرب ساعتين' : 'Nearest 2 hours'}</span>
                   <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(ساعة و50 د)' : '(1h 50m stream)'}</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('setClosest12hAll', locale === 'ar' ? 'ضبط كل القنوات لأقرب 12 ساعة وبث 11 ساعة و45 دقيقة؟' : 'Set all slots to nearest 12 hours (stream 11 hours 45 mins)?')} className="gap-2 cursor-pointer">
+                  <Clock className="w-3.5 h-3.5 text-pink-500" />
+                  <span>{locale === 'ar' ? 'أقرب 12 ساعة' : 'Closest 12h'}</span>
+                  <span className="mr-auto text-[10px] text-muted-foreground">{locale === 'ar' ? '(11 ساعة و45 د)' : '(11h 45m stream)'}</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -1996,6 +2039,10 @@ export default function Home() {
                 <DropdownMenuItem onClick={() => confirmBulkAction('repeat2hAll', locale === 'ar' ? 'تفعيل تكرار ساعتين للكل؟' : 'Toggle 2-hour repeat for all slots?')} className="gap-2 cursor-pointer">
                   <Sun className="w-3.5 h-3.5 text-purple-500" />
                   {locale === 'ar' ? 'ساعتين للكل' : '2 hours repeat'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => confirmBulkAction('repeat12hAll', locale === 'ar' ? 'تفعيل تكرار 12 ساعة للكل؟' : 'Toggle 12-hour repeat for all slots?')} className="gap-2 cursor-pointer">
+                  <Sun className="w-3.5 h-3.5 text-pink-500" />
+                  {locale === 'ar' ? '12 ساعة للكل' : '12 hours repeat'}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => confirmBulkAction('dailyAll', t('confirmDailyAll'))} className="gap-2 cursor-pointer">
@@ -2849,7 +2896,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`repeat10m-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2865,7 +2912,7 @@ export default function Home() {
                                       repeat15m: !!c,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`repeat15m-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2881,7 +2928,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`hourly-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2897,7 +2944,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: !!c,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`repeat30m-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2913,7 +2960,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: !!c,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`repeat1h-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2929,11 +2976,28 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: !!c,
+                                      repeat2h: !!c, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`repeat2h-${slot.slotIndex}`} className="w-3 h-3" />
                                   <label htmlFor={`repeat2h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat12h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      repeat12h: !!c,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`repeat12h-${slot.slotIndex}`} className="w-3 h-3" />
+                                  <label htmlFor={`repeat12h-${slot.slotIndex}`} className="text-[10px] text-muted-foreground cursor-pointer select-none">{t('lblRepeat12h')}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
@@ -2945,7 +3009,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`weekly-${slot.slotIndex}`} className="w-3 h-3" />
@@ -2961,7 +3025,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`daily-${slot.slotIndex}`} className="w-3 h-3" />
@@ -3397,7 +3461,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-repeat10m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3413,7 +3477,7 @@ export default function Home() {
                                       repeat15m: !!c,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-repeat15m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3429,7 +3493,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-hourly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3445,7 +3509,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: !!c,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-repeat30m-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3461,7 +3525,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: !!c,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-repeat1h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3477,11 +3541,28 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: !!c,
+                                      repeat2h: !!c, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-repeat2h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
                                   <label htmlFor={`m-repeat2h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat2h')}</label>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Checkbox disabled={isLocked} checked={slot.repeat12h} onCheckedChange={(c) => {
+                                    handleSlotMultipleChange(slot.slotIndex, {
+                                      weekly: false,
+                                      daily: false,
+                                      hourly: false,
+                                      repeat10m: false,
+                                      repeat15m: false,
+                                      repeat30m: false,
+                                      repeat1h: false,
+                                      repeat2h: false,
+                                      repeat12h: !!c,
+                                      nextRunTime: ''
+                                    })
+                                  }} id={`m-repeat12h-${slot.slotIndex}`} className="w-3.5 h-3.5" />
+                                  <label htmlFor={`m-repeat12h-${slot.slotIndex}`} className="text-xs text-muted-foreground cursor-pointer select-none">{t('lblRepeat12h')}</label>
                                 </div>
                                 <div className="flex items-center gap-1">
                                   <Checkbox disabled={isLocked} checked={slot.weekly} onCheckedChange={(c) => {
@@ -3493,7 +3574,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-weekly-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -3509,7 +3590,7 @@ export default function Home() {
                                       repeat15m: false,
                                       repeat30m: false,
                                       repeat1h: false,
-                                      repeat2h: false,
+                                      repeat2h: false, repeat12h: false,
                                       nextRunTime: ''
                                     })
                                   }} id={`m-daily-${slot.slotIndex}`} className="w-3.5 h-3.5" />
@@ -5859,6 +5940,16 @@ export default function Home() {
               <Clock className="w-3.5 h-3.5" />
               {locale === 'ar' ? 'أقرب ساعتين' : 'Closest 2h'}
             </Button>
+            {/* Set Closest 12h */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('setClosest12hAll', locale === 'ar' ? 'ضبط القنوات المحددة لأقرب 12 ساعة وبث 11 ساعة و45 دقيقة؟' : 'Set selected slots to nearest 12 hours?', undefined, selectedSlots)}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {locale === 'ar' ? 'أقرب 12 ساعة' : 'Closest 12h'}
+            </Button>
 
             {/* Repeat 20m / Hourly */}
             <Button
@@ -5902,6 +5993,16 @@ export default function Home() {
             >
               <Sun className="w-3 h-3" />
               {locale === 'ar' ? 'ساعتين للكل' : '2h Repeat'}
+            </Button>
+            {/* Repeat 12h */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 border-pink-500/20 bg-pink-500/5 hover:bg-pink-500/10 text-pink-600 dark:text-pink-400 font-medium gap-1 text-xs btn-premium"
+              onClick={() => confirmBulkAction('repeat12hAll', locale === 'ar' ? 'تفعيل تكرار 12 ساعة للقنوات المحددة؟' : 'Enable 12h repeat for selected slots?', undefined, selectedSlots)}
+            >
+              <Sun className="w-3 h-3" />
+              {locale === 'ar' ? '12 ساعة للكل' : '12h Repeat'}
             </Button>
 
             {/* Daily */}

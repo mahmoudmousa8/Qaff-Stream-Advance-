@@ -32,6 +32,7 @@ export async function PUT(
       'repeat30m',
       'repeat1h',
       'repeat2h',
+      'repeat12h',
       'isScheduled',
       'outputType',
       'youtubeChannelId',
@@ -87,7 +88,7 @@ export async function PUT(
     const extraUpdates: any = {}
     if (!slot.isRunning && !updates.isRunning) {
       extraUpdates.manuallyStopped = true
-      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates || 'hourly' in updates || 'repeat15m' in updates || 'repeat10m' in updates || 'repeat30m' in updates || 'repeat1h' in updates || 'repeat2h' in updates) {
+      if ('schedStart' in updates || 'schedStop' in updates || 'daily' in updates || 'weekly' in updates || 'hourly' in updates || 'repeat15m' in updates || 'repeat10m' in updates || 'repeat30m' in updates || 'repeat1h' in updates || 'repeat2h' in updates || 'repeat12h' in updates) {
         extraUpdates.isScheduled = false
         extraUpdates.nextRunTime = ''
         extraUpdates.status = 'Stopped'

@@ -114,6 +114,7 @@ async function executeTool(name: string, args: any, origin: string, cookieHeader
         else if (actionType === 'closest_30_all') bulkAction = 'setClosest30m24mAll'
         else if (actionType === 'closest_1h_all') bulkAction = 'setClosestHour50mAll'
         else if (actionType === 'closest_2h_all') bulkAction = 'setClosest2h110mAll'
+        else if (actionType === 'closest_12h_all') bulkAction = 'setClosest12hAll'
         else {
           return { success: false, error: `Invalid bulk action: ${actionType}` }
         }
@@ -399,7 +400,7 @@ Ensure that the JSON is valid and easy for the system to parse.`
             properties: {
               actionType: { 
                 type: 'STRING', 
-                description: 'نوع الإجراء الجماعي: "file_only_all" (بث مسجل فقط للكل)، "closest_30_all" (أقرب 30 دقيقة للكل)، "closest_1h_all" (أقرب ساعة للكل)، "closest_2h_all" (أقرب ساعتين للكل)' 
+                description: 'نوع الإجراء الجماعي: "file_only_all" (بث مسجل فقط للكل)، "closest_30_all" (أقرب 30 دقيقة للكل)، "closest_1h_all" (أقرب ساعة للكل)، "closest_2h_all" (أقرب ساعتين للكل)، "closest_12h_all" (أقرب 12 ساعة للكل)' 
               }
             },
             required: ['actionType']

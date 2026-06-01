@@ -30,6 +30,7 @@ model StreamSlot {
   repeat30m       Boolean  @default(false)
   repeat1h        Boolean  @default(false)
   repeat2h        Boolean  @default(false)
+  repeat12h       Boolean  @default(false)
   isScheduled     Boolean  @default(false)
   manuallyStopped Boolean  @default(true)
   nextRunTime     String   @default("")

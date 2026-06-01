@@ -174,7 +174,8 @@ export function calculateNextRun(
   repeat1h?: boolean,
   repeat2h?: boolean,
   repeat15m?: boolean,
-  repeat10m?: boolean
+  repeat10m?: boolean,
+  repeat12h?: boolean
 ): string {
   if (!schedStart) return ''
   const now = new Date()
@@ -190,6 +191,7 @@ export function calculateNextRun(
     else if (repeat30m) intervalMins = 30
     else if (repeat1h) intervalMins = 60
     else if (repeat2h) intervalMins = 120
+    else if (repeat12h) intervalMins = 720
 
     if (intervalMins > 0) {
       const cairoNow = getCairoNowFields(now)

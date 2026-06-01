@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
 
         // Phase 1: Schedule slots with schedStart
         for (const slot of slotsToSchedule) {
-          const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m)
+          const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
             data: {
@@ -470,7 +470,7 @@ export async function POST(request: NextRequest) {
               repeat10m: true,
               repeat30m: false,
               repeat1h: false,
-              repeat2h: false
+              repeat2h: false, repeat12h: false
             }
           })
         }
@@ -490,6 +490,7 @@ export async function POST(request: NextRequest) {
             daily: false,
             weekly: false,
             hourly: false,
+            repeat12h: false,
             isScheduled: false,
             manuallyStopped: true,
             nextRunTime: '',
@@ -580,7 +581,7 @@ export async function POST(request: NextRequest) {
                   repeat15m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -597,7 +598,7 @@ export async function POST(request: NextRequest) {
                   repeat15m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -651,7 +652,7 @@ export async function POST(request: NextRequest) {
                   repeat15m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -668,7 +669,7 @@ export async function POST(request: NextRequest) {
                   repeat15m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -683,7 +684,8 @@ export async function POST(request: NextRequest) {
             where: safeFilter,
             data: {
               hourly: false,
-              isScheduled: false,
+            repeat12h: false,
+            isScheduled: false,
               manuallyStopped: true,
               nextRunTime: '',
               status: 'Stopped'
@@ -723,7 +725,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -741,7 +743,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -796,7 +798,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: true,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -814,7 +816,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: true,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -869,7 +871,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: true,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -887,7 +889,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: true,
                   repeat1h: false,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -942,7 +944,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: true,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -960,7 +962,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: true,
-                  repeat2h: false,
+                  repeat2h: false, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -992,7 +994,7 @@ export async function POST(request: NextRequest) {
         const { calculateNextRun } = await import('@/lib/timezone-helper')
         const safeFilter = { ...userFilter, isRunning: false }
         const matchedCount = await db.streamSlot.count({
-          where: { repeat2h: true, ...safeFilter }
+          where: { repeat2h: true, repeat12h: false, ...safeFilter }
         })
         const total = await db.streamSlot.count({
           where: safeFilter
@@ -1015,7 +1017,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: true,
+                  repeat2h: true, repeat12h: false,
                   isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
                   manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
                   nextRunTime,
@@ -1033,7 +1035,7 @@ export async function POST(request: NextRequest) {
                   repeat10m: false,
                   repeat30m: false,
                   repeat1h: false,
-                  repeat2h: true,
+                  repeat2h: true, repeat12h: false,
                   isScheduled: false,
                   manuallyStopped: true,
                   nextRunTime: '',
@@ -1047,7 +1049,7 @@ export async function POST(request: NextRequest) {
           const res = await db.streamSlot.updateMany({
             where: safeFilter,
             data: {
-              repeat2h: false,
+              repeat2h: false, repeat12h: false,
               isScheduled: false,
               manuallyStopped: true,
               nextRunTime: '',
@@ -1106,7 +1108,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: false,
             repeat1h: false,
-            repeat2h: false
+            repeat2h: false, repeat12h: false
           }
           })
           count++
@@ -1197,7 +1199,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: false,
             repeat1h: false,
-            repeat2h: false
+            repeat2h: false, repeat12h: false
           }
           })
           count++
@@ -1256,7 +1258,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: true,
             repeat1h: false,
-            repeat2h: false
+            repeat2h: false, repeat12h: false
           }
           })
           count++
@@ -1309,7 +1311,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: false,
             repeat1h: true,
-            repeat2h: false
+            repeat2h: false, repeat12h: false
           }
           })
           count++
@@ -1362,7 +1364,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: false,
             repeat1h: false,
-            repeat2h: true
+            repeat2h: true, repeat12h: false
           }
           })
           count++
@@ -1376,6 +1378,143 @@ export async function POST(request: NextRequest) {
             ? `تم ضبط أوقات البدء والإيقاف لأقرب ساعتين وبث ساعة و50 دقيقة للكل (${startTime})`
             : `Set all slots to nearest 2 hours (stream 1h 50m) at ${startTime}`
         })
+      }
+
+      case 'setClosest12hAll': {
+        const { getCairoNowFields, getAbsoluteDateFromCairoFields } = await import('@/lib/timezone-helper')
+        const now = new Date()
+        const cairoNow = getCairoNowFields(now)
+
+        // Find the closest future 12 (AM or PM) in Cairo time
+        const candidates: Date[] = []
+        for (let offset = 0; offset <= 2; offset++) {
+          candidates.push(getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + offset, 0, 0, 0)) // 12 AM (00:00)
+          candidates.push(getAbsoluteDateFromCairoFields(cairoNow.year, cairoNow.month, cairoNow.day + offset, 12, 0, 0)) // 12 PM (12:00)
+        }
+
+        // Filter candidates that are strictly in the future
+        const futureCandidates = candidates.filter(d => d.getTime() > now.getTime())
+        futureCandidates.sort((a, b) => a.getTime() - b.getTime())
+
+        const targetDate = futureCandidates[0]
+
+        const formatCairoDate = (date: Date) => {
+          const fields = getCairoNowFields(date)
+          return `${String(fields.month + 1).padStart(2, '0')}-${String(fields.day).padStart(2, '0')} ${String(fields.hour).padStart(2, '0')}:${String(fields.minute).padStart(2, '0')}`
+        }
+
+        const startTime = formatCairoDate(targetDate)
+        const stopDate = new Date(targetDate.getTime() + (11 * 60 + 45) * 60 * 1000) // 11h 45m duration
+        const stopTime = formatCairoDate(stopDate)
+
+        const allSlots = await db.streamSlot.findMany({ where: { ...userFilter, isRunning: false } })
+        let count = 0
+        for (const slot of allSlots) {
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              schedStart: startTime,
+              schedStop: stopTime,
+              isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
+              manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
+              nextRunTime: startTime,
+              status: typeof slot !== 'undefined' && isSlotValidForSchedule(slot) ? 'Scheduled' : 'Stopped',
+              hourly: false,
+              daily: false,
+              weekly: false,
+              repeat15m: false,
+              repeat10m: false,
+              repeat30m: false,
+              repeat1h: false,
+              repeat2h: false,
+              repeat12h: true
+            }
+          })
+          count++
+        }
+
+        return NextResponse.json({
+          success: true,
+          count,
+          message: locale === 'ar'
+            ? `تم ضبط أوقات البدء والإيقاف لأقرب 12 ساعة وبث 11 ساعة و45 دقيقة للكل (${startTime})`
+            : `Set all slots to nearest 12 hours (stream 11h 45m) at ${startTime}`
+        })
+      }
+
+      case 'repeat12hAll': {
+        const { calculateNextRun } = await import('@/lib/timezone-helper')
+        const safeFilter = { ...userFilter, isRunning: false }
+        const matchedCount = await db.streamSlot.count({
+          where: { repeat12h: true, ...safeFilter }
+        })
+        const total = await db.streamSlot.count({
+          where: safeFilter
+        })
+        const targetState = matchedCount < total / 2
+
+        let count = 0
+        if (targetState) {
+          const slots = await db.streamSlot.findMany({ where: safeFilter })
+          for (const slot of slots) {
+            if (slot.schedStart) {
+              const nextRunTime = calculateNextRun(slot.schedStart, false, false, false, false, false, false, false, false, true)
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: false,
+                  daily: false,
+                  weekly: false,
+                  repeat15m: false,
+                  repeat10m: false,
+                  repeat30m: false,
+                  repeat1h: false,
+                  repeat2h: false,
+                  repeat12h: true,
+                  isScheduled: typeof slot !== 'undefined' ? isSlotValidForSchedule(slot) : true,
+                  manuallyStopped: typeof slot !== 'undefined' ? !isSlotValidForSchedule(slot) : false,
+                  nextRunTime,
+                  status: 'Scheduled'
+                }
+              })
+            } else {
+              await db.streamSlot.update({
+                where: { slotIndex: slot.slotIndex },
+                data: {
+                  hourly: false,
+                  daily: false,
+                  weekly: false,
+                  repeat15m: false,
+                  repeat10m: false,
+                  repeat30m: false,
+                  repeat1h: false,
+                  repeat2h: false,
+                  repeat12h: true,
+                  isScheduled: false,
+                  manuallyStopped: true,
+                  nextRunTime: '',
+                  status: 'Stopped'
+                }
+              })
+            }
+            count++
+          }
+        } else {
+          const res = await db.streamSlot.updateMany({
+            where: safeFilter,
+            data: {
+              repeat12h: false,
+              isScheduled: false,
+              manuallyStopped: true,
+              nextRunTime: '',
+              status: 'Stopped'
+            }
+          })
+          count = res.count
+        }
+
+        const actionText = targetState ? 'Enabled' : 'Disabled'
+        return NextResponse.json({ success: true, count, message: actionText + " 12-hour repeat and updated schedules for all slots" })
       }
 
       case 'resetAll': {
@@ -1412,7 +1551,7 @@ export async function POST(request: NextRequest) {
             repeat10m: false,
             repeat30m: false,
             repeat1h: false,
-            repeat2h: false,
+            repeat2h: false, repeat12h: false,
             isScheduled: false,
             isRunning: false,
             manuallyStopped: true,
@@ -1475,7 +1614,7 @@ export async function POST(request: NextRequest) {
 
         for (const slot of slots) {
           try {
-            const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m)
+            const nextRunTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
             await db.streamSlot.update({
               where: { slotIndex: slot.slotIndex },
               data: {
