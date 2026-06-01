@@ -2518,14 +2518,7 @@ export default function Home() {
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 100 }}>{t('colFilePath')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colStreamKey')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('startStream')}</th>
-                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 330 }}>
-                        <div className="flex items-end gap-2 h-full justify-center">
-                          <div className="w-[110px] text-center shrink-0">{t('stopStream')}</div>
-                          <div className="w-[210px] text-center shrink-0 pb-[1px]">
-                            <span className="text-[10px] text-muted-foreground leading-none whitespace-nowrap">{t('lblScheduling')}</span>
-                          </div>
-                        </div>
-                      </th>
+                      <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('stopStream')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 120 }}>{t('colActions')}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 320 }}>{locale === 'ar' ? 'تكرار البث' : 'Repeat Options'}</th>
                       <th className="text-center text-xs font-semibold px-2 py-1.5" style={{ width: 70 }}>{t('colStatus')}</th>
@@ -2778,72 +2771,7 @@ export default function Home() {
                                 </button>
                               </div>
 
-                              {/* Closest quick scheduling buttons */}
-                              <div className="flex gap-1 items-center shrink-0 flex-wrap max-w-[210px]">
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest10Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '10 (مدة 6 د)' : '10 mins (6m duration)'}
-                                >
-                                  {locale === 'ar' ? '10' : '10'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest15Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '15 (مدة 9 د)' : '15 mins (9m duration)'}
-                                >
-                                  {locale === 'ar' ? '15' : '15'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest20Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '20 (مدة 13 د)' : '20 mins (13m duration)'}
-                                >
-                                  {locale === 'ar' ? '20' : '20'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest30Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '30 (مدة 24 د)' : '30 mins (24m duration)'}
-                                >
-                                  {locale === 'ar' ? '30' : '30'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعة (مدة 50 د)' : 'Hour (50m duration)'}
-                                >
-                                  {locale === 'ar' ? 'ساعة' : '1h'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
-                                >
-                                  {locale === 'ar' ? 'ساعتين' : '2h'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest12Schedule(slot.slotIndex)}
-                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '12 ساعة (مدة 11 س و45 د)' : '12 hours (11h 45m duration)'}
-                                >
-                                  {locale === 'ar' ? '12 ساعة' : '12h'}
-                                </button>
-                              </div>
+                              
                             </div>
                           </td>
 
@@ -3400,72 +3328,7 @@ export default function Home() {
                                 </select>
                               </div>
 
-                              {/* Closest quick scheduling buttons */}
-                              <div className="flex gap-1 items-center shrink-0 flex-wrap">
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest10Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '10 (مدة 6 د)' : '10 mins (6m duration)'}
-                                >
-                                  {locale === 'ar' ? '10' : '10'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest15Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '15 (مدة 9 د)' : '15 mins (9m duration)'}
-                                >
-                                  {locale === 'ar' ? '15' : '15'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest20Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '20 (مدة 13 د)' : '20 mins (13m duration)'}
-                                >
-                                  {locale === 'ar' ? '20' : '20'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest30Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '30 (مدة 24 د)' : '30 mins (24m duration)'}
-                                >
-                                  {locale === 'ar' ? '30' : '30'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosestHourSchedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعة (مدة 50 د)' : 'Hour (50m duration)'}
-                                >
-                                  {locale === 'ar' ? 'ساعة' : '1h'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest2HourSchedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
-                                >
-                                  {locale === 'ar' ? 'ساعتين' : '2h'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
-                                  onClick={() => handleClosest12Schedule(slot.slotIndex)}
-                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                  title={locale === 'ar' ? '12 ساعة (مدة 11 س و45 د)' : '12 hours (11h 45m duration)'}
-                                >
-                                  {locale === 'ar' ? '12 ساعة' : '12h'}
-                                </button>
-                              </div>
+                              
 
                               {/* Recurrence Checkboxes */}
                               <div className={`flex flex-row flex-wrap items-center gap-2 shrink-0 ${isLocked ? 'opacity-50' : ''}`}>
