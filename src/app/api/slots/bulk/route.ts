@@ -1427,7 +1427,7 @@ export async function POST(request: NextRequest) {
               repeat30m: false,
               repeat1h: false,
               repeat2h: false,
-              repeat12h: true
+              repeat12h: false
             }
           })
           count++
