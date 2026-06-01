@@ -2779,7 +2779,7 @@ export default function Home() {
                               </div>
 
                               {/* Closest quick scheduling buttons */}
-                              <div className="flex gap-1 items-center shrink-0">
+                              <div className="flex gap-1 items-center shrink-0 flex-wrap max-w-[210px]">
                                 <button
                                   type="button"
                                   disabled={slot.isRunning || slot.status !== 'Stopped'}
@@ -2833,6 +2833,15 @@ export default function Home() {
                                   title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعتين' : '2h'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest12Schedule(slot.slotIndex)}
+                                  className="h-6 px-1.5 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '12 ساعة (مدة 11 س و45 د)' : '12 hours (11h 45m duration)'}
+                                >
+                                  {locale === 'ar' ? '12 ساعة' : '12h'}
                                 </button>
                               </div>
                             </div>
@@ -3446,6 +3455,15 @@ export default function Home() {
                                   title={locale === 'ar' ? 'ساعتين (مدة 110 د)' : '2 hours (1h 50m duration)'}
                                 >
                                   {locale === 'ar' ? 'ساعتين' : '2h'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={slot.isRunning || slot.status !== 'Stopped'}
+                                  onClick={() => handleClosest12Schedule(slot.slotIndex)}
+                                  className="h-7 px-2 flex items-center justify-center text-[10px] font-semibold bg-muted hover:bg-muted-foreground/15 border border-border rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                  title={locale === 'ar' ? '12 ساعة (مدة 11 س و45 د)' : '12 hours (11h 45m duration)'}
+                                >
+                                  {locale === 'ar' ? '12 ساعة' : '12h'}
                                 </button>
                               </div>
 
