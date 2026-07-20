@@ -4530,6 +4530,9 @@ export default function Home() {
                     youtubeThumbnailPath: settingsData.youtubeThumbnailPath,
                     titleDescListId: settingsData.titleDescListId || null,
                     episodeNumber: settingsData.episodeNumber,
+                    playlistConfig: settingsData.playlistConfig,
+                    playlistLoopEnabled: settingsData.playlistLoopEnabled,
+                    loopIntervalMins: settingsData.loopIntervalMins,
                   }
                   // Always save streamKey when a YouTube channel is linked
                   // (empty string = auto-fetch mode, non-empty = specific key chosen)
