@@ -4285,7 +4285,17 @@ export default function Home() {
                             <label className="text-sm font-bold text-foreground">
                               {locale === 'ar' ? 'قائمة الفيديوهات المحددة' : 'Selected Video List'}
                             </label>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex items-center gap-1 font-semibold text-pink-600 border-pink-500/30 hover:bg-pink-500/10"
+                                onClick={() => setTitleDescManagerOpen(true)}
+                              >
+                                <Settings className="w-3.5 h-3.5 text-pink-500" />
+                                {locale === 'ar' ? 'إدارة قوائم العناوين' : 'Manage Title Lists'}
+                              </Button>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -4399,10 +4409,23 @@ export default function Home() {
                                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 border-t border-border/50 pt-2">
                                         {/* Title Selection */}
                                         <div className="flex flex-col gap-1">
-                                          <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
-                                            <Shuffle className="w-3 h-3 text-pink-500" />
-                                            {locale === 'ar' ? 'العناوين والأوصاف لهذا الفيديو:' : 'Titles & Descs for this video:'}
-                                          </label>
+                                          <div className="flex justify-between items-center">
+                                            <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                              <Shuffle className="w-3 h-3 text-pink-500" />
+                                              {locale === 'ar' ? 'العناوين والأوصاف لهذا الفيديو:' : 'Titles & Descs for this video:'}
+                                            </label>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-5 px-1 text-[10px] font-semibold text-pink-500 hover:text-pink-600 hover:bg-pink-500/10"
+                                              onClick={() => setTitleDescManagerOpen(true)}
+                                              title={locale === 'ar' ? 'إنشاء أو تعديل قوائم العناوين والأوصاف' : 'Create or edit title lists'}
+                                            >
+                                              <Plus className="w-3 h-3 mr-0.5" />
+                                              {locale === 'ar' ? 'إنشاء قائمة' : 'New List'}
+                                            </Button>
+                                          </div>
                                           <select
                                             value={item.titleDescListId || ''}
                                             onChange={(e) => {
@@ -4412,7 +4435,11 @@ export default function Home() {
                                             }}
                                             className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
                                           >
-                                            <option value="">{locale === 'ar' ? '— افتراضي القناة / بدون —' : '— Channel Default —'}</option>
+                                            <option value="">
+                                              {titleDescLists.length === 0
+                                                ? (locale === 'ar' ? '— اضغط "إنشاء قائمة" لإضافة عناوين —' : '— Click "New List" to add titles —')
+                                                : (locale === 'ar' ? '— افتراضي القناة / بدون —' : '— Channel Default —')}
+                                            </option>
                                             {titleDescLists.map(list => {
                                               const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
                                               return (
