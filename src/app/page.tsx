@@ -896,6 +896,28 @@ export default function Home() {
     }
   }, [])
 
+  // Helper to open Advanced Settings for a slot focused on a specific tab
+  const openSlotSettings = useCallback((slot: StreamSlot, tab: 'swap' | 'youtube' | 'playlist' = 'swap') => {
+    setSettingsSlot(slot.slotIndex)
+    setActiveTab(tab)
+    setSettingsData({
+      swapVideoPath: slot.swapVideoPath ?? '',
+      swapVideoEnabled: slot.swapVideoEnabled ?? false,
+      youtubeChannelId: slot.youtubeChannelId ?? '',
+      youtubeTitle: slot.youtubeTitle ?? '',
+      youtubeDescription: slot.youtubeDescription ?? '',
+      youtubeThumbnailPath: slot.youtubeThumbnailPath ?? '',
+      streamKey: slot.streamKey ?? '',
+      rtmpServer: slot.rtmpServer ?? '',
+      titleDescListId: slot.titleDescListId ?? null,
+      episodeNumber: slot.episodeNumber ?? 1,
+      playlistConfig: slot.playlistConfig ?? '[]',
+      playlistLoopEnabled: slot.playlistLoopEnabled ?? false,
+      loopIntervalMins: slot.loopIntervalMins ?? 60,
+    })
+    if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
+  }, [fetchYtStreamKeys])
+
   // Fetch YouTube stream keys for a specific slot index (used in main table row)
   const fetchStreamKeysForSlot = useCallback(async (slotIndex: number, channelId: string, force = false) => {
     if (!channelId) return
