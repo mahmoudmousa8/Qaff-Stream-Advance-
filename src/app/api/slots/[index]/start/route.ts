@@ -165,15 +165,11 @@ export async function POST(
             if (tdList) {
               const listData = JSON.parse(tdList.items)
               const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
-              if (pairs.length > 0) {
-                const titles = pairs.map((p: any) => p.title).filter((t: string) => t.trim() !== '')
-                const descs = pairs.map((p: any) => p.description).filter((d: string) => d.trim() !== '')
-                if (titles.length > 0) {
-                  finalTitle = titles[Math.floor(Math.random() * titles.length)]
-                }
-                if (descs.length > 0) {
-                  finalDescription = descs[Math.floor(Math.random() * descs.length)]
-                }
+              const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+              if (validPairs.length > 0) {
+                const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)]
+                finalTitle = randomPair.title
+                finalDescription = randomPair.description || ''
               }
             }
           } catch (e: any) {

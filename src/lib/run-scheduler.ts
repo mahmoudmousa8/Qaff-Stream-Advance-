@@ -649,6 +649,18 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   return result
 }
 
+export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, intervalMins: number): number {
+  // Base stop offset: 7 minutes before end of interval (for 60m -> 53 minutes).
+  // Random jitter: ±2 minutes (between -2.0 and +2.0 minutes).
+  // Target run duration = (intervalMins - 7) + jitter => for 60m: 51.0m to 55.0m.
+  const seed = (slotIndex + 1) * 100000 + Math.floor(lastSwitchTime.getTime() / 60000)
+  const x = Math.sin(seed) * 10000
+  const randomFactor = x - Math.floor(x)
+  const jitterMins = (randomFactor * 4) - 2
+  const stopTarget = Math.max(1, (intervalMins - 7) + jitterMins)
+  return stopTarget
+}
+
 async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
   const nextIndex = (slot.currentPlaylistItemIndex + 1) % playlist.length
   const nextItem = playlist[nextIndex]
@@ -687,27 +699,24 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
     // 3. Wait 6 seconds
     await new Promise(r => setTimeout(r, 6000))
 
-    // 4. Resolve new Title/Description
+    // 4. Resolve new Title/Description (pick a matching random pair)
     let finalTitle = slot.youtubeTitle || 'Live Stream'
     let finalDescription = slot.youtubeDescription || ''
     
-    if (nextItem.titleDescListId) {
+    const listIdToUse = nextItem.titleDescListId || slot.titleDescListId
+    if (listIdToUse) {
       try {
         const tdList = await db.titleDescList.findUnique({
-          where: { id: nextItem.titleDescListId }
+          where: { id: listIdToUse }
         })
         if (tdList) {
           const listData = JSON.parse(tdList.items)
           const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
-          if (pairs.length > 0) {
-            const titles = pairs.map((p: any) => p.title).filter((t: string) => t.trim() !== '')
-            const descs = pairs.map((p: any) => p.description).filter((d: string) => d.trim() !== '')
-            if (titles.length > 0) {
-              finalTitle = titles[Math.floor(Math.random() * titles.length)]
-            }
-            if (descs.length > 0) {
-              finalDescription = descs[Math.floor(Math.random() * descs.length)]
-            }
+          const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+          if (validPairs.length > 0) {
+            const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)]
+            finalTitle = randomPair.title
+            finalDescription = randomPair.description || ''
           }
         }
       } catch (tdErr: any) {
@@ -1074,9 +1083,20 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       state.pendingUntil = Date.now() + delay
       recoveryStates.set(stateKey, state)
 
-      // Skip recovery if stream ended naturally near its scheduled stop time
+      // Skip recovery if stream ended naturally near its scheduled stop time or inside intentional playlist pre-stop
       let skipRecovery = false
-      if (slot.schedStop && !slot.schedStop.startsWith('DUR')) {
+      if (slot.playlistLoopEnabled && slot.playlistConfig) {
+        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+        const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
+        const intervalMins = slot.loopIntervalMins || 60
+        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+        if (elapsedMins >= stopTargetMins) {
+          skipRecovery = true
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window (${elapsedMins.toFixed(1)}m >= ${stopTargetMins.toFixed(1)}m)`)
+        }
+      }
+
+      if (!skipRecovery && slot.schedStop && !slot.schedStop.startsWith('DUR')) {
         const parsedStop = parseScheduleTime(slot.schedStop)
         if (parsedStop) {
           const stopDate = getCairoTargetDate(parsedStop, now)
@@ -1189,16 +1209,35 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
-    // ── Playlist Loop Video Switching ──
+    // ── Playlist Loop Video Switching & Random Pre-Stop ──
     if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig) {
       try {
         const playlist = JSON.parse(slot.playlistConfig)
         if (playlist.length > 0) {
           const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
           const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
-          if (elapsedMins >= slot.loopIntervalMins) {
-            logs.push(`Slot ${slot.slotIndex + 1}: Playlist loop switch triggered (${elapsedMins.toFixed(1)}m elapsed)`)
+          const intervalMins = slot.loopIntervalMins || 60
+          const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+
+          if (elapsedMins >= intervalMins) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Playlist loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Rotating to next video.`)
             triggerPlaylistSwitch(slot, playlist, now)
+          } else if (elapsedMins >= stopTargetMins && activeInManager.has(slot.slotIndex)) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly until next interval.`)
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered at ${elapsedMins.toFixed(1)}m (target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly.`)
+
+            // Stop stream manager process
+            fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotIndex: slot.slotIndex })
+            }, 5000).catch(err => console.error(`[Scheduler] Stop error during playlist pre-stop:`, err))
+
+            // Stop YouTube broadcast cleanly
+            if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+              stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+                .catch(ytErr => console.error(`[Scheduler] YouTube stop error during playlist pre-stop:`, ytErr.message))
+            }
           }
         }
       } catch (e: any) {
