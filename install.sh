@@ -346,6 +346,93 @@ sudo systemctl restart mediamtx
 echo -e "  ✅ MediaMTX service enabled and running natively on port 1935 (systemctl status mediamtx)"
 
 # ════════════════════════════════════════════
+# 7.5. Installing and Configuring Caddy Reverse Proxy & Domain/Subdomain
+# ════════════════════════════════════════════
+echo -e "\n${GREEN}[7.5/8]${NC} Setting up Caddy Reverse Proxy & Subdomain..."
+
+# Check if Caddy is installed, if not, install it
+if ! command -v caddy &>/dev/null; then
+  echo -e "  Installing Caddy..."
+  sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https -qq
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list >/dev/null
+  sudo apt-get update -qq
+  sudo apt-get install caddy -y -qq
+  echo -e "  ✅ Caddy installed successfully"
+else
+  echo -e "  ✅ Caddy is already installed"
+fi
+
+# Prompt for Root Domain and Subdomain
+echo -e "\n${YELLOW}🌐 Domain Configuration (e.g., stream1.qaff.net)${NC}"
+read -p "Enter root domain [default: qaff.net]: " ROOT_DOMAIN
+ROOT_DOMAIN=${ROOT_DOMAIN:-qaff.net}
+
+read -p "Enter subdomain (e.g., stream1) [leave empty for root domain]: " SUB_DOMAIN
+
+if [ -n "$SUB_DOMAIN" ]; then
+  FULL_DOMAIN="${SUB_DOMAIN}.${ROOT_DOMAIN}"
+else
+  FULL_DOMAIN="${ROOT_DOMAIN}"
+fi
+
+echo -e "  Configuring Caddy to point ${FULL_DOMAIN} to localhost:3000..."
+
+# Backup existing local Caddyfile if any
+if [ -f "$PROJECT_DIR/Caddyfile" ]; then
+  mv "$PROJECT_DIR/Caddyfile" "$PROJECT_DIR/Caddyfile.bak" || true
+fi
+
+# Write updated Caddyfile
+cat << EOF > "$PROJECT_DIR/Caddyfile"
+${FULL_DOMAIN} {
+	@transform_port_query {
+		query XTransformPort=*
+	}
+
+	handle @transform_port_query {
+		request_body {
+			max_size 0
+		}
+		reverse_proxy localhost:{query.XTransformPort} {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		request_body {
+			max_size 0
+		}
+		reverse_proxy localhost:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}
+EOF
+
+# Copy Caddyfile to system folder /etc/caddy/
+sudo cp "$PROJECT_DIR/Caddyfile" /etc/caddy/Caddyfile
+
+# Enable firewall ports 80 and 443 for web traffic
+if command -v ufw &>/dev/null; then
+  sudo ufw allow 80/tcp 2>/dev/null || true
+  sudo ufw allow 443/tcp 2>/dev/null || true
+fi
+
+# Restart Caddy system service to apply changes
+sudo systemctl daemon-reload
+sudo systemctl enable caddy 2>/dev/null || true
+sudo systemctl restart caddy
+echo -e "  ✅ Caddy reverse proxy configured and restarted (systemctl status caddy)"
+
+
+# ════════════════════════════════════════════
 # 8. Start Native Dashboard and Stream Manager via PM2
 # ════════════════════════════════════════════
 echo -e "\n${GREEN}[8/8]${NC} Launching App Services via PM2..."

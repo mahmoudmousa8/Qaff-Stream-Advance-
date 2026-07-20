@@ -53,6 +53,11 @@ model StreamSlot {
   youtubeBroadcastId String   @default("")
   titleDescListId    String?
   episodeNumber      Int      @default(1)
+  playlistConfig           String   @default("[]")
+  playlistLoopEnabled      Boolean  @default(false)
+  loopIntervalMins         Int      @default(60)
+  currentPlaylistItemIndex Int      @default(0)
+  lastVideoSwitchTime      String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

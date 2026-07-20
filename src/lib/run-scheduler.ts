@@ -649,6 +649,157 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   return result
 }
 
+async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
+  const nextIndex = (slot.currentPlaylistItemIndex + 1) % playlist.length
+  const nextItem = playlist[nextIndex]
+  
+  try {
+    // 0. Update DB state immediately to prevent multiple triggers in next ticks
+    await db.streamSlot.update({
+      where: { slotIndex: slot.slotIndex },
+      data: {
+        currentPlaylistItemIndex: nextIndex,
+        lastVideoSwitchTime: now.toISOString(),
+        status: 'Streaming',
+        isSwapped: false,
+        youtubeBroadcastId: ''
+      }
+    })
+
+    console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Playlist switch triggered! Swapping to index ${nextIndex}: ${nextItem.videoPath}`)
+
+    // 1. Stop current stream
+    await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slotIndex: slot.slotIndex })
+    }, 5000)
+
+    // 2. Stop YouTube Live broadcast if applicable
+    if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+      try {
+        await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+      } catch (ytErr: any) {
+        console.error(`[Scheduler] Stop YT broadcast failed during playlist switch:`, ytErr.message)
+      }
+    }
+
+    // 3. Wait 6 seconds
+    await new Promise(r => setTimeout(r, 6000))
+
+    // 4. Resolve new Title/Description
+    let finalTitle = slot.youtubeTitle || 'Live Stream'
+    let finalDescription = slot.youtubeDescription || ''
+    
+    if (nextItem.titleDescListId) {
+      try {
+        const tdList = await db.titleDescList.findUnique({
+          where: { id: nextItem.titleDescListId }
+        })
+        if (tdList) {
+          const listData = JSON.parse(tdList.items)
+          const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+          if (pairs.length > 0) {
+            const titles = pairs.map((p: any) => p.title).filter((t: string) => t.trim() !== '')
+            const descs = pairs.map((p: any) => p.description).filter((d: string) => d.trim() !== '')
+            if (titles.length > 0) {
+              finalTitle = titles[Math.floor(Math.random() * titles.length)]
+            }
+            if (descs.length > 0) {
+              finalDescription = descs[Math.floor(Math.random() * descs.length)]
+            }
+          }
+        }
+      } catch (tdErr: any) {
+        console.error(`[Scheduler] TitleDesc fetch failed during playlist switch:`, tdErr.message)
+      }
+    }
+
+    // Episode number replacement
+    const epNum = slot.episodeNumber || 1
+    const episodeRegex = /\{add\}/gi
+    if (episodeRegex.test(finalTitle) || episodeRegex.test(finalDescription)) {
+      finalTitle = finalTitle.replace(episodeRegex, epNum.toString())
+      finalDescription = finalDescription.replace(episodeRegex, epNum.toString())
+      await db.streamSlot.update({
+        where: { slotIndex: slot.slotIndex },
+        data: { episodeNumber: { increment: 1 } }
+      })
+    }
+
+    // 5. Setup new YouTube Live Broadcast
+    let finalStreamKey = slot.streamKey
+    let finalRtmpServer = slot.rtmpServer
+    let newBroadcastId = ''
+    
+    if (slot.youtubeChannelId && slot.outputType === 'youtube') {
+      try {
+        let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+        if (resolvedThumbnailPath) {
+          resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slot.slotIndex)
+          activeThumbnails.set(slot.slotIndex, resolvedThumbnailPath)
+        }
+
+        const yt = await setupYoutubeLiveStream(
+          slot.youtubeChannelId,
+          finalTitle,
+          finalDescription,
+          resolvedThumbnailPath,
+          slot.streamKey
+        )
+        finalStreamKey = yt.streamKey || finalStreamKey
+        finalRtmpServer = yt.rtmpServer || finalRtmpServer
+        newBroadcastId = yt.broadcastId || ''
+      } catch (ytErr: any) {
+        console.error(`[Scheduler] Setup YT stream failed during playlist switch:`, ytErr.message)
+      }
+    }
+
+    // 6. Update DB with final keys & resolved filePath
+    await db.streamSlot.update({
+      where: { slotIndex: slot.slotIndex },
+      data: {
+        filePath: nextItem.videoPath,
+        youtubeTitle: finalTitle,
+        youtubeDescription: finalDescription,
+        youtubeBroadcastId: newBroadcastId,
+        streamKey: finalStreamKey,
+        rtmpServer: finalRtmpServer
+      }
+    })
+
+    // 7. Start the stream in manager
+    const startRes = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slotIndex: slot.slotIndex,
+        outputType: slot.outputType,
+        rtmpServer: finalRtmpServer,
+        streamKey: finalStreamKey,
+        filePath: nextItem.videoPath
+      })
+    }, 5000)
+
+    const startData = await startRes.json()
+    if (startRes.ok && startData.success) {
+      const token = Math.random().toString(36).substring(7)
+      lastActionTokens.set(slot.slotIndex, token)
+      verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
+      await db.systemLog.create({
+        data: { message: `Slot ${slot.slotIndex + 1}: Switched to playlist item ${nextIndex} (${path.basename(nextItem.videoPath)})` }
+      })
+    } else {
+      throw new Error(startData.message || 'Stream manager rejected start')
+    }
+  } catch (err: any) {
+    console.error(`[Scheduler] Playlist switch failed for slot ${slot.slotIndex + 1}:`, err.message)
+    await db.systemLog.create({
+      data: { message: `Slot ${slot.slotIndex + 1}: Playlist switch failed: ${err.message}` }
+    })
+  }
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 export interface SchedulerResult {
@@ -1038,6 +1189,23 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
+    // ── Playlist Loop Video Switching ──
+    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig) {
+      try {
+        const playlist = JSON.parse(slot.playlistConfig)
+        if (playlist.length > 0) {
+          const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+          const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
+          if (elapsedMins >= slot.loopIntervalMins) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Playlist loop switch triggered (${elapsedMins.toFixed(1)}m elapsed)`)
+            triggerPlaylistSwitch(slot, playlist, now)
+          }
+        }
+      } catch (e: any) {
+        console.error(`[Scheduler] Playlist loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
+      }
+    }
+
     // ── Pre-Stop Swap Video ────────────────────────────────
     if (slot.isRunning && slot.schedStop && slot.swapVideoEnabled && !slot.isSwapped && slot.swapVideoPath) {
       const parsedStart = slot.schedStart ? parseScheduleTime(slot.schedStart) : null
@@ -1269,6 +1437,23 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
       }
 
+      let currentTitleDescListId = slot.titleDescListId
+      let playlistItems: any[] = []
+      if (slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live') {
+        try {
+          playlistItems = JSON.parse(slot.playlistConfig)
+          if (playlistItems.length > 0) {
+            const currentItem = playlistItems[slot.currentPlaylistItemIndex % playlistItems.length]
+            if (currentItem) {
+              finalInputPath = currentItem.videoPath
+              currentTitleDescListId = currentItem.titleDescListId
+            }
+          }
+        } catch (e) {
+          console.error(`[Scheduler] Failed to parse playlistConfig for start:`, e)
+        }
+      }
+
       // Convert DUR format to real datetime — anchored to schedStart (not now!)
       // This ensures stop time = original_scheduled_start + duration, regardless of late start
       let actualSchedStop = slot.schedStop
@@ -1298,6 +1483,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           manuallyStopped: false,
           isSwapped: slot.isScheduled ? false : slot.isSwapped,
           status: 'Streaming',
+          lastVideoSwitchTime: new Date().toISOString(),
+          filePath: finalInputPath,
           ...(actualSchedStop !== slot.schedStop ? { schedStop: actualSchedStop } : {})
         }
       })
@@ -1331,10 +1518,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             let finalTitle = slot.youtubeTitle || 'Live Stream'
             let finalDescription = slot.youtubeDescription || ''
 
-            if ((slot as any).titleDescListId) {
+            if (currentTitleDescListId) {
               try {
                 const tdList = await db.titleDescList.findUnique({
-                  where: { id: (slot as any).titleDescListId }
+                  where: { id: currentTitleDescListId }
                 })
                 if (tdList) {
                   const listData = JSON.parse(tdList.items)
@@ -1473,8 +1660,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         }
 
         let resolvedInputPath = finalInputPath
-        if (slot.inputType !== 'live' && slot.filePath) {
-          resolvedInputPath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+        if (slot.inputType !== 'live' && finalInputPath) {
+          if (slot.playlistLoopEnabled && playlistItems.length > 0) {
+            resolvedInputPath = finalInputPath
+          } else if (slot.filePath) {
+            resolvedInputPath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+          }
           activeMainVideos.set(slot.slotIndex, resolvedInputPath)
         }
 

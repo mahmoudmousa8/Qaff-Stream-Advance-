@@ -30,10 +30,26 @@ export async function POST(
     const securityKey = clientUser?.securityKey || 'qaff-key-123'
 
     let finalInputPath = slot.filePath
+    let currentTitleDescListId = slot.titleDescListId
+    if (slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live') {
+      try {
+        const playlist = JSON.parse(slot.playlistConfig)
+        if (playlist.length > 0) {
+          const currentItem = playlist[slot.currentPlaylistItemIndex % playlist.length]
+          if (currentItem) {
+            finalInputPath = currentItem.videoPath
+            currentTitleDescListId = currentItem.titleDescListId
+          }
+        }
+      } catch (e) {
+        console.error(`[Start Route] Failed to parse playlistConfig:`, e)
+      }
+    }
+
     if (slot.inputType === 'live') {
       finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
     } else {
-      if (!slot.filePath) {
+      if (!finalInputPath) {
         return NextResponse.json({ error: 'fileNotFound' }, { status: 400 })
       }
     }
@@ -115,7 +131,9 @@ export async function POST(
         manuallyStopped: false,
         schedStart: updatedSchedStart,
         schedStop: updatedSchedStop,
-        isSwapped: false
+        isSwapped: false,
+        lastVideoSwitchTime: new Date().toISOString(),
+        filePath: finalInputPath
       }
     })
 
@@ -137,10 +155,10 @@ export async function POST(
         let finalTitle = slot.youtubeTitle || 'Live Stream'
         let finalDescription = slot.youtubeDescription || ''
 
-        if ((slot as any).titleDescListId) {
+        if (currentTitleDescListId) {
           try {
             const tdList = await db.titleDescList.findUnique({
-              where: { id: (slot as any).titleDescListId }
+              where: { id: currentTitleDescListId }
             })
             if (tdList) {
               const listData = JSON.parse(tdList.items)
@@ -206,10 +224,14 @@ export async function POST(
     // Call stream manager — zero-transcode, direct copy only
     try {
       let resolvedInputPath = finalInputPath
-      if (slot.inputType !== 'live' && slot.filePath) {
+      if (slot.inputType !== 'live' && finalInputPath) {
         const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
-        resolvedInputPath = resolveVideoFileFromFolder(slot.filePath, slotIndex, 'main')
-        activeMainVideos.set(slotIndex, resolvedInputPath)
+        if (slot.playlistLoopEnabled) {
+          activeMainVideos.set(slotIndex, resolvedInputPath)
+        } else if (slot.filePath) {
+          resolvedInputPath = resolveVideoFileFromFolder(slot.filePath, slotIndex, 'main')
+          activeMainVideos.set(slotIndex, resolvedInputPath)
+        }
       }
 
       const response = await fetch(`${STREAM_MANAGER_URL}/start`, {

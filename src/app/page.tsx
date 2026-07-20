@@ -15,7 +15,7 @@ import {
   Sun, Moon, Calendar, AlertCircle, Activity,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
   Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
-  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download, ChevronDown, RepeatIcon
+  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download, ChevronDown, ChevronUp, RepeatIcon
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -86,6 +86,11 @@ interface StreamSlot {
   youtubeThumbnailPath?: string | null
   titleDescListId?: string | null
   episodeNumber?: number
+  playlistConfig?: string
+  playlistLoopEnabled?: boolean
+  loopIntervalMins?: number
+  currentPlaylistItemIndex?: number
+  lastVideoSwitchTime?: string
 }
 
 export interface TitleDescList {
@@ -563,9 +568,13 @@ export default function Home() {
     rtmpServer: string
     titleDescListId?: string | null
     episodeNumber: number
+    playlistConfig: string
+    playlistLoopEnabled: boolean
+    loopIntervalMins: number
   } | null>(null)
-  const [activeTab, setActiveTab] = useState<'swap' | 'youtube'>('swap')
+  const [activeTab, setActiveTab] = useState<'swap' | 'youtube' | 'playlist'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
+  const [playlistSelectorOpen, setPlaylistSelectorOpen] = useState(false)
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
@@ -2809,6 +2818,9 @@ export default function Home() {
                                     rtmpServer: slot.rtmpServer ?? '',
                                     titleDescListId: slot.titleDescListId ?? null,
                                     episodeNumber: slot.episodeNumber ?? 1,
+                                    playlistConfig: slot.playlistConfig ?? '[]',
+                                    playlistLoopEnabled: slot.playlistLoopEnabled ?? false,
+                                    loopIntervalMins: slot.loopIntervalMins ?? 60,
                                   })
                                   // Pre-fetch stream keys if channel is already linked
                                   if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
@@ -3537,6 +3549,9 @@ export default function Home() {
                                       rtmpServer: slot.rtmpServer ?? '',
                                       titleDescListId: slot.titleDescListId ?? null,
                                       episodeNumber: slot.episodeNumber ?? 1,
+                                      playlistConfig: slot.playlistConfig ?? '[]',
+                                      playlistLoopEnabled: slot.playlistLoopEnabled ?? false,
+                                      loopIntervalMins: slot.loopIntervalMins ?? 60,
                                     })
                                     if (slot.youtubeChannelId) fetchYtStreamKeys(slot.youtubeChannelId)
                                   }}
@@ -3827,6 +3842,18 @@ export default function Home() {
               >
                 <Youtube className="w-3.5 h-3.5 text-red-500" />
                 {locale === 'ar' ? 'أتمتة اليوتيوب' : 'YouTube Automation'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('playlist')}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+                  activeTab === 'playlist'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'
+                }`}
+              >
+                <span>📋</span>
+                {locale === 'ar' ? 'مجموعة البث' : 'Playlist Loop'}
               </button>
             </div>
 
@@ -4206,6 +4233,190 @@ export default function Home() {
                               {locale === 'ar' ? 'اختر صورة أو مجلد صور' : 'Select Image or Folder'}
                             </Button>
                           )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'playlist' && (
+                  <div className="space-y-6">
+                    {/* Toggle: Enable Playlist Loop */}
+                    <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
+                      <div className="space-y-0.5">
+                        <label htmlFor="playlistLoopEnabled-toggle" className="text-sm font-bold text-foreground cursor-pointer">
+                          {locale === 'ar' ? 'تفعيل تشغيل مجموعة فيديوهات بالترتيب' : 'Enable Playlist Loop'}
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {locale === 'ar'
+                            ? 'عند التفعيل، سيقوم النظام بالبث من مجموعة الفيديوهات المحددة بالترتيب والتبديل بينها تلقائياً.'
+                            : 'When enabled, the system will stream from the selected video list in order and rotate between them automatically.'}
+                        </p>
+                      </div>
+                      <Checkbox
+                        id="playlistLoopEnabled-toggle"
+                        checked={settingsData.playlistLoopEnabled}
+                        onCheckedChange={(checked) => setSettingsData(p => p ? { ...p, playlistLoopEnabled: !!checked } : p)}
+                        className="w-5 h-5 accent-primary"
+                      />
+                    </div>
+
+                    {settingsData.playlistLoopEnabled && (
+                      <>
+                        {/* Loop Interval selection */}
+                        <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <label className="text-sm font-bold text-foreground block">
+                            {locale === 'ar' ? 'فترة التبديل التلقائي بين الفيديوهات' : 'Video Rotation Interval'}
+                          </label>
+                          <p className="text-xs text-muted-foreground">
+                            {locale === 'ar'
+                              ? 'حدد المدة الزمنية قبل الانتقال التلقائي للفيديو التالي في المجموعة وتغيير العنوان عشوائياً له.'
+                              : 'Select the time duration before automatically switching to the next video in the list and updating its title randomly.'}
+                          </p>
+                          <select
+                            value={settingsData.loopIntervalMins}
+                            onChange={(e) => setSettingsData(p => p ? { ...p, loopIntervalMins: parseInt(e.target.value) || 60 } : p)}
+                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          >
+                            <option value="60">{locale === 'ar' ? 'كل ساعة' : 'Every 1 Hour'}</option>
+                            <option value="120">{locale === 'ar' ? 'كل ساعتين' : 'Every 2 Hours'}</option>
+                            <option value="180">{locale === 'ar' ? 'كل 3 ساعات' : 'Every 3 Hours'}</option>
+                            <option value="240">{locale === 'ar' ? 'كل 4 ساعات' : 'Every 4 Hours'}</option>
+                            <option value="360">{locale === 'ar' ? 'كل 6 ساعات' : 'Every 6 Hours'}</option>
+                            <option value="720">{locale === 'ar' ? 'كل 12 ساعة' : 'Every 12 Hours'}</option>
+                            <option value="1440">{locale === 'ar' ? 'كل 24 ساعة' : 'Every 24 Hours'}</option>
+                          </select>
+                        </div>
+
+                        {/* Playlist Videos manager */}
+                        <div className="space-y-4 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <div className="flex justify-between items-center">
+                            <label className="text-sm font-bold text-foreground">
+                              {locale === 'ar' ? 'قائمة الفيديوهات المحددة' : 'Selected Video List'}
+                            </label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="text-xs flex items-center gap-1"
+                              onClick={() => setPlaylistSelectorOpen(true)}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              {locale === 'ar' ? 'إضافة فيديو' : 'Add Video'}
+                            </Button>
+                          </div>
+
+                          {/* Render Playlist Items */}
+                          {(() => {
+                            let playlistItems: any[] = []
+                            try {
+                              playlistItems = JSON.parse(settingsData.playlistConfig || '[]')
+                            } catch (e) {
+                              playlistItems = []
+                            }
+
+                            if (playlistItems.length === 0) {
+                              return (
+                                <div className="text-center py-6 text-xs text-muted-foreground border border-dashed border-border rounded-lg">
+                                  {locale === 'ar' ? 'لا توجد فيديوهات في المجموعة حالياً. أضف فيديو للبدء.' : 'No videos in the playlist yet. Add a video to start.'}
+                                </div>
+                              )
+                            }
+
+                            return (
+                              <div className="space-y-3">
+                                {playlistItems.map((item: any, idx: number) => {
+                                  const videoName = item.videoPath.split(/[/\\]/).pop() || item.videoPath
+                                  return (
+                                    <div key={idx} className="flex flex-col gap-2 p-3 bg-card border border-border rounded-lg">
+                                      <div className="flex justify-between items-center gap-2">
+                                        <span className="text-xs font-bold text-muted-foreground font-mono">#{idx + 1}</span>
+                                        <span className="text-xs font-medium truncate flex-1 min-w-0" title={item.videoPath}>
+                                          {videoName}
+                                        </span>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          {/* Move Up */}
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0"
+                                            disabled={idx === 0}
+                                            onClick={() => {
+                                              const newPlaylist = [...playlistItems]
+                                              const temp = newPlaylist[idx]
+                                              newPlaylist[idx] = newPlaylist[idx - 1]
+                                              newPlaylist[idx - 1] = temp
+                                              setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                            }}
+                                          >
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                          </Button>
+                                          {/* Move Down */}
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0"
+                                            disabled={idx === playlistItems.length - 1}
+                                            onClick={() => {
+                                              const newPlaylist = [...playlistItems]
+                                              const temp = newPlaylist[idx]
+                                              newPlaylist[idx] = newPlaylist[idx + 1]
+                                              newPlaylist[idx + 1] = temp
+                                              setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                            }}
+                                          >
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                          </Button>
+                                          {/* Delete */}
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                            onClick={() => {
+                                              const newPlaylist = playlistItems.filter((_, i) => i !== idx)
+                                              setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                            }}
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Title Selection for this specific video */}
+                                      <div className="flex flex-col gap-1.5 mt-1 border-t border-border/50 pt-2">
+                                        <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                          <Shuffle className="w-3 h-3 text-pink-500" />
+                                          {locale === 'ar' ? 'العناوين والأوصاف المحددة لهذا الفيديو:' : 'Titles & Descriptions for this video:'}
+                                        </label>
+                                        <select
+                                          value={item.titleDescListId || ''}
+                                          onChange={(e) => {
+                                            const newPlaylist = [...playlistItems]
+                                            newPlaylist[idx].titleDescListId = e.target.value || null
+                                            setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                          }}
+                                          className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                                        >
+                                          <option value="">{locale === 'ar' ? '— اختر قائمة عناوين وأوصاف لهذا الفيديو —' : '— Select Title/Desc List for this video —'}</option>
+                                          {titleDescLists.map(list => {
+                                            const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
+                                            return (
+                                              <option key={list.id} value={list.id}>
+                                                {list.name} · {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
+                                              </option>
+                                            )
+                                          })}
+                                        </select>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )
+                          })()}
                         </div>
                       </>
                     )}
@@ -5640,6 +5851,41 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Playlist Video Selector Dialog ── */}
+      <Dialog open={playlistSelectorOpen} onOpenChange={(open) => !open && setPlaylistSelectorOpen(false)}>
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl p-0" dir={dir}>
+          <div className="p-6 pb-2 shrink-0 border-b border-border/80">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <Film className="w-5 h-5 text-primary" />
+              {locale === 'ar' ? 'اختر فيديو لمجموعة البث' : 'Select Video for Playlist'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'اختر ملف فيديو لإضافته إلى قائمة تشغيل البث المباشر.'
+                : 'Select a video file to add to the playlist rotation.'}
+            </DialogDescription>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
+            <VideoManager
+              onVideoSelect={(videoPath) => {
+                if (settingsData) {
+                  let items = []
+                  try {
+                    items = JSON.parse(settingsData.playlistConfig || '[]')
+                  } catch (e) {
+                    items = []
+                  }
+                  const updated = [...items, { videoPath, titleDescListId: null }]
+                  setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(updated) })
+                }
+                setPlaylistSelectorOpen(false)
+              }}
+              onClose={() => setPlaylistSelectorOpen(false)}
+            />
           </div>
         </DialogContent>
       </Dialog>
