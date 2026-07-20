@@ -4254,6 +4254,147 @@ export default function Home() {
 
                     {settingsData.playlistLoopEnabled && (
                       <>
+                        {/* Bound Channel Selection (Inline for Playlist tab) */}
+                        <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                          <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                            <Youtube className="w-4 h-4 text-red-500" />
+                            {locale === 'ar' ? 'ربط القناة للبث المباشر التلقائي للمجموعة' : 'Bind Channel for Playlist Streaming'}
+                          </label>
+                          <p className="text-xs text-muted-foreground mb-2">
+                            {locale === 'ar'
+                              ? 'اختر القناة التي ترغب في تشغيل هذه المجموعة عليها تلقائياً.'
+                              : 'Select which YouTube channel to run this playlist on automatically.'}
+                          </p>
+                          <select
+                            value={settingsData.youtubeChannelId || ''}
+                            onChange={(e) => {
+                              const channelId = e.target.value
+                              setSettingsData(p => p ? { ...p, youtubeChannelId: channelId, streamKey: '', rtmpServer: '' } : p)
+                              if (channelId) {
+                                fetchYtStreamKeys(channelId)
+                              }
+                            }}
+                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            dir="ltr"
+                          >
+                            <option value="">{locale === 'ar' ? '-- بدون ربط قناة (استخدام الإعدادات الافتراضية) --' : '-- No Channel Linked (Use defaults) --'}</option>
+                            {ytChannels.map(ch => (
+                              <option key={ch.id} value={ch.id}>
+                                {ch.name} ({ch.channelTitle})
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* Quick link row: refresh + add new channel directly */}
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => fetchYtChannels()}
+                              disabled={ytLoading}
+                              className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50 shrink-0"
+                              title={locale === 'ar' ? 'تحديث قائمة القنوات' : 'Refresh channel list'}
+                            >
+                              {ytLoading ? <span className="animate-spin inline-block">⟳</span> : <span>↻</span>}
+                              {locale === 'ar' ? 'تحديث' : 'Refresh'}
+                            </button>
+                            <Input
+                              value={ytSlotLinkName}
+                              onChange={(e) => setYtSlotLinkName(e.target.value)}
+                              placeholder={locale === 'ar' ? 'اسم قناة جديدة للربط...' : 'New channel nickname...'}
+                              className="flex-1 h-7 text-xs bg-background"
+                              dir="auto"
+                            />
+                            <button
+                              type="button"
+                              disabled={!ytSlotLinkName.trim()}
+                              onClick={() => {
+                                const authUrl = `/api/auth/youtube/redirect?name=${encodeURIComponent(ytSlotLinkName.trim())}`
+                                window.open(authUrl, '_blank')
+                                alert(locale === 'ar'
+                                  ? 'سيتم فتح نافذة ترخيص Google. أتمم تسجيل الدخول ثم انقر "تحديث" لرؤية القناة.'
+                                  : 'Google authorization window will open. Complete login then click Refresh to see the channel.')
+                              }}
+                              className="flex items-center gap-1 text-[10px] text-white bg-red-600 hover:bg-red-500 disabled:opacity-40 rounded px-2 py-1 transition-all font-semibold shrink-0"
+                            >
+                              <Youtube className="w-3 h-3" />
+                              {locale === 'ar' ? 'ربط' : 'Link'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {settingsData.youtubeChannelId && (
+                          /* Stream Key Selection Dropdown inline */
+                          <div className="space-y-1.5 p-4 bg-muted/30 border border-border/80 rounded-xl">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <label className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                                <span>🔑</span>
+                                {locale === 'ar' ? 'مفتاح البث المخصص' : 'Custom Stream Key'}
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
+                                disabled={ytStreamKeysLoading}
+                                className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
+                              >
+                                {ytStreamKeysLoading ? (
+                                  <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
+                                ) : (
+                                  <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
+                                )}
+                              </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground mb-2">
+                              {locale === 'ar'
+                                ? 'اختر مفتاح البث من القناة أو اتركه فارغاً ليتم الجلب التلقائي (موصى به).'
+                                : 'Select a stream key from your channel, or leave empty to auto-fetch (recommended).'}
+                            </p>
+
+                            {ytStreamKeysError && (
+                              <div className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded p-2 mb-2">
+                                ⚠️ {ytStreamKeysError}
+                              </div>
+                            )}
+
+                            <select
+                              value={settingsData.streamKey || ''}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                if (!val) {
+                                  setSettingsData(p => p ? { ...p, streamKey: '', rtmpServer: '' } : p)
+                                  return
+                                }
+                                const found = ytStreamKeys.find(k => k.streamKey === val)
+                                setSettingsData(p => p ? {
+                                  ...p,
+                                  streamKey: found?.streamKey || val,
+                                  rtmpServer: found?.rtmpServer || 'rtmp://a.rtmp.youtube.com/live2'
+                                } : p)
+                              }}
+                              className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                              dir="ltr"
+                            >
+                              <option value="">
+                                {ytStreamKeysLoading
+                                  ? (locale === 'ar' ? 'جارٍ التحميل...' : 'Loading...')
+                                  : (locale === 'ar' ? '-- جلب تلقائي (موصى به) --' : '-- Auto-Fetch (Recommended) --')}
+                              </option>
+                              {ytStreamKeys.map(k => (
+                                <option key={k.id} value={k.streamKey}>
+                                  {k.title}{k.status === 'active' ? ' ✅' : ''}
+                                </option>
+                              ))}
+                            </select>
+
+                            {settingsData.streamKey && (
+                              <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded-lg text-[10px] font-mono text-green-600 dark:text-green-400 flex items-center gap-2 overflow-hidden">
+                                <span className="shrink-0">✓</span>
+                                <span className="truncate" title={settingsData.streamKey}>
+                                  {settingsData.streamKey.substring(0, 8)}••••
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {/* Loop Interval selection */}
                         <div className="space-y-2 p-4 bg-muted/30 border border-border/80 rounded-xl">
                           <label className="text-sm font-bold text-foreground block">
