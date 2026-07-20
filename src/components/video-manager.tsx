@@ -884,6 +884,19 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
           />
         </div>
 
+        {mode === 'select' && currentFolder && (
+          <Button
+            size="sm"
+            variant="default"
+            className="bg-green-600 hover:bg-green-700 text-white text-xs flex items-center gap-1 font-bold shadow-md animate-pulse"
+            onClick={() => onVideoSelect && onVideoSelect(currentFolder)}
+            title={getLocale() === 'en' ? 'Select all videos in current folder' : 'اختيار كافة فيديوهات المجلد الحالي مع الفرعية'}
+          >
+            <FolderOpen className="w-4 h-4 mr-1" />
+            <span>{getLocale() === 'en' ? 'Select Current Folder' : 'إضافة هذا المجلد بالكامل'}</span>
+          </Button>
+        )}
+
         {/* Actions */}
         <Button size="sm" variant="outline" onClick={() => setCreateFolderDialog(true)}>
           <FolderPlus className="w-4 h-4 mr-1" />
@@ -979,15 +992,16 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                 {mode === 'select' && (
                   <Button
                     size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 border border-green-500/20 text-green-600 hover:bg-green-600 hover:text-white shrink-0"
+                    variant="outline"
+                    className="h-7 px-2 border border-green-500/40 text-green-600 dark:text-green-400 hover:bg-green-600 hover:text-white shrink-0 text-xs flex items-center gap-1 font-semibold"
                     onClick={(e) => {
                       e.stopPropagation()
                       onVideoSelect && onVideoSelect(folder.path)
                     }}
-                    title={getLocale() === 'en' ? 'Select this folder' : 'اختيار هذا المجلد'}
+                    title={getLocale() === 'en' ? 'Select all videos in this folder (including subfolders)' : 'اختيار كافة فيديوهات هذا المجلد والمجلدات الفرعية'}
                   >
-                    <Check className="w-3.5 h-3.5" />
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    <span>{getLocale() === 'en' ? 'Select Folder' : 'إضافة كولكشن المجلد'}</span>
                   </Button>
                 )}
                 {mode === 'manage' && (

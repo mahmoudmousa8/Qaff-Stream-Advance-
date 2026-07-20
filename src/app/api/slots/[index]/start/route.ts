@@ -31,6 +31,7 @@ export async function POST(
 
     let finalInputPath = slot.filePath
     let currentTitleDescListId = slot.titleDescListId
+    let currentThumbnailPath = slot.youtubeThumbnailPath
     if (slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live') {
       try {
         const playlist = JSON.parse(slot.playlistConfig)
@@ -38,7 +39,8 @@ export async function POST(
           const currentItem = playlist[slot.currentPlaylistItemIndex % playlist.length]
           if (currentItem) {
             finalInputPath = currentItem.videoPath
-            currentTitleDescListId = currentItem.titleDescListId
+            if (currentItem.titleDescListId) currentTitleDescListId = currentItem.titleDescListId
+            if (currentItem.thumbnailPath) currentThumbnailPath = currentItem.thumbnailPath
           }
         }
       } catch (e) {
@@ -146,7 +148,7 @@ export async function POST(
         console.log(`[Start Route] Slot ${slotIndex}: Setting up YouTube Live broadcast...`)
         const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
         const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
-        let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+        let resolvedThumbnailPath = currentThumbnailPath || slot.youtubeThumbnailPath || undefined
         if (resolvedThumbnailPath) {
           resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slotIndex)
           activeThumbnails.set(slotIndex, resolvedThumbnailPath)

@@ -734,7 +734,7 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
     
     if (slot.youtubeChannelId && slot.outputType === 'youtube') {
       try {
-        let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+        let resolvedThumbnailPath = nextItem?.thumbnailPath || slot.youtubeThumbnailPath || undefined
         if (resolvedThumbnailPath) {
           resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slot.slotIndex)
           activeThumbnails.set(slot.slotIndex, resolvedThumbnailPath)

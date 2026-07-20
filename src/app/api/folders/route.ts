@@ -66,12 +66,54 @@ function sanitizeName(name: string): string {
   return name.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim()
 }
 
+// Helper function to recursively get all video files (excluding images)
+function getAllVideosRecursive(dir: string): { name: string; path: string }[] {
+  let results: { name: string; path: string }[] = []
+  if (!existsSync(dir)) return results
+
+  const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.ogv', '.mpeg', '.mpg']
+
+  try {
+    const items = readdirSync(dir)
+    for (const item of items) {
+      if (item.startsWith('.')) continue
+      const itemPath = path.join(dir, item)
+      const stats = statSync(itemPath)
+      if (stats.isDirectory()) {
+        results = results.concat(getAllVideosRecursive(itemPath))
+      } else if (videoExtensions.includes(path.extname(item).toLowerCase())) {
+        results.push({
+          name: item,
+          path: itemPath
+        })
+      }
+    }
+  } catch (e) {}
+
+  return results.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+}
+
 // GET - List folders and videos
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const currentFolder = searchParams.get('folder') || ''
     const allFolders = searchParams.get('all') === 'true'
+    const recursiveVideos = searchParams.get('recursiveVideos') === 'true'
+
+    // If requesting recursive video files of a folder and its subfolders
+    if (recursiveVideos) {
+      const folderPathParam = searchParams.get('folderPath') || currentFolder
+      const targetDir = folderPathParam
+        ? (path.isAbsolute(folderPathParam) ? folderPathParam : path.join(VIDEOS_DIR, folderPathParam))
+        : VIDEOS_DIR
+
+      if (!isWithinBase(targetDir, VIDEOS_DIR)) {
+        return NextResponse.json({ error: 'Invalid folder path' }, { status: 400 })
+      }
+      const videos = getAllVideosRecursive(targetDir)
+      return NextResponse.json({ videos, count: videos.length })
+    }
 
     // If requesting all folders for dropdown
     if (allFolders) {

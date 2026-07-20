@@ -38,7 +38,7 @@ import { VideoManager } from '@/components/video-manager'
 import { DateTimePicker } from '@/components/date-time-picker'
 import { t, getLocale, setLocale, isRTL, type Locale } from '@/lib/i18n'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { useToast } from '@/hooks/use-toast'
 
 // ── RTMP base URLs ────────────────────────────────────────────────────────────
 const RTMP_BASES: Record<string, string> = {
@@ -341,6 +341,7 @@ const isFolderOrImage = (p: string) => {
 
 export default function Home() {
   const router = useRouter()
+  const { toast } = useToast()
   const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
   const [slots, setSlots] = useState<StreamSlot[]>([])
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'scheduled'>('all')
@@ -575,6 +576,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<'swap' | 'youtube' | 'playlist'>('swap')
   const [swapSelectorOpen, setSwapSelectorOpen] = useState(false)
   const [playlistSelectorOpen, setPlaylistSelectorOpen] = useState(false)
+  const [playlistThumbSelectorIdx, setPlaylistThumbSelectorIdx] = useState<number | null>(null)
   const [thumbnailSelectorOpen, setThumbnailSelectorOpen] = useState(false)
   const [bulkThumbnailSelectorOpen, setBulkThumbnailSelectorOpen] = useState(false)
   const [bulkSwapSelectorOpen, setBulkSwapSelectorOpen] = useState(false)
@@ -4257,20 +4259,38 @@ export default function Home() {
 
                         {/* Playlist Videos manager */}
                         <div className="space-y-4 p-4 bg-muted/30 border border-border/80 rounded-xl">
-                          <div className="flex justify-between items-center">
+                          <div className="flex justify-between items-center flex-wrap gap-2">
                             <label className="text-sm font-bold text-foreground">
                               {locale === 'ar' ? 'قائمة الفيديوهات المحددة' : 'Selected Video List'}
                             </label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="text-xs flex items-center gap-1"
-                              onClick={() => setPlaylistSelectorOpen(true)}
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              {locale === 'ar' ? 'إضافة فيديو' : 'Add Video'}
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex items-center gap-1 font-semibold text-green-600 border-green-500/30 hover:bg-green-500/10"
+                                onClick={() => {
+                                  toast({
+                                    title: locale === 'ar' ? 'إضافة مجلد فيديوهات' : 'Add Folder Videos',
+                                    description: locale === 'ar' ? 'اختر أي مجلد من المتصفح لإضافة كافة فيديوهاته والمجلدات الفرعية تلقائياً' : 'Select any folder to automatically add all its video files recursively'
+                                  })
+                                  setPlaylistSelectorOpen(true)
+                                }}
+                              >
+                                <FolderOpen className="w-3.5 h-3.5" />
+                                {locale === 'ar' ? 'إضافة مجلد بالكامل' : 'Add Whole Folder'}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="text-xs flex items-center gap-1"
+                                onClick={() => setPlaylistSelectorOpen(true)}
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                {locale === 'ar' ? 'إضافة فيديو' : 'Add Video'}
+                              </Button>
+                            </div>
                           </div>
 
                           {/* Render Playlist Items */}
@@ -4285,7 +4305,7 @@ export default function Home() {
                             if (playlistItems.length === 0) {
                               return (
                                 <div className="text-center py-6 text-xs text-muted-foreground border border-dashed border-border rounded-lg">
-                                  {locale === 'ar' ? 'لا توجد فيديوهات في المجموعة حالياً. أضف فيديو للبدء.' : 'No videos in the playlist yet. Add a video to start.'}
+                                  {locale === 'ar' ? 'لا توجد فيديوهات في المجموعة حالياً. اضغط "إضافة مجلد بالكامل" أو "إضافة فيديو" للبدء.' : 'No videos in the playlist yet. Click "Add Whole Folder" or "Add Video" to start.'}
                                 </div>
                               )
                             }
@@ -4294,11 +4314,12 @@ export default function Home() {
                               <div className="space-y-3">
                                 {playlistItems.map((item: any, idx: number) => {
                                   const videoName = item.videoPath.split(/[/\\]/).pop() || item.videoPath
+                                  const thumbName = item.thumbnailPath ? (item.thumbnailPath.split(/[/\\]/).pop() || item.thumbnailPath) : null
                                   return (
-                                    <div key={idx} className="flex flex-col gap-2 p-3 bg-card border border-border rounded-lg">
+                                    <div key={idx} className="flex flex-col gap-2 p-3 bg-card border border-border rounded-lg shadow-sm hover:border-border/80 transition-colors">
                                       <div className="flex justify-between items-center gap-2">
-                                        <span className="text-xs font-bold text-muted-foreground font-mono">#{idx + 1}</span>
-                                        <span className="text-xs font-medium truncate flex-1 min-w-0" title={item.videoPath}>
+                                        <span className="text-xs font-bold text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">#{idx + 1}</span>
+                                        <span className="text-xs font-bold truncate flex-1 min-w-0" title={item.videoPath}>
                                           {videoName}
                                         </span>
                                         <div className="flex items-center gap-1 shrink-0">
@@ -4352,31 +4373,73 @@ export default function Home() {
                                         </div>
                                       </div>
                                       
-                                      {/* Title Selection for this specific video */}
-                                      <div className="flex flex-col gap-1.5 mt-1 border-t border-border/50 pt-2">
-                                        <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
-                                          <Shuffle className="w-3 h-3 text-pink-500" />
-                                          {locale === 'ar' ? 'العناوين والأوصاف المحددة لهذا الفيديو:' : 'Titles & Descriptions for this video:'}
-                                        </label>
-                                        <select
-                                          value={item.titleDescListId || ''}
-                                          onChange={(e) => {
-                                            const newPlaylist = [...playlistItems]
-                                            newPlaylist[idx].titleDescListId = e.target.value || null
-                                            setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
-                                          }}
-                                          className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-                                        >
-                                          <option value="">{locale === 'ar' ? '— اختر قائمة عناوين وأوصاف لهذا الفيديو —' : '— Select Title/Desc List for this video —'}</option>
-                                          {titleDescLists.map(list => {
-                                            const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
-                                            return (
-                                              <option key={list.id} value={list.id}>
-                                                {list.name} · {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
-                                              </option>
-                                            )
-                                          })}
-                                        </select>
+                                      {/* Per-video options grid */}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 border-t border-border/50 pt-2">
+                                        {/* Title Selection */}
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                            <Shuffle className="w-3 h-3 text-pink-500" />
+                                            {locale === 'ar' ? 'العناوين والأوصاف لهذا الفيديو:' : 'Titles & Descs for this video:'}
+                                          </label>
+                                          <select
+                                            value={item.titleDescListId || ''}
+                                            onChange={(e) => {
+                                              const newPlaylist = [...playlistItems]
+                                              newPlaylist[idx].titleDescListId = e.target.value || null
+                                              setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                            }}
+                                            className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                                          >
+                                            <option value="">{locale === 'ar' ? '— افتراضي القناة / بدون —' : '— Channel Default —'}</option>
+                                            {titleDescLists.map(list => {
+                                              const count = (() => { try { return JSON.parse(list.items).length } catch { return 0 } })()
+                                              return (
+                                                <option key={list.id} value={list.id}>
+                                                  {list.name} · {count} {locale === 'ar' ? 'عنصر' : count === 1 ? 'item' : 'items'}
+                                                </option>
+                                              )
+                                            })}
+                                          </select>
+                                        </div>
+
+                                        {/* Thumbnail Selection */}
+                                        <div className="flex flex-col gap-1">
+                                          <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                            <ImageIcon className="w-3 h-3 text-purple-500" />
+                                            {locale === 'ar' ? 'الصورة المصغرة لهذا الفيديو:' : 'Thumbnail for this video:'}
+                                          </label>
+                                          <div className="flex items-center gap-1">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-8 text-xs flex-1 truncate justify-start"
+                                              onClick={() => setPlaylistThumbSelectorIdx(idx)}
+                                              title={item.thumbnailPath || (locale === 'ar' ? 'اختر صورة مصغرة' : 'Select thumbnail')}
+                                            >
+                                              <ImageIcon className="w-3.5 h-3.5 mr-1 text-purple-500 shrink-0" />
+                                              <span className="truncate">
+                                                {thumbName || (locale === 'ar' ? '— افتراضي القناة / اختر صورة —' : '— Channel Default —')}
+                                              </span>
+                                            </Button>
+                                            {item.thumbnailPath && (
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 w-8 p-0 text-red-500 shrink-0 hover:bg-red-500/10"
+                                                onClick={() => {
+                                                  const newPlaylist = [...playlistItems]
+                                                  newPlaylist[idx].thumbnailPath = null
+                                                  setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                                }}
+                                                title={locale === 'ar' ? 'إزالة الصورة' : 'Remove thumbnail'}
+                                              >
+                                                <X className="w-3.5 h-3.5" />
+                                              </Button>
+                                            )}
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   )
@@ -5822,23 +5885,24 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Playlist Video Selector Dialog ── */}
+      {/* ── Playlist Video / Folder Selector Dialog ── */}
       <Dialog open={playlistSelectorOpen} onOpenChange={(open) => !open && setPlaylistSelectorOpen(false)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl p-0" dir={dir}>
           <div className="p-6 pb-2 shrink-0 border-b border-border/80">
             <DialogTitle className="flex items-center gap-2 text-lg font-bold">
               <Film className="w-5 h-5 text-primary" />
-              {locale === 'ar' ? 'اختر فيديو لمجموعة البث' : 'Select Video for Playlist'}
+              {locale === 'ar' ? 'اختر فيديو أو مجلد لمجموعة البث' : 'Select Video or Folder for Playlist'}
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               {locale === 'ar'
-                ? 'اختر ملف فيديو لإضافته إلى قائمة تشغيل البث المباشر.'
-                : 'Select a video file to add to the playlist rotation.'}
+                ? 'اختر ملف فيديو فردي، أو اختر مجلداً كاملاً لإضافة كافة فيديوهاته (شاملاً المجلدات الفرعية) تلقائياً.'
+                : 'Select an individual video file, or select a whole folder to automatically add all its video files recursively.'}
             </DialogDescription>
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto p-6">
             <VideoManager
-              onVideoSelect={(videoPath) => {
+              mode="select"
+              onVideoSelect={async (selectedPath) => {
                 if (settingsData) {
                   let items = []
                   try {
@@ -5846,12 +5910,79 @@ export default function Home() {
                   } catch (e) {
                     items = []
                   }
-                  const updated = [...items, { videoPath, titleDescListId: null }]
-                  setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(updated) })
+
+                  try {
+                    const res = await fetch(`/api/folders?recursiveVideos=true&folderPath=${encodeURIComponent(selectedPath)}`)
+                    const data = await res.json()
+
+                    if (data.videos && data.videos.length > 0) {
+                      const newItems = data.videos.map((v: any) => ({
+                        videoPath: v.path,
+                        titleDescListId: null,
+                        thumbnailPath: null
+                      }))
+                      const updated = [...items, ...newItems]
+                      setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(updated) })
+                      toast({
+                        title: locale === 'ar' ? 'تمت إضافة الفيديوهات بنجاح' : 'Videos added successfully',
+                        description: locale === 'ar'
+                          ? `تمت إضافة ${data.videos.length} فيديو من المجلد وكافة المجلدات الفرعية!`
+                          : `Added ${data.videos.length} videos from folder and all subfolders!`
+                      })
+                    } else {
+                      const updated = [...items, { videoPath: selectedPath, titleDescListId: null, thumbnailPath: null }]
+                      setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(updated) })
+                    }
+                  } catch (err) {
+                    const updated = [...items, { videoPath: selectedPath, titleDescListId: null, thumbnailPath: null }]
+                    setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(updated) })
+                  }
                 }
                 setPlaylistSelectorOpen(false)
               }}
               onClose={() => setPlaylistSelectorOpen(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Playlist Item Custom Thumbnail Selector Dialog ── */}
+      <Dialog open={playlistThumbSelectorIdx !== null} onOpenChange={(open) => !open && setPlaylistThumbSelectorIdx(null)}>
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col bg-card border border-border shadow-2xl rounded-xl p-0" dir={dir}>
+          <div className="p-6 pb-2 shrink-0 border-b border-border/80">
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+              <ImageIcon className="w-5 h-5 text-purple-500" />
+              {locale === 'ar' ? 'اختر صورة مصغرة للفيديو في المجموعة' : 'Select Thumbnail for Video in Playlist'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'اختر صورة مصغرة (PNG/JPG) أو مجلد صور مصغرة ليتم تطبيقها على يوتيوب عند الانتقال لهذا الفيديو.'
+                : 'Select a thumbnail image (PNG/JPG) or image folder to be applied on YouTube when switching to this video.'}
+            </DialogDescription>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-6">
+            <VideoManager
+              mode="select"
+              onVideoSelect={(thumbPath) => {
+                if (settingsData && playlistThumbSelectorIdx !== null) {
+                  let items: any[] = []
+                  try {
+                    items = JSON.parse(settingsData.playlistConfig || '[]')
+                  } catch (e) {
+                    items = []
+                  }
+                  if (items[playlistThumbSelectorIdx]) {
+                    items[playlistThumbSelectorIdx].thumbnailPath = thumbPath
+                    setSettingsData({ ...settingsData, playlistConfig: JSON.stringify(items) })
+                    toast({
+                      title: locale === 'ar' ? 'تمت إضافة الصورة المصغرة' : 'Thumbnail assigned',
+                      description: locale === 'ar' ? 'تم تعيين الصورة المصغرة المخصصة لهذا الفيديو' : 'Assigned custom thumbnail to this video'
+                    })
+                  }
+                }
+                setPlaylistThumbSelectorIdx(null)
+              }}
+              onClose={() => setPlaylistThumbSelectorIdx(null)}
             />
           </div>
         </DialogContent>
