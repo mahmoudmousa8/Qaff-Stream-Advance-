@@ -2108,40 +2108,7 @@ export default function Home() {
 
             {/* Top Bar 2: Navigation & Settings */}
             <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50 flex-wrap justify-center shadow-sm w-full lg:w-auto">
-              {/* Tunnel URL inline */}
-              {tunnelUrl ? (
-                <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 rounded-md px-2 py-0.5 text-[10px] font-semibold transition-all duration-200 shrink-0">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping shrink-0" />
-                  <span className="font-mono truncate max-w-[100px] sm:max-w-[160px]" title={tunnelUrl}>
-                    {tunnelUrl.replace("https://", "")}
-                  </span>
-                  <a href={tunnelUrl} target="_blank" rel="noreferrer" className="hover:text-green-500 hover:scale-110 transition-transform" title={locale === 'ar' ? 'فتح الرابط' : 'Open link'}>
-                    <Globe className="w-3 h-3" />
-                  </a>
-                  <Button size="icon" variant="ghost" className="h-4 w-4 hover:bg-green-500/20 text-green-600 dark:text-green-400 shrink-0 p-0 rounded hover:scale-105 active:scale-95 transition-all"
-                    onClick={() => { navigator.clipboard.writeText(tunnelUrl); alert(locale === 'ar' ? 'تم نسخ رابط التونل!' : 'Tunnel URL copied!'); }}
-                    title={locale === 'ar' ? 'نسخ الرابط' : 'Copy link'}>
-                    <Copy className="w-2.5 h-2.5" />
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-4 px-1 text-[8px] font-bold border-green-500/30 hover:bg-green-500/20 text-green-700 dark:text-green-300 shrink-0 transition-all p-0"
-                    onClick={handleRestartTunnel} disabled={loadingTunnel} title={locale === 'ar' ? 'تغيير الرابط' : 'Change Link'}>
-                    {locale === 'ar' ? 'تغيير' : 'Change'}
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1 bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 rounded-md px-2 py-0.5 text-[10px] font-semibold shrink-0">
-                  <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse mr-0.5" />
-                  <span>{locale === 'ar' ? 'التونل غير نشط' : 'Tunnel off'}</span>
-                  <Button size="sm" variant="outline" className="h-4 px-1 text-[8px] font-bold border-yellow-500/30 hover:bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 shrink-0 transition-all p-0 ml-1"
-                    onClick={handleRestartTunnel} disabled={loadingTunnel}>
-                    {locale === 'ar' ? 'تشغيل' : 'Start'}
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-4 w-4 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 shrink-0 p-0 rounded hover:scale-110 active:scale-90 transition-all ml-0.5"
-                    onClick={fetchTunnelUrl} title={locale === 'ar' ? 'تحديث' : 'Refresh'} disabled={loadingTunnel}>
-                    <RefreshCw className={`w-2.5 h-2.5 ${loadingTunnel ? 'animate-spin' : ''}`} />
-                  </Button>
-                </div>
-              )}
+
 
               <Button size="sm" variant="ghost" className="h-7 text-xs hover:bg-background hover:scale-105 active:scale-95 transition-all text-muted-foreground hover:text-foreground font-medium" onClick={() => setAiAssistantOpen(true)}>
                 <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-500 animate-pulse" />
