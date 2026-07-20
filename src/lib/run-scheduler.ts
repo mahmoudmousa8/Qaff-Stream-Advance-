@@ -759,6 +759,15 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
         finalStreamKey = yt.streamKey || finalStreamKey
         finalRtmpServer = yt.rtmpServer || finalRtmpServer
         newBroadcastId = yt.broadcastId || ''
+
+        if (newBroadcastId && slot.youtubeChannelId) {
+          const chId = slot.youtubeChannelId
+          const bcId = newBroadcastId
+          setTimeout(async () => {
+            const { triggerLiveAdBreak } = await import('@/lib/youtube-helper')
+            triggerLiveAdBreak(chId, bcId)
+          }, 20000)
+        }
       } catch (ytErr: any) {
         console.error(`[Scheduler] Setup YT stream failed during playlist switch:`, ytErr.message)
       }

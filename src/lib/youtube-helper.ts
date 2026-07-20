@@ -240,30 +240,50 @@ export async function setupYoutubeLiveStream(
   const truncatedTitle = title.substring(0, 100).trim() || 'Untitled Broadcast'
   const truncatedDesc = description.substring(0, 4500).trim() || 'Live stream powered by Qaff'
 
-  console.log(`[YouTube Helper] Creating Live Broadcast: "${truncatedTitle}"`)
+  console.log(`[YouTube Helper] Creating Live Broadcast: "${truncatedTitle}" (with autoStart & monetization)`)
   const broadcastUrl = 'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails'
-  const broadcastResponse = await fetchWithTimeout(broadcastUrl, {
+  
+  const createPayload = (withMonetization: boolean) => ({
+    snippet: {
+      title: truncatedTitle,
+      description: truncatedDesc,
+      scheduledStartTime: scheduledStartTime
+    },
+    status: {
+      privacyStatus: 'public',
+      selfDeclaredMadeForKids: false
+    },
+    contentDetails: {
+      enableAutoStart: true,
+      enableAutoStop: false,
+      enableDvr: true,
+      enableEmbed: true,
+      recordFromStart: true,
+      ...(withMonetization ? { enableMonetization: true } : {})
+    }
+  })
+
+  let broadcastResponse = await fetchWithTimeout(broadcastUrl, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      snippet: {
-        title: truncatedTitle,
-        description: truncatedDesc,
-        scheduledStartTime: scheduledStartTime
-      },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false
-      },
-      contentDetails: {
-        enableAutoStart: true,
-        enableAutoStop: false
-      }
-    })
+    body: JSON.stringify(createPayload(true))
   }, 10000)
+
+  // If monetization flag fails for non-partner channels, fallback without monetization flag
+  if (!broadcastResponse.ok) {
+    console.warn('[YouTube Helper] Creation with enableMonetization failed. Retrying standard broadcast payload...')
+    broadcastResponse = await fetchWithTimeout(broadcastUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(createPayload(false))
+    }, 10000)
+  }
 
   if (!broadcastResponse.ok) {
     const errorText = await broadcastResponse.text()
@@ -499,4 +519,44 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
   }
 
   return { deletedCount, errors }
+}
+
+/**
+ * Triggers a 30-second live ad break (monetization cuepoint) for an active YouTube Live broadcast.
+ */
+export async function triggerLiveAdBreak(channelId: string, broadcastId: string): Promise<boolean> {
+  if (!channelId || !broadcastId) return false
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    
+    console.log(`[YouTube Helper] Triggering live ad break / monetization for broadcast ${broadcastId}...`)
+    const cuepointUrl = 'https://www.googleapis.com/youtube/v3/liveCuepoints?part=snippet'
+    const res = await fetchWithTimeout(cuepointUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        snippet: {
+          broadcastId: broadcastId,
+          type: 'ad',
+          cueType: 'ad',
+          durationSecs: 30
+        }
+      })
+    }, 10000)
+
+    if (res.ok) {
+      console.log(`[YouTube Helper] Successfully triggered live ad break for broadcast ${broadcastId}`)
+      return true
+    } else {
+      const errText = await res.text()
+      console.warn(`[YouTube Helper] Live ad break response non-200:`, errText)
+      return false
+    }
+  } catch (err: any) {
+    console.warn(`[YouTube Helper] Failed to trigger live ad break:`, err.message)
+    return false
+  }
 }

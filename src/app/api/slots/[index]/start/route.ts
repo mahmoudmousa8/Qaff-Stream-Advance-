@@ -204,6 +204,15 @@ export async function POST(
         finalRtmpServer = yt.rtmpServer || finalRtmpServer
         youtubeBroadcastId = yt.broadcastId || ""
         console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
+
+        if (youtubeBroadcastId && slot.youtubeChannelId) {
+          const chId = slot.youtubeChannelId
+          const bcId = youtubeBroadcastId
+          setTimeout(async () => {
+            const { triggerLiveAdBreak } = await import('@/lib/youtube-helper')
+            triggerLiveAdBreak(chId, bcId)
+          }, 20000)
+        }
       } catch (ytErr: any) {
         console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed:`, ytErr.message)
         // Reset the slot status to Failed and save
