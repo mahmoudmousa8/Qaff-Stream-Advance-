@@ -998,19 +998,110 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
-      const missKey = `miss_${slot.slotIndex}`
-      const missCount = (missCounters.get(missKey) ?? 0) + 1
-      missCounters.set(missKey, missCount)
-
       // 🛡️ STARTUP GRACE: stream-manager just started — it handles auto-resume itself.
-      // Reduced to 5 seconds per user request for immediate booting.
       if (isManagerInStartupGrace) {
         console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: In startup grace (${Math.round(streamManagerUptimeMs / 1000)}s uptime). Skipping recovery.`)
         continue
       }
 
+      // A. Check intentional playlist pre-stop window first (NOT a crash!)
+      let isPlaylistPreStop = false
+      if (slot.playlistLoopEnabled && slot.playlistConfig) {
+        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+        const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
+        const intervalMins = slot.loopIntervalMins || 60
+        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+        if (elapsedMins >= stopTargetMins) {
+          isPlaylistPreStop = true
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window (${elapsedMins.toFixed(1)}m >= ${stopTargetMins.toFixed(1)}m)`)
+        }
+      }
+
+      if (isPlaylistPreStop) {
+        // Keep slot running in DB, skip recovery, wait for next tick to check if rotation interval reached
+        continue
+      }
+
+      // B. Check natural scheduled stop time first (NOT a crash!)
+      let isNaturalSchedStop = false
+      if (slot.schedStop && !slot.schedStop.startsWith('DUR')) {
+        const parsedStop = parseScheduleTime(slot.schedStop)
+        if (parsedStop) {
+          const stopDate = getCairoTargetDate(parsedStop, now)
+          const msSinceStop = now.getTime() - stopDate.getTime()
+          if (msSinceStop >= -2 * 60 * 1000 && msSinceStop < 2 * 60 * 1000) {
+            isNaturalSchedStop = true
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — ended naturally near/after schedStop`)
+          }
+        }
+      }
+
+      if (isNaturalSchedStop) {
+        logs.push(`Slot ${slot.slotIndex + 1}: Ended naturally near/after schedStop. Transitioning to stopped and rescheduling.`)
+        
+        // Terminate YouTube Live broadcast cleanly
+        if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+          try {
+            await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+            logs.push(`Slot ${slot.slotIndex + 1}: YouTube broadcast ended cleanly (natural end)`)
+          } catch (ytErr: any) {
+            logs.push(`Slot ${slot.slotIndex + 1}: YouTube stop failed (natural end): ${ytErr.message}`)
+          }
+        }
+
+        // Recalculate next start/stop for daily/weekly/hourly slots
+        let nextStartTime = slot.schedStart || ''
+        let nextStopTime = slot.schedStop || ''
+        if (slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h) {
+          const oldStart = parseScheduleTime(slot.schedStart)
+          const oldStop = parseScheduleTime(slot.schedStop)
+          if (oldStart && oldStop) {
+            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+            if (durMins < 0) durMins += 1440
+            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
+            const nParsed = parseScheduleTime(nextStartTime)
+            if (nParsed) {
+              const nDate = getCairoTargetDate(nParsed, now)
+              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+              const stopFields = getCairoNowFields(stopDate)
+              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+            }
+          }
+        }
+
+        const newStatus = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h ? 'Scheduled' : 'Stopped'
+        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
+        const claimed = await db.streamSlot.updateMany({
+          where: { slotIndex: slot.slotIndex, isRunning: true },
+          data: {
+            isRunning: false,
+            isScheduled: isRecurring,
+            status: newStatus,
+            schedStart: nextStartTime,
+            schedStop: nextStopTime,
+            nextRunTime: nextStartTime,
+            isSwapped: false,
+            youtubeBroadcastId: '',
+            ...(!isRecurring ? { manuallyStopped: true } : {})
+          }
+        })
+        if (claimed.count > 0) {
+          stoppedCount++
+          activeMainVideos.delete(slot.slotIndex)
+          activeSwapVideos.delete(slot.slotIndex)
+          const token = Math.random().toString(36).substring(7)
+          lastActionTokens.set(slot.slotIndex, token)
+          verifyStreamStatusAfterDelay(slot.slotIndex, 'stop', token)
+        }
+        continue
+      }
+
+      // C. Genuine Crash recovery logic
+      const missKey = `miss_${slot.slotIndex}`
+      const missCount = (missCounters.get(missKey) ?? 0) + 1
+      missCounters.set(missKey, missCount)
+
       // No confirmation delay: immediately recover on the first missed tick.
-      // Crash confirmed immediately ──
       missCounters.set(missKey, 0)
 
       const stateKey = `state_${slot.slotIndex}`
@@ -1091,98 +1182,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       state.backoffLevel++
       state.pendingUntil = Date.now() + delay
       recoveryStates.set(stateKey, state)
-
-      // Skip recovery if stream ended naturally near its scheduled stop time or inside intentional playlist pre-stop
-      let skipRecovery = false
-      let isPlaylistPreStop = false
-      if (slot.playlistLoopEnabled && slot.playlistConfig) {
-        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
-        const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
-        const intervalMins = slot.loopIntervalMins || 60
-        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
-        if (elapsedMins >= stopTargetMins) {
-          skipRecovery = true
-          isPlaylistPreStop = true
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window (${elapsedMins.toFixed(1)}m >= ${stopTargetMins.toFixed(1)}m)`)
-        }
-      }
-
-      if (isPlaylistPreStop) {
-        // Keep slot running in DB, skip recovery, wait for next tick to check if rotation interval reached
-        continue
-      }
-
-      if (!skipRecovery && slot.schedStop && !slot.schedStop.startsWith('DUR')) {
-        const parsedStop = parseScheduleTime(slot.schedStop)
-        if (parsedStop) {
-          const stopDate = getCairoTargetDate(parsedStop, now)
-          const msSinceStop = now.getTime() - stopDate.getTime()
-          if (msSinceStop >= -2 * 60 * 1000 && msSinceStop < 2 * 60 * 1000) {
-            skipRecovery = true
-            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — ended naturally near/after schedStop`)
-          }
-        }
-      }
-
-      if (skipRecovery) {
-        logs.push(`Slot ${slot.slotIndex + 1}: Ended naturally near/after schedStop. Transitioning to stopped and rescheduling.`)
-        
-        // Terminate YouTube Live broadcast cleanly
-        if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
-          try {
-            await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube broadcast ended cleanly (natural end)`)
-          } catch (ytErr: any) {
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube stop failed (natural end): ${ytErr.message}`)
-          }
-        }
-
-        // Recalculate next start/stop for daily/weekly/hourly slots
-        let nextStartTime = slot.schedStart || ''
-        let nextStopTime = slot.schedStop || ''
-        if (slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h) {
-          const oldStart = parseScheduleTime(slot.schedStart)
-          const oldStop = parseScheduleTime(slot.schedStop)
-          if (oldStart && oldStop) {
-            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
-            if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
-            const nParsed = parseScheduleTime(nextStartTime)
-            if (nParsed) {
-              const nDate = getCairoTargetDate(nParsed, now)
-              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
-              const stopFields = getCairoNowFields(stopDate)
-              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
-            }
-          }
-        }
-
-        const newStatus = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h ? 'Scheduled' : 'Stopped'
-        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
-        const claimed = await db.streamSlot.updateMany({
-          where: { slotIndex: slot.slotIndex, isRunning: true },
-          data: {
-            isRunning: false,
-            isScheduled: isRecurring,
-            status: newStatus,
-            schedStart: nextStartTime,
-            schedStop: nextStopTime,
-            nextRunTime: nextStartTime,
-            isSwapped: false,
-            youtubeBroadcastId: '',
-            ...(!isRecurring ? { manuallyStopped: true } : {})
-          }
-        })
-        if (claimed.count > 0) {
-          stoppedCount++
-          activeMainVideos.delete(slot.slotIndex)
-          activeSwapVideos.delete(slot.slotIndex)
-          const token = Math.random().toString(36).substring(7)
-          lastActionTokens.set(slot.slotIndex, token)
-          verifyStreamStatusAfterDelay(slot.slotIndex, 'stop', token)
-        }
-        continue
-      }
 
       logs.push(`Slot ${slot.slotIndex + 1}: Crash #${state.crashCount} confirmed. Recovering (backoff level ${state.backoffLevel - 1}, next wait ${Math.round(delay / 1000)}s)`)
 
