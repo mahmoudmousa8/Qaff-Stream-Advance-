@@ -998,12 +998,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
-      // 🛡️ STARTUP GRACE: stream-manager just started — it handles auto-resume itself.
-      if (isManagerInStartupGrace) {
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: In startup grace (${Math.round(streamManagerUptimeMs / 1000)}s uptime). Skipping recovery.`)
-        continue
-      }
-
       // A. Check intentional playlist pre-stop window first (NOT a crash!)
       let isPlaylistPreStop = false
       if (slot.playlistLoopEnabled && slot.playlistConfig) {
@@ -1013,25 +1007,18 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
         if (elapsedMins >= stopTargetMins) {
           isPlaylistPreStop = true
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window (${elapsedMins.toFixed(1)}m >= ${stopTargetMins.toFixed(1)}m)`)
         }
       }
 
-      if (isPlaylistPreStop) {
-        // Keep slot running in DB, skip recovery, wait for next tick to check if rotation interval reached
-        continue
-      }
-
-      // B. Check natural scheduled stop time first (NOT a crash!)
+      // B. Check natural scheduled stop time (NOT a crash!)
       let isNaturalSchedStop = false
-      if (slot.schedStop && !slot.schedStop.startsWith('DUR')) {
+      if (!isPlaylistPreStop && slot.schedStop && !slot.schedStop.startsWith('DUR')) {
         const parsedStop = parseScheduleTime(slot.schedStop)
         if (parsedStop) {
           const stopDate = getCairoTargetDate(parsedStop, now)
           const msSinceStop = now.getTime() - stopDate.getTime()
           if (msSinceStop >= -2 * 60 * 1000 && msSinceStop < 2 * 60 * 1000) {
             isNaturalSchedStop = true
-            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — ended naturally near/after schedStop`)
           }
         }
       }
@@ -1096,129 +1083,133 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         continue
       }
 
-      // C. Genuine Crash recovery logic
-      const missKey = `miss_${slot.slotIndex}`
-      const missCount = (missCounters.get(missKey) ?? 0) + 1
-      missCounters.set(missKey, missCount)
+      // Proceed with genuine recovery ONLY if we are NOT in playlist pre-stop and NOT in startup grace
+      if (!isPlaylistPreStop && !isManagerInStartupGrace) {
+        const missKey = `miss_${slot.slotIndex}`
+        const missCount = (missCounters.get(missKey) ?? 0) + 1
+        missCounters.set(missKey, missCount)
 
-      // No confirmation delay: immediately recover on the first missed tick.
-      missCounters.set(missKey, 0)
+        // No confirmation delay: immediately recover on the first missed tick.
+        missCounters.set(missKey, 0)
 
-      const stateKey = `state_${slot.slotIndex}`
-      const state: SlotRecoveryState = recoveryStates.get(stateKey) ?? {
-        crashCount: 0, backoffLevel: 0, pendingUntil: 0
-      }
+        const stateKey = `state_${slot.slotIndex}`
+        const state: SlotRecoveryState = recoveryStates.get(stateKey) ?? {
+          crashCount: 0, backoffLevel: 0, pendingUntil: 0
+        }
 
-      // Skip recovery if still within backoff window
-      if (state.pendingUntil > Date.now()) {
-        const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Backoff active (${waitSec}s remaining). Skipping recovery.`)
-        continue
-      }
-
-      // Too many crashes → mark permanently failed or reschedule if recurring
-      if (state.crashCount >= MAX_CRASH_COUNT) {
-        const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
-        if (isRecurring) {
-          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Rescheduling for the next occurrence.`)
-          
-          let nextStartTime = slot.schedStart || ''
-          let nextStopTime = slot.schedStop || ''
-          const oldStart = parseScheduleTime(slot.schedStart)
-          const oldStop = parseScheduleTime(slot.schedStop)
-          if (oldStart && oldStop) {
-            let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
-            if (durMins < 0) durMins += 1440
-            nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
-            const nParsed = parseScheduleTime(nextStartTime)
-            if (nParsed) {
-              const nDate = getCairoTargetDate(nParsed, now)
-              const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
-              const stopFields = getCairoNowFields(stopDate)
-              nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+        // Skip recovery if still within backoff window
+        if (state.pendingUntil > Date.now()) {
+          const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Backoff active (${waitSec}s remaining). Skipping recovery.`)
+          // Fall through to rotation checks
+        } else if (state.crashCount >= MAX_CRASH_COUNT) {
+          // Too many crashes → mark permanently failed or reschedule if recurring
+          const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
+          if (isRecurring) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Rescheduling for the next occurrence.`)
+            
+            let nextStartTime = slot.schedStart || ''
+            let nextStopTime = slot.schedStop || ''
+            const oldStart = parseScheduleTime(slot.schedStart)
+            const oldStop = parseScheduleTime(slot.schedStop)
+            if (oldStart && oldStop) {
+              let durMins = (oldStop.hour * 60 + oldStop.minute) - (oldStart.hour * 60 + oldStart.minute)
+              if (durMins < 0) durMins += 1440
+              nextStartTime = calculateNextRun(slot.schedStart, slot.daily, slot.weekly, slot.hourly, slot.repeat30m, slot.repeat1h, slot.repeat2h, slot.repeat15m, slot.repeat10m, slot.repeat12h)
+              const nParsed = parseScheduleTime(nextStartTime)
+              if (nParsed) {
+                const nDate = getCairoTargetDate(nParsed, now)
+                const stopDate = new Date(nDate.getTime() + durMins * 60 * 1000)
+                const stopFields = getCairoNowFields(stopDate)
+                nextStopTime = `${String(stopFields.month + 1).padStart(2, '0')}-${String(stopFields.day).padStart(2, '0')} ${String(stopFields.hour).padStart(2, '0')}:${String(stopFields.minute).padStart(2, '0')}`
+              }
             }
+
+            // Reset recovery state and miss counters for the next run
+            recoveryStates.delete(stateKey)
+            missCounters.set(missKey, 0)
+
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                isRunning: false,
+                isScheduled: true,
+                status: 'Scheduled',
+                schedStart: nextStartTime,
+                schedStop: nextStopTime,
+                nextRunTime: nextStartTime,
+                isSwapped: false,
+                youtubeBroadcastId: ''
+              }
+            })
+          } else {
+            logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Stopping.`)
+            recoveryStates.delete(stateKey)
+            missCounters.set(missKey, 0)
+
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                isRunning: false,
+                isScheduled: false,
+                status: 'Failed',
+                manuallyStopped: true,
+                isSwapped: false,
+                youtubeBroadcastId: ''
+              }
+            })
           }
-
-          // Reset recovery state and miss counters for the next run
-          recoveryStates.delete(stateKey)
-          missCounters.set(missKey, 0)
-
-          await db.streamSlot.update({
-            where: { slotIndex: slot.slotIndex },
-            data: {
-              isRunning: false,
-              isScheduled: true,
-              status: 'Scheduled',
-              schedStart: nextStartTime,
-              schedStop: nextStopTime,
-              nextRunTime: nextStartTime,
-              isSwapped: false,
-              youtubeBroadcastId: ''
-            }
-          })
+          continue
         } else {
-          logs.push(`Slot ${slot.slotIndex + 1}: Permanently failed after ${state.crashCount} crashes. Stopping.`)
-          recoveryStates.delete(stateKey)
-          missCounters.set(missKey, 0)
-
-          await db.streamSlot.update({
-            where: { slotIndex: slot.slotIndex },
-            data: {
-              isRunning: false,
-              isScheduled: false,
-              status: 'Failed',
-              manuallyStopped: true,
-              isSwapped: false,
-              youtubeBroadcastId: ''
-            }
-          })
-        }
-        continue
-      }
-
-      // Record crash and set next backoff window
-      state.crashCount++
-      const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
-      state.backoffLevel++
-      state.pendingUntil = Date.now() + delay
-      recoveryStates.set(stateKey, state)
-
-      logs.push(`Slot ${slot.slotIndex + 1}: Crash #${state.crashCount} confirmed. Recovering (backoff level ${state.backoffLevel - 1}, next wait ${Math.round(delay / 1000)}s)`)
-
-      try {
-        let recoveryFilePath = finalInputPath
-        if (slot.isSwapped && slot.swapVideoPath) {
-          recoveryFilePath = activeSwapVideos.get(slot.slotIndex) || resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex)
-          activeSwapVideos.set(slot.slotIndex, recoveryFilePath)
-        } else if (slot.filePath) {
-          recoveryFilePath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
-          activeMainVideos.set(slot.slotIndex, recoveryFilePath)
-        }
-        const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            slotIndex: slot.slotIndex,
-            outputType: slot.outputType,
-            rtmpServer: slot.rtmpServer,
-            streamKey: slot.streamKey,
-            filePath: recoveryFilePath
-          })
-        }, 5000)
-        const data = await res.json()
-        if (res.ok && data.success) {
-          // Reset backoff on successful recovery
-          state.backoffLevel = Math.max(0, state.backoffLevel - 1)
+          // Record crash and set next backoff window
+          state.crashCount++
+          const delay = BACKOFF_DELAYS_MS[Math.min(state.backoffLevel, BACKOFF_DELAYS_MS.length - 1)]
+          state.backoffLevel++
+          state.pendingUntil = Date.now() + delay
           recoveryStates.set(stateKey, state)
-          logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovered crashed stream`)
-          const token = Math.random().toString(36).substring(7)
-          lastActionTokens.set(slot.slotIndex, token)
-          verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
-        } else {
-          logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovery failed: ${data.error || data.message || 'stream-manager rejected start'}`)
+
+          logs.push(`Slot ${slot.slotIndex + 1}: Crash #${state.crashCount} confirmed. Recovering (backoff level ${state.backoffLevel - 1}, next wait ${Math.round(delay / 1000)}s)`)
+
+          try {
+            let recoveryFilePath = finalInputPath
+            if (slot.isSwapped && slot.swapVideoPath) {
+              recoveryFilePath = activeSwapVideos.get(slot.slotIndex) || resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex)
+              activeSwapVideos.set(slot.slotIndex, recoveryFilePath)
+            } else if (slot.filePath) {
+              recoveryFilePath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
+              activeMainVideos.set(slot.slotIndex, recoveryFilePath)
+            }
+            const res = await fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                slotIndex: slot.slotIndex,
+                outputType: slot.outputType,
+                rtmpServer: slot.rtmpServer,
+                streamKey: slot.streamKey,
+                filePath: recoveryFilePath
+              })
+            }, 5000)
+            const data = await res.json()
+            if (res.ok && data.success) {
+              // Reset backoff on successful recovery
+              state.backoffLevel = Math.max(0, state.backoffLevel - 1)
+              recoveryStates.set(stateKey, state)
+              logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovered crashed stream`)
+              const token = Math.random().toString(36).substring(7)
+              lastActionTokens.set(slot.slotIndex, token)
+              verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
+            } else {
+              logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovery failed: ${data.error || data.message || 'stream-manager rejected start'}`)
+            }
+          } catch (e: any) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovery failed: ${e.message || 'Network error'}`)
+          }
         }
-      } catch (e: any) {
-        logs.push(`Slot ${slot.slotIndex + 1}: Auto-recovery failed: ${e.message || 'Network error'}`)
+      } else if (isPlaylistPreStop) {
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window`)
+      } else if (isManagerInStartupGrace) {
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: In startup grace (${Math.round(streamManagerUptimeMs / 1000)}s uptime). Skipping recovery.`)
       }
     } else if (slot.isRunning && activeInManager.has(slot.slotIndex)) {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
