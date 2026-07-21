@@ -2618,18 +2618,26 @@ export default function Home() {
                                 </div>
                               ) : (
                                 <div className="flex gap-1 items-center flex-nowrap flex-1 min-w-0">
-                                  <Input
-                                    readOnly
-                                    value={slot.filePath ? slot.filePath.split(/[/\\]/).pop() : ''}
-                                    className={`h-6 text-[11px] flex-1 font-mono bg-muted/10 hover:bg-muted-foreground/15 hover:text-foreground transition-colors text-muted-foreground outline-none ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-default'}`}
-                                    placeholder={t('phFilePath')}
-                                    title={slot.filePath}
-                                    dir="ltr"
-                                  />
-                                  <Button size="sm" variant="outline" className="h-6 w-6 p-0 shrink-0" disabled={isLocked}
-                                    onClick={() => setVideoSelectorSlot(slot.slotIndex)} title={t('select')}>
-                                    <FolderOpen className="w-3 h-3" />
-                                  </Button>
+                                  {slot.playlistLoopEnabled ? (
+                                    <div className="flex-1 text-[10px] font-medium bg-purple-500/10 text-purple-600 border border-purple-500/20 rounded h-6 flex items-center justify-center px-1.5 select-none" title={locale === 'ar' ? 'مجموعة الفيديوهات مفعّلة بالداخل' : 'Playlist Loop Enabled Inside'}>
+                                      {locale === 'ar' ? '🔁 مجموعة الفيديوهات نشطة' : '🔁 Playlist Loop Active'}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <Input
+                                        readOnly
+                                        value={slot.filePath ? (slot.filePath.includes('/') ? slot.filePath.split('/').pop() : slot.filePath.split('\\').pop()) : ''}
+                                        className={`h-6 text-[11px] flex-1 font-mono bg-muted/10 hover:bg-muted-foreground/15 hover:text-foreground transition-colors text-muted-foreground outline-none ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-default'}`}
+                                        placeholder={t('phFilePath')}
+                                        title={slot.filePath}
+                                        dir="ltr"
+                                      />
+                                      <Button size="sm" variant="outline" className="h-6 w-6 p-0 shrink-0" disabled={isLocked}
+                                        onClick={() => setVideoSelectorSlot(slot.slotIndex)} title={t('select')}>
+                                        <FolderOpen className="w-3 h-3" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -3211,18 +3219,26 @@ export default function Home() {
                                 />
                               ) : (
                                 <>
-                                  <Input
-                                    readOnly
-                                    value={slot.filePath ? slot.filePath.split(/[/\\]/).pop() : ''}
-                                    placeholder={t('phFilePath')}
-                                    className={`h-8 text-xs flex-1 font-mono text-muted-foreground bg-muted/20 ${isLocked ? 'opacity-50' : 'cursor-default'}`}
-                                    dir="ltr"
-                                    title={slot.filePath}
-                                  />
-                                  <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" disabled={isLocked}
-                                    onClick={() => setVideoSelectorSlot(slot.slotIndex)}>
-                                    <FolderOpen className="w-3.5 h-3.5" />
-                                  </Button>
+                                  {slot.playlistLoopEnabled ? (
+                                    <div className="flex-1 text-xs font-medium bg-purple-500/10 text-purple-600 border border-purple-500/20 rounded h-8 flex items-center justify-center px-2 select-none" title={locale === 'ar' ? 'مجموعة الفيديوهات مفعّلة بالداخل' : 'Playlist Loop Enabled Inside'}>
+                                      {locale === 'ar' ? '🔁 مجموعة الفيديوهات نشطة' : '🔁 Playlist Loop Active'}
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <Input
+                                        readOnly
+                                        value={slot.filePath ? (slot.filePath.includes('/') ? slot.filePath.split('/').pop() : slot.filePath.split('\\').pop()) : ''}
+                                        placeholder={t('phFilePath')}
+                                        className={`h-8 text-xs flex-1 font-mono text-muted-foreground bg-muted/20 ${isLocked ? 'opacity-50' : 'cursor-default'}`}
+                                        dir="ltr"
+                                        title={slot.filePath}
+                                      />
+                                      <Button size="sm" variant="outline" className="h-8 w-8 p-0 shrink-0" disabled={isLocked}
+                                        onClick={() => setVideoSelectorSlot(slot.slotIndex)}>
+                                        <FolderOpen className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </div>
