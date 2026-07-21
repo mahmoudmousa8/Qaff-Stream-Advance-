@@ -1565,6 +1565,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             }
 
             let resolvedThumbnailPath = slot.youtubeThumbnailPath || undefined
+            if (slot.playlistLoopEnabled && playlistItems.length > 0) {
+              const currentItem = playlistItems[slot.currentPlaylistItemIndex % playlistItems.length]
+              if (currentItem && currentItem.thumbnailPath) {
+                resolvedThumbnailPath = currentItem.thumbnailPath
+              }
+            }
             if (resolvedThumbnailPath) {
               resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slot.slotIndex)
               activeThumbnails.set(slot.slotIndex, resolvedThumbnailPath)
