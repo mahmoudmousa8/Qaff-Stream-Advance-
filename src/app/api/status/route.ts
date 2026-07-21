@@ -37,6 +37,10 @@ export async function GET() {
         if (managerReachable) {
             // Fix slots that DB says are running but stream-manager says they are not
             for (const dbSlot of dbRunningSlots) {
+                if (dbSlot.status === 'PreStop') {
+                    // Skip reconciliation for playlist loops waiting in the pre-stop window
+                    continue
+                }
                 if (!managerActiveSlots.includes(dbSlot.slotIndex) && !managerQueuedSlots.includes(dbSlot.slotIndex)) {
                     await db.streamSlot.update({
                         where: { slotIndex: dbSlot.slotIndex },
