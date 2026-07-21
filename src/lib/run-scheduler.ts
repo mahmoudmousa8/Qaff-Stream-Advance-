@@ -1094,6 +1094,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
       // Skip recovery if stream ended naturally near its scheduled stop time or inside intentional playlist pre-stop
       let skipRecovery = false
+      let isPlaylistPreStop = false
       if (slot.playlistLoopEnabled && slot.playlistConfig) {
         const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
         const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
@@ -1101,8 +1102,14 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
         if (elapsedMins >= stopTargetMins) {
           skipRecovery = true
+          isPlaylistPreStop = true
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipping recovery — in intentional playlist pre-stop window (${elapsedMins.toFixed(1)}m >= ${stopTargetMins.toFixed(1)}m)`)
         }
+      }
+
+      if (isPlaylistPreStop) {
+        // Keep slot running in DB, skip recovery, wait for next tick to check if rotation interval reached
+        continue
       }
 
       if (!skipRecovery && slot.schedStop && !slot.schedStop.startsWith('DUR')) {

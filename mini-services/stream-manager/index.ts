@@ -58,10 +58,19 @@ async function updateDbSlotStatus(slotIndex: number, isRunning: boolean, status:
     db = new Database(path)
 
     // Safeguard: do not overwrite status if it's already 'Scheduled' in DB (due to scheduler stop logic)
-    const current = db.prepare("SELECT status FROM StreamSlot WHERE slotIndex = ?").get(slotIndex) as { status: string } | undefined
-    if (current && current.status === 'Scheduled' && (status === 'Failed' || status === 'Stopped')) {
-      log(`Slot ${slotIndex + 1}: Skipping status update to '${status}' because it is already 'Scheduled' in DB.`)
-      return
+    const current = db.prepare("SELECT status, playlistLoopEnabled, manuallyStopped FROM StreamSlot WHERE slotIndex = ?").get(slotIndex) as { status: string, playlistLoopEnabled: number, manuallyStopped: number } | undefined
+    if (current) {
+      if (current.status === 'Scheduled' && (status === 'Failed' || status === 'Stopped')) {
+        log(`Slot ${slotIndex + 1}: Skipping status update to '${status}' because it is already 'Scheduled' in DB.`)
+        return
+      }
+      
+      // If this is a playlist loop slot and NOT manually stopped by the user, keep isRunning=1 and set status to 'PreStop'
+      if (current.playlistLoopEnabled === 1 && current.manuallyStopped === 0 && (status === 'Failed' || status === 'Stopped')) {
+        db.prepare("UPDATE StreamSlot SET isRunning = 1, status = 'PreStop' WHERE slotIndex = ?").run(slotIndex)
+        log(`Slot ${slotIndex + 1}: Playlist loop active. Kept isRunning=1 and set status='PreStop' in DB.`)
+        return
+      }
     }
 
     db.prepare("UPDATE StreamSlot SET isRunning = ?, status = ? WHERE slotIndex = ?").run(isRunning ? 1 : 0, status, slotIndex)

@@ -1736,8 +1736,25 @@ export default function Home() {
       case 'Scheduled': return 'bg-orange-500'
       case 'Completed': return 'bg-blue-500'
       case 'Failed': return 'bg-red-600'
+      case 'PreStop': return 'bg-cyan-600'
       default: return 'bg-slate-500'
     }
+  }
+
+  const renderStatusBadge = (status: string) => {
+    if (locale === 'ar') {
+      switch (status) {
+        case 'Streaming': return 'يبث مباشر'
+        case 'Starting': return 'بدء التشغيل'
+        case 'Scheduled': return 'مجدول'
+        case 'Completed': return 'مكتمل'
+        case 'Failed': return 'فشل'
+        case 'PreStop': return 'انتظار الدورة'
+        case 'Stopped': return 'متوقف'
+        default: return status
+      }
+    }
+    return status
   }
 
   // ── Per-channel Logs Panel ───────────────────────────────────
@@ -2981,7 +2998,7 @@ export default function Home() {
                           {/* Status */}
                           <td className="text-center px-2 py-1">
                             <Badge className={`${getStatusColor(slot.status)} text-white text-[10px] font-medium`}>
-                              {slot.status}
+                              {renderStatusBadge(slot.status)}
                             </Badge>
                           </td>
 
@@ -3143,7 +3160,7 @@ export default function Home() {
                                 #{slot.slotIndex + 1}
                               </span>
                               <Badge className={`${getStatusColor(slot.status)} text-white text-[10px] px-1.5 py-0`}>
-                                {slot.status}
+                                {renderStatusBadge(slot.status)}
                               </Badge>
                             </div>
                             {/* Platform selector */}
