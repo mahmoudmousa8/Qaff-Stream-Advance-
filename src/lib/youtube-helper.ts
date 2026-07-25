@@ -52,6 +52,30 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
+let lastQuotaLogTime = 0
+
+export async function checkAndLogQuotaError(errorText: string, contextMessage: string): Promise<boolean> {
+  const isQuota = errorText.toLowerCase().includes('quota') || errorText.includes('quotaExceeded')
+  if (isQuota) {
+    console.error(`[YouTube Helper] QUOTA EXCEEDED (${contextMessage}):`, errorText)
+    const now = Date.now()
+    if (now - lastQuotaLogTime > 60000) {
+      lastQuotaLogTime = now
+      try {
+        await db.systemLog.create({
+          data: {
+            message: `⚠️ تنبيه يوتيوب: نفذت الحصة اليومية لـ YouTube API (Quota Exceeded) أثناء (${contextMessage}). لن يتم إنشاء بثوث أو جلب مفاتيح حتى يتم تجديد الحصة من جوجل.`
+          }
+        })
+      } catch (e) {
+        console.error('[YouTube Helper] Failed to log quota error to db.systemLog:', e)
+      }
+    }
+    return true
+  }
+  return false
+}
+
 // Refresh Google OAuth token if close to expiry (within 2 minutes)
 export async function refreshAccessToken(channelId: string): Promise<string> {
   const channel = await db.youtubeChannel.findUnique({
@@ -165,6 +189,7 @@ export async function setupYoutubeLiveStream(
     }
   } else {
     const errorText = await streamsResponse.text()
+    await checkAndLogQuotaError(errorText, 'جلب مفاتيح البث')
     let errorMsg = errorText
     try {
       const parsed = JSON.parse(errorText)
@@ -196,6 +221,7 @@ export async function setupYoutubeLiveStream(
 
     if (!createStreamResponse.ok) {
       const errorText = await createStreamResponse.text()
+      await checkAndLogQuotaError(errorText, 'إنشاء مفتاح بث جديد')
       let errorMsg = errorText
       try {
         const parsed = JSON.parse(errorText)
@@ -287,6 +313,7 @@ export async function setupYoutubeLiveStream(
 
   if (!broadcastResponse.ok) {
     const errorText = await broadcastResponse.text()
+    await checkAndLogQuotaError(errorText, 'إنشاء البث المباشر')
     let errorMsg = errorText
     try {
       const parsed = JSON.parse(errorText)
@@ -314,6 +341,7 @@ export async function setupYoutubeLiveStream(
 
   if (!bindResponse.ok) {
     const errorText = await bindResponse.text()
+    await checkAndLogQuotaError(errorText, 'ربط البث بمفتاح البث')
     let errorMsg = errorText
     try {
       const parsed = JSON.parse(errorText)

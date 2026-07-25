@@ -770,6 +770,13 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
         }
       } catch (ytErr: any) {
         console.error(`[Scheduler] Setup YT stream failed during playlist switch:`, ytErr.message)
+        const isQuota = ytErr.message && (ytErr.message.includes('quota') || ytErr.message.includes('Quota'))
+        const msg = isQuota
+          ? `Slot ${slot.slotIndex + 1}: ⚠️ تم تجاوز الحد اليومي لـ YouTube API (Quota Exceeded) عند التدوير`
+          : `Slot ${slot.slotIndex + 1}: فشل إعداد يوتيوب عند التدوير: ${ytErr.message}`
+        try {
+          await db.systemLog.create({ data: { message: msg } })
+        } catch {}
       }
     }
 
@@ -1632,7 +1639,11 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             })
             logs.push(`Slot ${slot.slotIndex + 1}: YouTube Live broadcast created and stream key fetched`)
           } catch (ytErr: any) {
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube setup failed: ${ytErr.message}`)
+            const isQuota = ytErr.message && (ytErr.message.includes('quota') || ytErr.message.includes('Quota'))
+            const errMsg = isQuota
+              ? `Slot ${slot.slotIndex + 1}: ⚠️ تم تجاوز الحد اليومي لـ YouTube API (Quota Exceeded)`
+              : `Slot ${slot.slotIndex + 1}: YouTube setup failed: ${ytErr.message}`
+            logs.push(errMsg)
             
             const stateKey = `state_${slot.slotIndex}`
             const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
