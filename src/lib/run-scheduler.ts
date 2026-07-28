@@ -650,14 +650,31 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
 }
 
 export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, intervalMins: number): number {
-  // Base stop offset: 7 minutes before end of interval (for 60m -> 53 minutes).
-  // Random jitter: ±2 minutes (between -2.0 and +2.0 minutes).
-  // Target run duration = (intervalMins - 7) + jitter => for 60m: 51.0m to 55.0m.
+  let baseStopOffsetMins = 7
+  let maxJitterMins = 2.0 // ±2 minutes for 60m+
+
+  if (intervalMins <= 10) {
+    baseStopOffsetMins = 2 // Stop 2 minutes before (run for ~8 mins)
+    maxJitterMins = 0.25 // ±15 seconds
+  } else if (intervalMins <= 15) {
+    baseStopOffsetMins = 3 // Stop 3 minutes before (run for ~12 mins)
+    maxJitterMins = 0.5 // ±30 seconds
+  } else if (intervalMins <= 20) {
+    baseStopOffsetMins = 4 // Stop 4 minutes before (run for ~16 mins)
+    maxJitterMins = 0.5 // ±30 seconds
+  } else if (intervalMins <= 30) {
+    baseStopOffsetMins = 4 // Stop 4 minutes before (run for ~26 mins)
+    maxJitterMins = 0.5 // ±30 seconds
+  } else {
+    baseStopOffsetMins = 7 // Stop 7 minutes before (run for ~53 mins for 60m)
+    maxJitterMins = 2.0 // ±2 minutes
+  }
+
   const seed = (slotIndex + 1) * 100000 + Math.floor(lastSwitchTime.getTime() / 60000)
   const x = Math.sin(seed) * 10000
   const randomFactor = x - Math.floor(x)
-  const jitterMins = (randomFactor * 4) - 2
-  const stopTarget = Math.max(1, (intervalMins - 7) + jitterMins)
+  const jitterMins = (randomFactor * (maxJitterMins * 2)) - maxJitterMins
+  const stopTarget = Math.max(0.5, (intervalMins - baseStopOffsetMins) + jitterMins)
   return stopTarget
 }
 

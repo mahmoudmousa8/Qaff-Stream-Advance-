@@ -4443,7 +4443,11 @@ export default function Home() {
                             onChange={(e) => setSettingsData(p => p ? { ...p, loopIntervalMins: parseInt(e.target.value) || 60 } : p)}
                             className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                           >
-                            <option value="60">{locale === 'ar' ? 'كل ساعة' : 'Every 1 Hour'}</option>
+                            <option value="10">{locale === 'ar' ? 'كل 10 دقائق (إغلاق قبلها بـ 2 دقيقة)' : 'Every 10 Minutes (Pre-stop 2m)'}</option>
+                            <option value="15">{locale === 'ar' ? 'كل 15 دقيقة (إغلاق قبلها بـ 3 دقائق)' : 'Every 15 Minutes (Pre-stop 3m)'}</option>
+                            <option value="20">{locale === 'ar' ? 'كل 20 دقيقة (إغلاق قبلها بـ 4 دقائق)' : 'Every 20 Minutes (Pre-stop 4m)'}</option>
+                            <option value="30">{locale === 'ar' ? 'كل 30 دقيقة (إغلاق قبلها بـ 4 دقائق)' : 'Every 30 Minutes (Pre-stop 4m)'}</option>
+                            <option value="60">{locale === 'ar' ? 'كل ساعة (إغلاق قبلها بـ 7 دقائق)' : 'Every 1 Hour (Pre-stop 7m)'}</option>
                             <option value="120">{locale === 'ar' ? 'كل ساعتين' : 'Every 2 Hours'}</option>
                             <option value="180">{locale === 'ar' ? 'كل 3 ساعات' : 'Every 3 Hours'}</option>
                             <option value="240">{locale === 'ar' ? 'كل 4 ساعات' : 'Every 4 Hours'}</option>
