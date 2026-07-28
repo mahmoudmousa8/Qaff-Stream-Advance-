@@ -273,7 +273,9 @@ export async function setupYoutubeLiveStream(
     snippet: {
       title: truncatedTitle,
       description: truncatedDesc,
-      scheduledStartTime: scheduledStartTime
+      scheduledStartTime: scheduledStartTime,
+      defaultLanguage: 'en',
+      defaultAudioLanguage: 'ar'
     },
     status: {
       privacyStatus: 'public',
@@ -327,6 +329,38 @@ export async function setupYoutubeLiveStream(
   const broadcastData = await broadcastResponse.json()
   const broadcastId = broadcastData.id
   console.log(`[YouTube Helper] Created Live Broadcast ID: ${broadcastId}`)
+
+  // 4.5 Set Category to Music (10), Audio language to Arabic (ar), Title/Desc language to English (en) via videos.update
+  try {
+    console.log(`[YouTube Helper] Setting category to Music (10), Audio lang: Arabic (ar), Title/Desc lang: English (en) for video ${broadcastId}...`)
+    const updateVideoUrl = 'https://www.googleapis.com/youtube/v3/videos?part=snippet'
+    const videoResponse = await fetchWithTimeout(updateVideoUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: broadcastId,
+        snippet: {
+          title: truncatedTitle,
+          description: truncatedDesc,
+          categoryId: '10', // 10 = Music (موسيقى)
+          defaultLanguage: 'en', // English for Title/Description
+          defaultAudioLanguage: 'ar' // Arabic for Stream Audio
+        }
+      })
+    }, 10000)
+
+    if (!videoResponse.ok) {
+      const errText = await videoResponse.text()
+      console.warn(`[YouTube Helper] Non-fatal warning setting video category/language:`, errText)
+    } else {
+      console.log(`[YouTube Helper] Successfully set video category to Music (10), Audio: ar, Title/Desc: en`)
+    }
+  } catch (videoErr: any) {
+    console.warn(`[YouTube Helper] Non-fatal error setting video category/language:`, videoErr.message)
+  }
 
   // 5. Bind Broadcast to Stream Key
   console.log(`[YouTube Helper] Binding Broadcast (${broadcastId}) to Stream Key (${streamId})`)
