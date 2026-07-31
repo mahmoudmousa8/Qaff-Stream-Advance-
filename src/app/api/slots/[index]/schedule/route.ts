@@ -23,7 +23,18 @@ export async function POST(
       return NextResponse.json({ error: 'Please set start schedule time' }, { status: 400 })
     }
 
-    if (slot.inputType !== 'live' && !slot.filePath) {
+    const hasPlaylistInput = !!(
+      slot.playlistLoopEnabled &&
+      slot.playlistConfig &&
+      (() => {
+        try {
+          const p = JSON.parse(slot.playlistConfig)
+          return Array.isArray(p) && p.length > 0
+        } catch { return false }
+      })()
+    )
+
+    if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylistInput) {
       return NextResponse.json({ error: 'Please fill File Path' }, { status: 400 })
     }
     
