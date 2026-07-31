@@ -7,7 +7,17 @@ const BULK_STREAM_MANAGER = STREAM_MANAGER_URL
 
 // POST - Bulk operations
 function isSlotValidForSchedule(slot: any) {
-  if (slot.inputType !== 'live' && !slot.filePath) return false
+  const hasPlaylist = !!(
+    slot.playlistLoopEnabled &&
+    slot.playlistConfig &&
+    (() => {
+      try {
+        const p = JSON.parse(slot.playlistConfig)
+        return Array.isArray(p) && p.length > 0
+      } catch { return false }
+    })()
+  )
+  if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylist) return false
   const outputType = slot.outputType || 'youtube'
   if (outputType === 'youtube' || outputType === 'facebook') {
     const ytId = slot.youtubeChannelId
@@ -56,7 +66,17 @@ export async function POST(request: NextRequest) {
         })
 
         const slots = allSlots.filter(slot => {
-          if (slot.inputType !== 'live' && !slot.filePath) return false
+          const hasPlaylist = !!(
+            slot.playlistLoopEnabled &&
+            slot.playlistConfig &&
+            (() => {
+              try {
+                const p = JSON.parse(slot.playlistConfig)
+                return Array.isArray(p) && p.length > 0
+              } catch { return false }
+            })()
+          )
+          if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylist) return false
 
           const outputType = slot.outputType || 'youtube'
           if (outputType === 'youtube' || outputType === 'facebook') {
@@ -1596,7 +1616,17 @@ export async function POST(request: NextRequest) {
         })
 
         const slots = allSlots.filter(slot => {
-          if (slot.inputType !== 'live' && !slot.filePath) return false
+          const hasPlaylist = !!(
+            slot.playlistLoopEnabled &&
+            slot.playlistConfig &&
+            (() => {
+              try {
+                const p = JSON.parse(slot.playlistConfig)
+                return Array.isArray(p) && p.length > 0
+              } catch { return false }
+            })()
+          )
+          if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylist) return false
 
           const outputType = slot.outputType || 'youtube'
           if (outputType === 'youtube' || outputType === 'facebook') {

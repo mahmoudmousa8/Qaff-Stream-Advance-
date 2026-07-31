@@ -1259,7 +1259,18 @@ export default function Home() {
     const outputType = slot.outputType || 'youtube'
 
     // Client-side validation
-    if (slot.inputType !== 'live' && !slot.filePath) {
+    const hasPlaylistInput = !!(
+      slot.playlistLoopEnabled &&
+      slot.playlistConfig &&
+      (() => {
+        try {
+          const p = JSON.parse(slot.playlistConfig)
+          return Array.isArray(p) && p.length > 0
+        } catch { return false }
+      })()
+    )
+
+    if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylistInput) {
       addLog(`Slot ${index + 1}: ${t('fileNotFound')}`)
       return
     }
@@ -1309,7 +1320,17 @@ export default function Home() {
     if (!slot?.schedStart) { addLog(`Slot ${index + 1}: ${t('outputIncomplete')}`); return }
 
     const outputType = slot.outputType || 'youtube'
-    if (slot.inputType !== 'live' && !slot.filePath) {
+    const hasPlaylistInputSched = !!(
+      slot.playlistLoopEnabled &&
+      slot.playlistConfig &&
+      (() => {
+        try {
+          const p = JSON.parse(slot.playlistConfig)
+          return Array.isArray(p) && p.length > 0
+        } catch { return false }
+      })()
+    )
+    if (slot.inputType !== 'live' && !slot.filePath && !hasPlaylistInputSched) {
       addLog(`Slot ${index + 1}: ${t('fileNotFound')}`); return
     }
     // Skip stream key check when YouTube automation is active (key is auto-fetched by backend)

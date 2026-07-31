@@ -1199,6 +1199,17 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             if (slot.isSwapped && slot.swapVideoPath) {
               recoveryFilePath = activeSwapVideos.get(slot.slotIndex) || resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex)
               activeSwapVideos.set(slot.slotIndex, recoveryFilePath)
+            } else if (slot.playlistLoopEnabled && slot.playlistConfig) {
+              try {
+                const p = JSON.parse(slot.playlistConfig)
+                if (Array.isArray(p) && p.length > 0) {
+                  const currentItem = p[slot.currentPlaylistItemIndex % p.length]
+                  if (currentItem?.videoPath) {
+                    recoveryFilePath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(currentItem.videoPath, slot.slotIndex, 'main')
+                    activeMainVideos.set(slot.slotIndex, recoveryFilePath)
+                  }
+                }
+              } catch {}
             } else if (slot.filePath) {
               recoveryFilePath = activeMainVideos.get(slot.slotIndex) || resolveVideoFileFromFolder(slot.filePath, slot.slotIndex, 'main')
               activeMainVideos.set(slot.slotIndex, recoveryFilePath)
@@ -1432,7 +1443,17 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     const hasDestination = (outputType === 'youtube' || outputType === 'facebook')
       ? (slot.youtubeChannelId && slot.youtubeChannelId !== 'null' && slot.youtubeChannelId !== 'undefined' && slot.youtubeChannelId.trim() !== '') || (slot.streamKey && slot.streamKey.trim() !== '')
       : (slot.streamKey && slot.streamKey.trim() !== '')
-    const hasInput = slot.inputType === 'live' || (slot.filePath && slot.filePath.trim() !== '')
+    const hasPlaylistInput = !!(
+      slot.playlistLoopEnabled &&
+      slot.playlistConfig &&
+      (() => {
+        try {
+          const p = JSON.parse(slot.playlistConfig)
+          return Array.isArray(p) && p.length > 0
+        } catch { return false }
+      })()
+    )
+    const hasInput = slot.inputType === 'live' || (slot.filePath && slot.filePath.trim() !== '') || hasPlaylistInput
 
     // Check if slot has backoff active
     const stateKey = `state_${slot.slotIndex}`

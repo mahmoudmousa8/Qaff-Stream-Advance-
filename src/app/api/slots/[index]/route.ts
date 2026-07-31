@@ -95,6 +95,17 @@ export async function PUT(
       }
     }
 
+    if (proposedSlot.playlistLoopEnabled && proposedSlot.playlistConfig) {
+      try {
+        const p = JSON.parse(proposedSlot.playlistConfig)
+        if (Array.isArray(p) && p.length > 0 && p[0].videoPath) {
+          if (!proposedSlot.filePath || proposedSlot.filePath.trim() === '') {
+            extraUpdates.filePath = p[0].videoPath
+          }
+        }
+      } catch {}
+    }
+
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },
       data: {
