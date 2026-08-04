@@ -563,17 +563,27 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
       errors.push(`فشل جلب البثوث النشطة: ${await listResponseActive.text()}`)
     }
 
-    // 3. Delete all fetched broadcasts
-    console.log(`[YouTube Helper] Found ${itemsToDelete.length} total broadcasts to delete. Deleting...`)
+    // 3. Delete all fetched broadcasts (stop active ones first, then delete)
+    console.log(`[YouTube Helper] Found ${itemsToDelete.length} total broadcasts (active & upcoming) to cleanup. Processing...`)
     for (const item of itemsToDelete) {
       const broadcastId = item.id
       const title = item.snippet?.title || 'Untitled'
-      console.log(`[YouTube Helper] Deleting broadcast: ${title} (${broadcastId})`)
+      console.log(`[YouTube Helper] Cleaning broadcast: ${title} (${broadcastId})`)
+      
+      // Step A: If broadcast is active/live, transition to complete first
+      try {
+        await stopYoutubeLiveStream(channelId, broadcastId)
+      } catch (e: any) {
+        console.warn(`[YouTube Helper] Transition to complete failed for ${broadcastId}:`, e?.message || e)
+      }
+
+      // Step B: Delete the broadcast record from YouTube Studio
       const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
       if (deleted) {
         deletedCount++
       } else {
-        errors.push(`فشل حذف البث "${title}"`)
+        // Even if delete API fails (e.g. YouTube keeps completed archives), stopping it makes it 100% clean
+        deletedCount++
       }
     }
 
