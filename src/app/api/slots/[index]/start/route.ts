@@ -265,6 +265,10 @@ export async function POST(
           }
 
           for (let itemIdx = 0; itemIdx < playlistItems.length; itemIdx++) {
+            if (itemIdx > 0) {
+              // 1.5s stagger delay so YouTube RTMP ingest servers can cleanly register each incoming stream connection
+              await new Promise(resolve => setTimeout(resolve, 1500))
+            }
             const item = playlistItems[itemIdx]
             const subSlotIndex = itemIdx === 0 ? slotIndex : (10000 + slotIndex * 100 + itemIdx)
 
