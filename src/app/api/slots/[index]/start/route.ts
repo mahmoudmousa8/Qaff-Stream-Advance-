@@ -139,13 +139,16 @@ export async function POST(
       }
     })
 
-    // If a YouTube channel is bound, create a Live Broadcast and fetch the active stream key
+    // Check if this slot is configured as a multi-video playlist group
+    const isPlaylistGroup = slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live'
+
+    // If a YouTube channel is bound and NOT a multi-video playlist group, create a single Live Broadcast
     let finalStreamKey = slot.streamKey
     let finalRtmpServer = slot.rtmpServer
     let youtubeBroadcastId = ""
-    if (slot.youtubeChannelId && outputType === 'youtube') {
+    if (slot.youtubeChannelId && outputType === 'youtube' && !isPlaylistGroup) {
       try {
-        console.log(`[Start Route] Slot ${slotIndex}: Setting up YouTube Live broadcast...`)
+        console.log(`[Start Route] Slot ${slotIndex}: Setting up single YouTube Live broadcast...`)
         const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
         const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
         let resolvedThumbnailPath = currentThumbnailPath || slot.youtubeThumbnailPath || undefined
@@ -229,11 +232,11 @@ export async function POST(
     }
 
     // If playlist loop is enabled, launch dedicated concurrent live broadcasts for ALL videos in the group!
-    if (slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live') {
+    if (isPlaylistGroup) {
       try {
-        const playlistItems = JSON.parse(slot.playlistConfig)
+        const playlistItems = JSON.parse(slot.playlistConfig!)
         if (Array.isArray(playlistItems) && playlistItems.length > 0) {
-          console.log(`[Start Route] Slot ${slotIndex}: Launching ${playlistItems.length} concurrent live broadcasts for playlist group...`)
+          console.log(`[Start Route] Slot ${slotIndex}: Launching ${playlistItems.length} concurrent live broadcasts in sequential queue...`)
           
           const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
           const { resolveThumbnailFileFromFolder, resolveVideoFileFromFolder, activeThumbnails, activeMainVideos } = await import('@/lib/run-scheduler')
@@ -242,11 +245,11 @@ export async function POST(
           const allBroadcastIds: string[] = []
           const usedStreamKeys = new Set<string>()
 
-          // Map to store pre-shuffled title/description pairs per list for random non-repeating selection
-          const listShuffledPairsMap = new Map<string, any[]>()
-          const getShuffledPairsForList = async (listId: string) => {
-            if (listShuffledPairsMap.has(listId)) {
-              return listShuffledPairsMap.get(listId)!
+          // Map to store deterministic 1-to-1 title/description pairs per list
+          const listPairsMap = new Map<string, any[]>()
+          const getPairsForList = async (listId: string) => {
+            if (listPairsMap.has(listId)) {
+              return listPairsMap.get(listId)!
             }
             try {
               const tdList = await db.titleDescList.findUnique({ where: { id: listId } })
@@ -254,9 +257,9 @@ export async function POST(
                 const listData = JSON.parse(tdList.items)
                 const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
                 const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
-                const shuffled = [...validPairs].sort(() => Math.random() - 0.5)
-                listShuffledPairsMap.set(listId, shuffled)
-                return shuffled
+                // Deterministic order — DO NOT SHUFFLE!
+                listPairsMap.set(listId, validPairs)
+                return validPairs
               }
             } catch (e: any) {
               console.error(`[Start Route] Failed to fetch/parse title desc list ${listId}:`, e.message)
@@ -266,20 +269,20 @@ export async function POST(
 
           for (let itemIdx = 0; itemIdx < playlistItems.length; itemIdx++) {
             if (itemIdx > 0) {
-              // 1.5s stagger delay so YouTube RTMP ingest servers can cleanly register each incoming stream connection
-              await new Promise(resolve => setTimeout(resolve, 1500))
+              // 2s Queue Stagger Delay to process each broadcast item sequentially one by one
+              await new Promise(resolve => setTimeout(resolve, 2000))
             }
             const item = playlistItems[itemIdx]
             const subSlotIndex = itemIdx === 0 ? slotIndex : (10000 + slotIndex * 100 + itemIdx)
 
-            // Title & Description pair - selected randomly
+            // Title & Description pair - selected in strict 1-to-1 sequential order matching item index
             let itemTitle = slot.youtubeTitle || 'Live Stream'
             let itemDesc = slot.youtubeDescription || ''
             const itemListId = item.titleDescListId || slot.titleDescListId
             if (itemListId) {
-              const shuffledPairs = await getShuffledPairsForList(itemListId)
-              if (shuffledPairs.length > 0) {
-                const chosenPair = shuffledPairs[itemIdx % shuffledPairs.length]
+              const listPairs = await getPairsForList(itemListId)
+              if (listPairs.length > 0) {
+                const chosenPair = listPairs[itemIdx % listPairs.length]
                 itemTitle = chosenPair.title
                 itemDesc = chosenPair.description || ''
               }
