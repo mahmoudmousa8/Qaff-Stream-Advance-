@@ -4360,12 +4360,12 @@ export default function Home() {
                     <div className="flex items-center justify-between p-4 bg-muted/30 border border-border/80 rounded-xl hover:bg-muted/40 transition-colors">
                       <div className="space-y-0.5">
                         <label htmlFor="playlistLoopEnabled-toggle" className="text-sm font-bold text-foreground cursor-pointer">
-                          {locale === 'ar' ? 'تفعيل تشغيل مجموعة فيديوهات بالترتيب' : 'Enable Playlist Loop'}
+                          {locale === 'ar' ? 'تفعيل إطلاق مجموعة فيديوهات بوقت واحد' : 'Enable Multi-Video Concurrent Stream Group'}
                         </label>
                         <p className="text-xs text-muted-foreground">
                           {locale === 'ar'
-                            ? 'عند التفعيل، سيقوم النظام بالبث من مجموعة الفيديوهات المحددة بالترتيب والتبديل بينها تلقائياً.'
-                            : 'When enabled, the system will stream from the selected video list in order and rotate between them automatically.'}
+                            ? 'عند التفعيل، سيقوم النظام بإنشاء وإطلاق بث مباشر منفصل ومخصص لكل فيديو في المجموعة في نفس الوقت.'
+                            : 'When enabled, the system will create and launch a dedicated live broadcast for every video in the group simultaneously.'}
                         </p>
                       </div>
                       <Checkbox
