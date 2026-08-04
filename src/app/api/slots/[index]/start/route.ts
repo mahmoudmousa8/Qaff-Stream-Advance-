@@ -241,28 +241,43 @@ export async function POST(
           let firstBroadcastId = ''
           let firstStreamKey = slot.streamKey
 
+          // Map to store pre-shuffled title/description pairs per list for random non-repeating selection
+          const listShuffledPairsMap = new Map<string, any[]>()
+          const getShuffledPairsForList = async (listId: string) => {
+            if (listShuffledPairsMap.has(listId)) {
+              return listShuffledPairsMap.get(listId)!
+            }
+            try {
+              const tdList = await db.titleDescList.findUnique({ where: { id: listId } })
+              if (tdList) {
+                const listData = JSON.parse(tdList.items)
+                const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+                const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+                const shuffled = [...validPairs].sort(() => Math.random() - 0.5)
+                listShuffledPairsMap.set(listId, shuffled)
+                return shuffled
+              }
+            } catch (e: any) {
+              console.error(`[Start Route] Failed to fetch/parse title desc list ${listId}:`, e.message)
+            }
+            return []
+          }
+
           for (let itemIdx = 0; itemIdx < playlistItems.length; itemIdx++) {
             const item = playlistItems[itemIdx]
             const subSlotIndex = itemIdx === 0 ? slotIndex : (10000 + slotIndex * 100 + itemIdx)
 
-            // Title & Description pair
+            // Title & Description pair - selected randomly
             let itemTitle = slot.youtubeTitle || 'Live Stream'
             let itemDesc = slot.youtubeDescription || ''
             const itemListId = item.titleDescListId || slot.titleDescListId
             if (itemListId) {
-              try {
-                const tdList = await db.titleDescList.findUnique({ where: { id: itemListId } })
-                if (tdList) {
-                  const listData = JSON.parse(tdList.items)
-                  const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
-                  const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
-                  if (validPairs.length > 0) {
-                    const chosenPair = validPairs[itemIdx % validPairs.length]
-                    itemTitle = chosenPair.title
-                    itemDesc = chosenPair.description || ''
-                  }
-                }
-              } catch {}
+              const shuffledPairs = await getShuffledPairsForList(itemListId)
+              if (shuffledPairs.length > 0) {
+                const chosenPair = shuffledPairs[itemIdx % shuffledPairs.length]
+                itemTitle = chosenPair.title
+                itemDesc = chosenPair.description || ''
+              }
             }
 
             // Episode Number replacement
