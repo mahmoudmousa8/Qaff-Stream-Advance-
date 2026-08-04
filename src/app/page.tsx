@@ -588,6 +588,47 @@ export default function Home() {
       setCreateStreamKeyLoading(false)
     }
   }
+
+  const [cleaningChannelId, setCleaningChannelId] = useState<string | null>(null)
+
+  const handleCleanupChannelBroadcasts = async (channelId: string) => {
+    if (!channelId) return
+    const confirmMsg = locale === 'ar'
+      ? 'هل أنت تأكد من إغلاق وتنظيف كافة البثوث المباشرة النشطة والقادمة على هذه القناة لتفريغها بالكامل؟'
+      : 'Are you sure you want to close and clear all active & upcoming broadcasts on this channel?'
+    if (!confirm(confirmMsg)) return
+
+    setCleaningChannelId(channelId)
+    try {
+      const res = await fetch('/api/youtube/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelDbId: channelId })
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast({
+          title: locale === 'ar' ? 'تم تنظيف البثوث بنجاح' : 'Broadcasts Cleaned',
+          description: data.message
+        })
+        addLog(data.message)
+      } else {
+        toast({
+          title: locale === 'ar' ? 'تنبيه' : 'Notice',
+          description: data.error || data.message || (locale === 'ar' ? 'حدث خطأ أثناء تنظيف البثوث.' : 'Failed to cleanup broadcasts.'),
+          variant: 'destructive'
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: locale === 'ar' ? 'خطأ' : 'Error',
+        description: err.message || 'Error cleaning channel broadcasts',
+        variant: 'destructive'
+      })
+    } finally {
+      setCleaningChannelId(null)
+    }
+  }
   const [storageInfo, setStorageInfo] = useState<{ used: string; free: string; total: string; percent: number } | null>(null)
   const [locale, setLocaleState] = useState<Locale>('en')
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -4138,6 +4179,29 @@ export default function Home() {
                           {locale === 'ar' ? 'ربط' : 'Link'}
                         </button>
                       </div>
+
+                      {settingsData.youtubeChannelId && (
+                        <div className="mt-2 pt-2 border-t border-border/40">
+                          <button
+                            type="button"
+                            disabled={cleaningChannelId === settingsData.youtubeChannelId}
+                            onClick={() => handleCleanupChannelBroadcasts(settingsData.youtubeChannelId!)}
+                            className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 text-xs font-semibold text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-all disabled:opacity-50"
+                          >
+                            {cleaningChannelId === settingsData.youtubeChannelId ? (
+                              <>
+                                <span className="animate-spin text-xs">⟳</span>
+                                <span>{locale === 'ar' ? 'جاري إغلاق وتنظيف كافة بثوث القناة...' : 'Cleaning channel broadcasts...'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                <span>{locale === 'ar' ? '🛑 إغلاق وتنظيف كافة البثوث الشغالة على هذه القناة لتفريغها' : '🛑 Close & Clear All Active Broadcasts on this Channel'}</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {settingsData.youtubeChannelId && (
@@ -4444,6 +4508,29 @@ export default function Home() {
                               {locale === 'ar' ? 'ربط' : 'Link'}
                             </button>
                           </div>
+
+                          {settingsData.youtubeChannelId && (
+                            <div className="mt-2 pt-2 border-t border-border/40">
+                              <button
+                                type="button"
+                                disabled={cleaningChannelId === settingsData.youtubeChannelId}
+                                onClick={() => handleCleanupChannelBroadcasts(settingsData.youtubeChannelId!)}
+                                className="flex items-center justify-center gap-1.5 w-full py-1.5 px-3 text-xs font-semibold text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-lg transition-all disabled:opacity-50"
+                              >
+                                {cleaningChannelId === settingsData.youtubeChannelId ? (
+                                  <>
+                                    <span className="animate-spin text-xs">⟳</span>
+                                    <span>{locale === 'ar' ? 'جاري إغلاق وتنظيف كافة بثوث القناة...' : 'Cleaning channel broadcasts...'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                    <span>{locale === 'ar' ? '🛑 إغلاق وتنظيف كافة البثوث الشغالة على هذه القناة لتفريغها' : '🛑 Close & Clear All Active Broadcasts on this Channel'}</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
                         </div>
 
 
