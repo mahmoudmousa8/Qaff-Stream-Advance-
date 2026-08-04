@@ -245,26 +245,32 @@ export async function POST(
           const allBroadcastIds: string[] = []
           const usedStreamKeys = new Set<string>()
 
-          // Map to store deterministic 1-to-1 title/description pairs per list
-          const listPairsMap = new Map<string, any[]>()
-          const getPairsForList = async (listId: string) => {
-            if (listPairsMap.has(listId)) {
-              return listPairsMap.get(listId)!
-            }
-            try {
-              const tdList = await db.titleDescList.findUnique({ where: { id: listId } })
-              if (tdList) {
-                const listData = JSON.parse(tdList.items)
-                const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
-                const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
-                // Deterministic order — DO NOT SHUFFLE!
-                listPairsMap.set(listId, validPairs)
-                return validPairs
+          // Map to store randomly shuffled, non-repeating title/description pairs per list
+          const listRandomPairsMap = new Map<string, any[]>()
+          const getRandomPairForList = async (listId: string) => {
+            let remainingPairs = listRandomPairsMap.get(listId)
+            if (!remainingPairs || remainingPairs.length === 0) {
+              try {
+                const tdList = await db.titleDescList.findUnique({ where: { id: listId } })
+                if (tdList) {
+                  const listData = JSON.parse(tdList.items)
+                  const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+                  const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+                  if (validPairs.length > 0) {
+                    // Randomly shuffle list for non-repeating random selection
+                    remainingPairs = [...validPairs].sort(() => Math.random() - 0.5)
+                    listRandomPairsMap.set(listId, remainingPairs)
+                  }
+                }
+              } catch (e: any) {
+                console.error(`[Start Route] Failed to fetch title desc list ${listId}:`, e.message)
               }
-            } catch (e: any) {
-              console.error(`[Start Route] Failed to fetch/parse title desc list ${listId}:`, e.message)
             }
-            return []
+
+            if (remainingPairs && remainingPairs.length > 0) {
+              return remainingPairs.shift()
+            }
+            return null
           }
 
           for (let itemIdx = 0; itemIdx < playlistItems.length; itemIdx++) {
@@ -275,14 +281,13 @@ export async function POST(
             const item = playlistItems[itemIdx]
             const subSlotIndex = itemIdx === 0 ? slotIndex : (10000 + slotIndex * 100 + itemIdx)
 
-            // Title & Description pair - selected in strict 1-to-1 sequential order matching item index
+            // Title & Description pair - selected randomly (paired) from the item's or slot's list
             let itemTitle = slot.youtubeTitle || 'Live Stream'
             let itemDesc = slot.youtubeDescription || ''
             const itemListId = item.titleDescListId || slot.titleDescListId
             if (itemListId) {
-              const listPairs = await getPairsForList(itemListId)
-              if (listPairs.length > 0) {
-                const chosenPair = listPairs[itemIdx % listPairs.length]
+              const chosenPair = await getRandomPairForList(itemListId)
+              if (chosenPair) {
                 itemTitle = chosenPair.title
                 itemDesc = chosenPair.description || ''
               }
