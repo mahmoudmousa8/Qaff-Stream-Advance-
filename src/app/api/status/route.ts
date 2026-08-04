@@ -35,13 +35,17 @@ export async function GET() {
         const reconciled: { slotIndex: number; action: string }[] = []
 
         if (managerReachable) {
+            // Filter out virtual sub-slots (>= 10000) when updating primary DB slots
+            const primaryManagerActive = managerActiveSlots.filter(id => id < 10000)
+            const primaryManagerQueued = managerQueuedSlots.filter(id => id < 10000)
+
             // Fix slots that DB says are running but stream-manager says they are not
             for (const dbSlot of dbRunningSlots) {
                 if (dbSlot.status === 'PreStop') {
                     // Skip reconciliation for playlist loops waiting in the pre-stop window
                     continue
                 }
-                if (!managerActiveSlots.includes(dbSlot.slotIndex) && !managerQueuedSlots.includes(dbSlot.slotIndex)) {
+                if (!primaryManagerActive.includes(dbSlot.slotIndex) && !primaryManagerQueued.includes(dbSlot.slotIndex)) {
                     await db.streamSlot.update({
                         where: { slotIndex: dbSlot.slotIndex },
                         data: { isRunning: false, status: 'Stopped' }
@@ -51,7 +55,7 @@ export async function GET() {
             }
 
             // Fix slots that stream-manager says are running but DB doesn't
-            for (const activeSlot of managerActiveSlots) {
+            for (const activeSlot of primaryManagerActive) {
                 const dbSlot = dbRunningSlots.find(s => s.slotIndex === activeSlot)
                 if (!dbSlot) {
                     await db.streamSlot.update({
@@ -63,7 +67,7 @@ export async function GET() {
             }
 
             // Fix slots that stream-manager says are queued but DB doesn't say are running/starting
-            for (const queuedSlot of managerQueuedSlots) {
+            for (const queuedSlot of primaryManagerQueued) {
                 const dbSlot = dbRunningSlots.find(s => s.slotIndex === queuedSlot)
                 const dbStarting = dbStartingSlots.find(s => s.slotIndex === queuedSlot)
                 if (!dbSlot && !dbStarting) {

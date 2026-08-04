@@ -352,6 +352,7 @@ export async function POST(
             data: {
               isRunning: true,
               isScheduled: false,
+              status: 'Streaming',
               streamKey: firstStreamKey,
               youtubeBroadcastId: allBroadcastIds.join(',')
             }
