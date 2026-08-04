@@ -38,6 +38,9 @@ export const activeSwapVideos: Map<number, string> = g.__qaffActiveSwapVideos
 if (!g.__qaffActiveThumbnails) g.__qaffActiveThumbnails = new Map<number, string>()
 export const activeThumbnails: Map<number, string> = g.__qaffActiveThumbnails
 
+if (!g.__qaffUsedPairIndicesMap) g.__qaffUsedPairIndicesMap = new Map<string, number>()
+export const usedPairIndicesMap: Map<string, number> = g.__qaffUsedPairIndicesMap
+
 interface FolderQueue {
   files: string[]
   currentIndex: number
@@ -717,6 +720,7 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
     await new Promise(r => setTimeout(r, 6000))
 
     // 4. Resolve new Title/Description (pick a matching random pair)
+    // 4. Resolve new Title/Description (pick a matching paired item)
     let finalTitle = slot.youtubeTitle || 'Live Stream'
     let finalDescription = slot.youtubeDescription || ''
     
@@ -731,9 +735,16 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
           const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
           const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
           if (validPairs.length > 0) {
-            const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)]
-            finalTitle = randomPair.title
-            finalDescription = randomPair.description || ''
+            // Strictly pair title & description from the SAME item index to prevent cross-mixing
+            // Rotate sequentially through available pairs for maximum diversity without immediate repetition
+            const mapKey = `slot_${slot.slotIndex}_list_${listIdToUse}`
+            const lastIdx = usedPairIndicesMap.get(mapKey) ?? -1
+            const nextPairIdx = (lastIdx + 1) % validPairs.length
+            usedPairIndicesMap.set(mapKey, nextPairIdx)
+
+            const chosenPair = validPairs[nextPairIdx]
+            finalTitle = chosenPair.title
+            finalDescription = chosenPair.description || ''
           }
         }
       } catch (tdErr: any) {
@@ -753,8 +764,9 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
       })
     }
 
-    // 5. Setup new YouTube Live Broadcast
-    let finalStreamKey = slot.streamKey
+    // 5. Setup new YouTube Live Broadcast (use per-video streamKey if defined)
+    let itemStreamKey = (nextItem.streamKey && nextItem.streamKey.trim() !== '') ? nextItem.streamKey.trim() : slot.streamKey
+    let finalStreamKey = itemStreamKey
     let finalRtmpServer = slot.rtmpServer
     let newBroadcastId = ''
     
@@ -771,7 +783,7 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
           finalTitle,
           finalDescription,
           resolvedThumbnailPath,
-          slot.streamKey
+          itemStreamKey
         )
         finalStreamKey = yt.streamKey || finalStreamKey
         finalRtmpServer = yt.rtmpServer || finalRtmpServer

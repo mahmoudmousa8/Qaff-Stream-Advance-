@@ -308,27 +308,8 @@ export async function POST(request: NextRequest) {
         const finalPath = job.filePath
         const finalFilename = job.filename
 
-        // Validate video before keeping
-        try {
-          const processor = await import('@/lib/video-processor')
-          const check = await processor.validateVideoFile(finalPath)
-          if (!check.allowed) {
-            console.log(`[download] File ${finalFilename} rejected by validation, triggering auto-transcode...`)
-            const processingDir = path.join(VIDEOS_DIR, '.processing')
-            if (!existsSync(processingDir)) {
-              mkdirSync(processingDir, { recursive: true })
-            }
-            const tempPath = path.join(processingDir, finalFilename)
-            try {
-              renameSync(finalPath, tempPath)
-              processor.transcodeVideo(tempPath, finalPath, finalFilename, folder)
-            } catch (e) {
-              console.error('[download] failed to start transcode:', e)
-            }
-          }
-        } catch (e) {
-          console.error('[download] validation error:', e)
-        }
+        // Accept downloaded file directly as-is without transcoding/rendering
+        console.log(`[download] File ${finalFilename} downloaded successfully (accepted as-is without rendering).`)
 
         job.status = 'complete'
         job.completedAt = Date.now()
