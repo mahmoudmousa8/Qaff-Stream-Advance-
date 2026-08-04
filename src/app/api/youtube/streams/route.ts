@@ -106,3 +106,76 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST /api/youtube/streams
+// Creates a new YouTube Live Stream key with a custom title/name
+export async function POST(request: NextRequest) {
+  try {
+    const { channelId, title } = await request.json()
+
+    if (!channelId) {
+      return NextResponse.json({ error: 'Missing channelId' }, { status: 400 })
+    }
+
+    const channel = await db.youtubeChannel.findUnique({
+      where: { id: channelId }
+    })
+
+    if (!channel) {
+      return NextResponse.json({ error: 'YouTube channel not found' }, { status: 404 })
+    }
+
+    const accessToken = await refreshAccessToken(channelId)
+    const streamTitle = (title && title.trim()) ? title.trim() : `Stream Key ${new Date().toLocaleDateString('ar-EG')}`
+
+    const createUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn'
+    const createRes = await fetch(createUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        snippet: {
+          title: streamTitle
+        },
+        cdn: {
+          frameRate: 'variable',
+          ingestionType: 'rtmp',
+          resolution: 'variable'
+        }
+      }),
+      signal: AbortSignal.timeout(12000)
+    })
+
+    if (!createRes.ok) {
+      const errText = await createRes.text()
+      console.error('[YouTube Streams API] Create Stream Key failed:', errText)
+      return NextResponse.json({ error: 'Failed to create stream key on YouTube', details: errText }, { status: createRes.status })
+    }
+
+    const createdData = await createRes.json()
+    const streamKey = createdData.cdn?.ingestionInfo?.streamName
+    const rtmpServer = createdData.cdn?.ingestionInfo?.ingestionAddress || 'rtmp://a.rtmp.youtube.com/live2'
+
+    if (!streamKey) {
+      return NextResponse.json({ error: 'YouTube API did not return streamName' }, { status: 500 })
+    }
+
+    // Invalidate cache for this channel
+    streamsCache.delete(channelId)
+
+    console.log(`[YouTube Streams API] Successfully created new stream key "${streamTitle}" for channel ${channel.channelTitle}: ${streamKey}`)
+
+    return NextResponse.json({
+      success: true,
+      id: createdData.id,
+      title: streamTitle,
+      streamKey,
+      rtmpServer
+    })
+  } catch (error: any) {
+    console.error('[YouTube Streams API] Error creating stream key:', error)
+    return NextResponse.json({ error: 'Failed to create stream key: ' + error.message }, { status: 500 })
+  }
+}
+

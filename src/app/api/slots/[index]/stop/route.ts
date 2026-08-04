@@ -36,13 +36,25 @@ export async function POST(
       }
     })
 
-    // Call stream-manager to stop FFmpeg
+    // Call stream-manager to stop FFmpeg (primary + sub-slots for multi-video group)
     try {
       await fetch(`${STREAM_MANAGER_URL}/stop`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slotIndex })
       })
+      
+      // Stop up to 30 possible sub-slot streams
+      for (let itemIdx = 1; itemIdx < 30; itemIdx++) {
+        const subSlotIndex = 10000 + slotIndex * 100 + itemIdx
+        try {
+          await fetch(`${STREAM_MANAGER_URL}/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slotIndex: subSlotIndex })
+          })
+        } catch {}
+      }
     } catch (error) {
       console.error('Failed to connect to stream manager:', error)
     }

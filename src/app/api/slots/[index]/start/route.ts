@@ -228,7 +228,128 @@ export async function POST(
       }
     }
 
-    // Call stream manager — zero-transcode, direct copy only
+    // If playlist loop is enabled, launch dedicated concurrent live broadcasts for ALL videos in the group!
+    if (slot.playlistLoopEnabled && slot.playlistConfig && slot.inputType !== 'live') {
+      try {
+        const playlistItems = JSON.parse(slot.playlistConfig)
+        if (Array.isArray(playlistItems) && playlistItems.length > 0) {
+          console.log(`[Start Route] Slot ${slotIndex}: Launching ${playlistItems.length} concurrent live broadcasts for playlist group...`)
+          
+          const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+          const { resolveThumbnailFileFromFolder, resolveVideoFileFromFolder, activeThumbnails, activeMainVideos } = await import('@/lib/run-scheduler')
+          
+          let firstBroadcastId = ''
+          let firstStreamKey = slot.streamKey
+
+          for (let itemIdx = 0; itemIdx < playlistItems.length; itemIdx++) {
+            const item = playlistItems[itemIdx]
+            const subSlotIndex = itemIdx === 0 ? slotIndex : (10000 + slotIndex * 100 + itemIdx)
+
+            // Title & Description pair
+            let itemTitle = slot.youtubeTitle || 'Live Stream'
+            let itemDesc = slot.youtubeDescription || ''
+            const itemListId = item.titleDescListId || slot.titleDescListId
+            if (itemListId) {
+              try {
+                const tdList = await db.titleDescList.findUnique({ where: { id: itemListId } })
+                if (tdList) {
+                  const listData = JSON.parse(tdList.items)
+                  const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+                  const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+                  if (validPairs.length > 0) {
+                    const chosenPair = validPairs[itemIdx % validPairs.length]
+                    itemTitle = chosenPair.title
+                    itemDesc = chosenPair.description || ''
+                  }
+                }
+              } catch {}
+            }
+
+            // Episode Number replacement
+            const epNum = (slot as any).episodeNumber || 1
+            const episodeRegex = /\{add\}/gi
+            if (episodeRegex.test(itemTitle) || episodeRegex.test(itemDesc)) {
+              itemTitle = itemTitle.replace(episodeRegex, (epNum + itemIdx).toString())
+              itemDesc = itemDesc.replace(episodeRegex, (epNum + itemIdx).toString())
+            }
+
+            // Thumbnail
+            let itemThumb = item.thumbnailPath || slot.youtubeThumbnailPath || undefined
+            if (itemThumb) {
+              itemThumb = resolveThumbnailFileFromFolder(itemThumb, subSlotIndex)
+              activeThumbnails.set(subSlotIndex, itemThumb)
+            }
+
+            // Stream Key & RTMP
+            let itemStreamKey = (item.streamKey && item.streamKey.trim() !== '') ? item.streamKey.trim() : slot.streamKey
+            let itemRtmpServer = slot.rtmpServer
+            let itemBroadcastId = ''
+
+            if (slot.youtubeChannelId && outputType === 'youtube') {
+              try {
+                const yt = await setupYoutubeLiveStream(
+                  slot.youtubeChannelId,
+                  itemTitle,
+                  itemDesc,
+                  itemThumb,
+                  itemStreamKey
+                )
+                itemStreamKey = yt.streamKey || itemStreamKey
+                itemRtmpServer = yt.rtmpServer || itemRtmpServer
+                itemBroadcastId = yt.broadcastId || ''
+                if (itemIdx === 0) {
+                  firstBroadcastId = itemBroadcastId
+                  firstStreamKey = itemStreamKey
+                }
+              } catch (ytErr: any) {
+                console.error(`[Start Route] YT setup failed for playlist item #${itemIdx + 1}:`, ytErr.message)
+              }
+            }
+
+            // Resolve video path and start FFmpeg stream
+            const resolvedInputPath = resolveVideoFileFromFolder(item.videoPath, subSlotIndex, 'main')
+            activeMainVideos.set(subSlotIndex, resolvedInputPath)
+
+            try {
+              await fetch(`${STREAM_MANAGER_URL}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  slotIndex: subSlotIndex,
+                  outputType,
+                  rtmpServer: itemRtmpServer,
+                  streamKey: itemStreamKey,
+                  filePath: resolvedInputPath
+                })
+              })
+            } catch (e: any) {
+              console.error(`[Start Route] Stream manager start failed for item #${itemIdx + 1}:`, e.message)
+            }
+          }
+
+          const updatedSlot = await db.streamSlot.update({
+            where: { slotIndex },
+            data: {
+              isRunning: true,
+              isScheduled: false,
+              status: 'Streaming',
+              streamKey: firstStreamKey,
+              youtubeBroadcastId: firstBroadcastId
+            }
+          })
+
+          return NextResponse.json({
+            success: true,
+            slot: updatedSlot,
+            message: `تم إطلاق ${playlistItems.length} بث مباشر منفصل ومستقل لجميع فيديوهات المجموعة بنجاح!`
+          })
+        }
+      } catch (e: any) {
+        console.error(`[Start Route] Failed multi-video playlist start:`, e)
+      }
+    }
+
+    // Call stream manager — single stream fallback
     try {
       let resolvedInputPath = finalInputPath
       if (slot.inputType !== 'live' && finalInputPath) {

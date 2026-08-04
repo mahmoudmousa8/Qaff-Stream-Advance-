@@ -15,7 +15,7 @@ import {
   Sun, Moon, Calendar, AlertCircle, Activity,
   Loader2, ChevronLeft, ChevronRight, FolderOpen, HardDrive,
   Film, Globe, LogOut, Copy, Check, FileText, Wifi, Search, Settings, Trash2, Youtube, X, ImageIcon, CalendarX, Edit3,
-  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download, ChevronDown, ChevronUp, RepeatIcon
+  Shuffle, Plus, List, BookOpen, Dices, Link2, Sparkles, FileVideo, Upload, Download, ChevronDown, ChevronUp, RepeatIcon, Key
 } from 'lucide-react'
 import Image from 'next/image'
 import {
@@ -518,6 +518,76 @@ export default function Home() {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; action: string; onConfirm: () => void } | null>(null)
   const [videoSelectorSlot, setVideoSelectorSlot] = useState<number | null>(null)
   const [videosManagerOpen, setVideosManagerOpen] = useState(false)
+
+  // Create Stream Key Dialog State
+  const [createStreamKeyModalOpen, setCreateStreamKeyModalOpen] = useState(false)
+  const [createStreamKeyTitle, setCreateStreamKeyTitle] = useState('')
+  const [createStreamKeyLoading, setCreateStreamKeyLoading] = useState(false)
+  const [createStreamKeyError, setCreateStreamKeyError] = useState('')
+  const [createStreamKeyTargetIdx, setCreateStreamKeyTargetIdx] = useState<number | null>(null)
+
+  const handleCreateStreamKey = async () => {
+    if (!settingsData?.youtubeChannelId) {
+      toast({
+        title: locale === 'ar' ? 'تنبيه' : 'Notice',
+        description: locale === 'ar' ? 'يرجى اختيار قناة يوتيوب أولاً لإنشاء مفتاح بث لها' : 'Please select a YouTube channel first'
+      })
+      return
+    }
+
+    if (!createStreamKeyTitle.trim()) {
+      setCreateStreamKeyError(locale === 'ar' ? 'يرجى إدخال اسم لمفتاح البث' : 'Please enter a stream key name')
+      return
+    }
+
+    setCreateStreamKeyLoading(true)
+    setCreateStreamKeyError('')
+    try {
+      const res = await fetch('/api/youtube/streams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: settingsData.youtubeChannelId,
+          title: createStreamKeyTitle.trim()
+        })
+      })
+      const data = await res.json()
+      if (data.success && data.streamKey) {
+        addLog(locale === 'ar' ? `تم إنشاء مفتاح بث جديد: "${data.title}"` : `Created new stream key: "${data.title}"`)
+        toast({
+          title: locale === 'ar' ? 'تم إنشاء مفتاح البث بنجاح' : 'Stream Key Created',
+          description: locale === 'ar' ? `المفتاح: ${data.streamKey}` : `Key: ${data.streamKey}`
+        })
+
+        // Refresh YouTube stream keys list
+        fetchYtStreamKeys(settingsData.youtubeChannelId, true)
+
+        if (createStreamKeyTargetIdx !== null && createStreamKeyTargetIdx >= 0) {
+          // Assign to playlist item
+          try {
+            const playlistItems = JSON.parse(settingsData.playlistConfig || '[]')
+            if (playlistItems[createStreamKeyTargetIdx]) {
+              playlistItems[createStreamKeyTargetIdx].streamKey = data.streamKey
+              setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(playlistItems) } : p)
+            }
+          } catch {}
+        } else {
+          // Assign to main slot stream key
+          setSettingsData(p => p ? { ...p, streamKey: data.streamKey } : p)
+        }
+
+        setCreateStreamKeyModalOpen(false)
+        setCreateStreamKeyTitle('')
+      } else {
+        setCreateStreamKeyError(data.error || (locale === 'ar' ? 'فشل إنشاء مفتاح البث' : 'Failed to create stream key'))
+      }
+    } catch (e: any) {
+      console.error(e)
+      setCreateStreamKeyError(locale === 'ar' ? 'حدث خطأ في الاتصال بالسيرفر' : 'Network error')
+    } finally {
+      setCreateStreamKeyLoading(false)
+    }
+  }
   const [storageInfo, setStorageInfo] = useState<{ used: string; free: string; total: string; percent: number } | null>(null)
   const [locale, setLocaleState] = useState<Locale>('en')
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -4384,18 +4454,33 @@ export default function Home() {
                                 <span>🔑</span>
                                 {locale === 'ar' ? 'مفتاح البث المخصص' : 'Custom Stream Key'}
                               </label>
-                              <button
-                                type="button"
-                                onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
-                                disabled={ytStreamKeysLoading}
-                                className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
-                              >
-                                {ytStreamKeysLoading ? (
-                                  <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
-                                ) : (
-                                  <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
-                                )}
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCreateStreamKeyTargetIdx(null)
+                                    setCreateStreamKeyTitle('')
+                                    setCreateStreamKeyError('')
+                                    setCreateStreamKeyModalOpen(true)
+                                  }}
+                                  className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-500 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 rounded px-2 py-1 transition-all font-bold"
+                                >
+                                  <Plus className="w-3 h-3 text-amber-500" />
+                                  {locale === 'ar' ? 'إنشاء مفتاح جديد' : 'Create Key'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
+                                  disabled={ytStreamKeysLoading}
+                                  className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
+                                >
+                                  {ytStreamKeysLoading ? (
+                                    <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
+                                  ) : (
+                                    <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
+                                  )}
+                                </button>
+                              </div>
                             </div>
                             <p className="text-xs text-muted-foreground mb-2">
                               {locale === 'ar'
@@ -4686,6 +4771,68 @@ export default function Home() {
                                                 <X className="w-3.5 h-3.5" />
                                               </Button>
                                             )}
+                                          </div>
+                                        </div>
+
+                                        {/* Stream Key Selection */}
+                                        <div className="flex flex-col gap-1.5 sm:col-span-2 border-t border-border/40 pt-2 mt-1">
+                                          <div className="flex justify-between items-center flex-wrap gap-1">
+                                            <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                              <Key className="w-3 h-3 text-amber-500" />
+                                              {locale === 'ar' ? 'مفتاح البث المخصص لهذا الفيديو:' : 'Stream Key for this video:'}
+                                            </label>
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              className="h-5 px-1.5 text-[10px] font-bold text-amber-600 border-amber-500/30 hover:bg-amber-500/10 gap-1"
+                                              onClick={() => {
+                                                setCreateStreamKeyTargetIdx(idx)
+                                                setCreateStreamKeyTitle('')
+                                                setCreateStreamKeyError('')
+                                                setCreateStreamKeyModalOpen(true)
+                                              }}
+                                              title={locale === 'ar' ? 'إنشاء مفتاح بث جديد وتسميته' : 'Create new named stream key'}
+                                            >
+                                              <Plus className="w-3 h-3 text-amber-500" />
+                                              {locale === 'ar' ? 'إنشاء مفتاح بث جديد وتسميته' : 'Create & Name Stream Key'}
+                                            </Button>
+                                          </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {/* Select Existing Key from YouTube Channel */}
+                                            <select
+                                              value={item.streamKey || ''}
+                                              onChange={(e) => {
+                                                const newPlaylist = [...playlistItems]
+                                                newPlaylist[idx].streamKey = e.target.value || null
+                                                setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                              }}
+                                              className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                                            >
+                                              <option value="">
+                                                {ytStreamKeys.length === 0
+                                                  ? (locale === 'ar' ? '— افتراضي السلوت / أدخل يدوياً —' : '— Slot Default —')
+                                                  : (locale === 'ar' ? '— اختر مفتاح من القناة / افتراضي —' : '— Choose Channel Key —')}
+                                              </option>
+                                              {ytStreamKeys.map(k => (
+                                                <option key={k.id} value={k.streamKey}>
+                                                  🔑 {k.title}
+                                                </option>
+                                              ))}
+                                            </select>
+
+                                            {/* Manual Stream Key Input */}
+                                            <input
+                                              type="text"
+                                              value={item.streamKey || ''}
+                                              placeholder={locale === 'ar' ? 'أو اكتب مفتاح البث يدوياً...' : 'Or enter stream key manually...'}
+                                              onChange={(e) => {
+                                                const newPlaylist = [...playlistItems]
+                                                newPlaylist[idx].streamKey = e.target.value || null
+                                                setSettingsData(p => p ? { ...p, playlistConfig: JSON.stringify(newPlaylist) } : p)
+                                              }}
+                                              className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring font-mono"
+                                            />
                                           </div>
                                         </div>
                                       </div>
@@ -6517,6 +6664,68 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Create Stream Key Dialog */}
+      <Dialog open={createStreamKeyModalOpen} onOpenChange={setCreateStreamKeyModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 font-bold">
+              <Key className="w-5 h-5 text-amber-500" />
+              {locale === 'ar' ? 'إنشاء مفتاح بث جديد وتسميته' : 'Create New Named Stream Key'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {locale === 'ar'
+                ? 'أدخل اسماً مميزاً لمفتاح البث لإنشائه فوراً على يوتيوب وتعيينه للفيديو المحدد.'
+                : 'Enter a custom name for the stream key to generate it on YouTube.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground">
+                {locale === 'ar' ? 'اسم مفتاح البث (مثل اسم السورة أو القناة):' : 'Stream Key Name (e.g. Surah Name):'}
+              </label>
+              <input
+                type="text"
+                value={createStreamKeyTitle}
+                onChange={(e) => setCreateStreamKeyTitle(e.target.value)}
+                placeholder={locale === 'ar' ? 'مثال: سورة البقرة - بث مباشر مخصص' : 'e.g. Surah Al-Baqarah Custom Key'}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                autoFocus
+              />
+            </div>
+
+            {createStreamKeyError && (
+              <p className="text-xs text-red-500 font-semibold p-2 bg-red-500/10 rounded-lg">
+                ⚠️ {createStreamKeyError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateStreamKeyModalOpen(false)}
+              disabled={createStreamKeyLoading}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-600 hover:bg-amber-500 text-white font-bold gap-1"
+              onClick={handleCreateStreamKey}
+              disabled={createStreamKeyLoading || !createStreamKeyTitle.trim()}
+            >
+              {createStreamKeyLoading ? (
+                <><span className="animate-spin inline-block mr-1">⟳</span> {locale === 'ar' ? 'جارٍ الإنشاء على يوتيوب...' : 'Creating on YouTube...'}</>
+              ) : (
+                <><Plus className="w-4 h-4" /> {locale === 'ar' ? 'إنشاء المفتاح' : 'Create Key'}</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
