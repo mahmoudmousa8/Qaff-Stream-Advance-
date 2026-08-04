@@ -10,10 +10,55 @@
 
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
-import { setupYoutubeLiveStream, stopYoutubeLiveStream } from '@/lib/youtube-helper'
+import { setupYoutubeLiveStream, stopYoutubeLiveStream, stopAllActiveBroadcastsForChannel } from '@/lib/youtube-helper'
 import { getCairoNowFields, getCairoTargetDate, getAbsoluteDateFromCairoFields } from '@/lib/timezone-helper'
 import fs from 'fs'
 import path from 'path'
+
+// Helper to fully stop a slot and all its sub-slots (stream manager & YouTube)
+export async function stopSlotStreamFully(slot: any, logs?: string[]) {
+  const subSlotsToStop: number[] = [slot.slotIndex]
+  if (slot.playlistLoopEnabled && slot.playlistConfig) {
+    try {
+      const items = JSON.parse(slot.playlistConfig)
+      for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+        const subSlotIndex = itemIdx === 0 ? slot.slotIndex : (10000 + slot.slotIndex * 100 + itemIdx)
+        subSlotsToStop.push(subSlotIndex)
+      }
+    } catch {}
+  }
+
+  // 1. Stop all stream manager processes for sub-slots
+  for (const sIdx of subSlotsToStop) {
+    try {
+      await fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slotIndex: sIdx })
+      }, 5000)
+    } catch {}
+  }
+
+  // 2. Stop all YouTube live broadcasts for this slot & channel
+  if (slot.youtubeChannelId && slot.outputType === 'youtube') {
+    try {
+      if (slot.youtubeBroadcastId) {
+        const bcIds = slot.youtubeBroadcastId.split(',').map((s: string) => s.trim()).filter(Boolean)
+        for (const bId of bcIds) {
+          try {
+            await stopYoutubeLiveStream(slot.youtubeChannelId, bId)
+            if (logs) logs.push(`Slot ${slot.slotIndex + 1}: Stopped YouTube broadcast ${bId}`)
+          } catch (ytErr: any) {
+            if (logs) logs.push(`Slot ${slot.slotIndex + 1}: YouTube broadcast stop error: ${ytErr.message}`)
+          }
+        }
+      }
+      await stopAllActiveBroadcastsForChannel(slot.youtubeChannelId)
+    } catch (e: any) {
+      console.warn(`[Scheduler] Full YouTube stop error for slot ${slot.slotIndex + 1}:`, e.message)
+    }
+  }
+}
 
 // Tracks consecutive missed ticks per slot
 const missCounters = new Map<string, number>()
@@ -1062,15 +1107,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       if (isNaturalSchedStop) {
         logs.push(`Slot ${slot.slotIndex + 1}: Ended naturally near/after schedStop. Transitioning to stopped and rescheduling.`)
         
-        // Terminate YouTube Live broadcast cleanly
-        if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
-          try {
-            await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube broadcast ended cleanly (natural end)`)
-          } catch (ytErr: any) {
-            logs.push(`Slot ${slot.slotIndex + 1}: YouTube stop failed (natural end): ${ytErr.message}`)
-          }
-        }
+        // Terminate all YouTube Live broadcasts & stream manager processes cleanly
+        await stopSlotStreamFully(slot, logs)
 
         // Recalculate next start/stop for daily/weekly/hourly slots
         let nextStartTime = slot.schedStart || ''
@@ -1279,18 +1317,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             logs.push(`Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly until next interval.`)
             console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered at ${elapsedMins.toFixed(1)}m (target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly.`)
 
-            // Stop stream manager process
-            fetchWithTimeout(`${STREAM_MANAGER_URL}/stop`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ slotIndex: slot.slotIndex })
-            }, 5000).catch(err => console.error(`[Scheduler] Stop error during playlist pre-stop:`, err))
-
-            // Stop YouTube broadcast cleanly
-            if (slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
-              stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
-                .catch(ytErr => console.error(`[Scheduler] YouTube stop error during playlist pre-stop:`, ytErr.message))
-            }
+            stopSlotStreamFully(slot)
+              .catch(err => console.error(`[Scheduler] Stop error during playlist pre-stop:`, err))
           }
         }
       } catch (e: any) {

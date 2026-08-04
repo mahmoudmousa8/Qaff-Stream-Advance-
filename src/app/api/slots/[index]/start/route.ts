@@ -315,14 +315,20 @@ export async function POST(
                 itemStreamKey = yt.streamKey || itemStreamKey
                 itemRtmpServer = yt.rtmpServer || itemRtmpServer
                 itemBroadcastId = yt.broadcastId || ''
+                
+                // Update item in playlist array so stream key is persisted in DB
+                item.streamKey = itemStreamKey
+                item.broadcastId = itemBroadcastId
+
                 if (itemBroadcastId) {
                   allBroadcastIds.push(itemBroadcastId)
                 }
                 if (itemIdx === 0) {
                   firstStreamKey = itemStreamKey || firstStreamKey
                 }
+                console.log(`[Start Route] Slot ${slotIndex + 1} - Playlist Item #${itemIdx + 1} (${itemTitle}): StreamKey=${itemStreamKey?.substring(0, 6)}****, BroadcastId=${itemBroadcastId}`)
               } catch (ytErr: any) {
-                console.error(`[Start Route] YT setup failed for playlist item #${itemIdx + 1}:`, ytErr.message)
+                console.error(`[Start Route] Slot ${slotIndex + 1} - YT setup failed for playlist item #${itemIdx + 1} (${itemTitle}):`, ytErr.message)
               }
             }
 
@@ -342,8 +348,9 @@ export async function POST(
                   filePath: resolvedInputPath
                 })
               })
+              console.log(`[Start Route] Slot ${slotIndex + 1} - Stream manager started process for subSlot ${subSlotIndex} (Item #${itemIdx + 1})`)
             } catch (e: any) {
-              console.error(`[Start Route] Stream manager start failed for item #${itemIdx + 1}:`, e.message)
+              console.error(`[Start Route] Slot ${slotIndex + 1} - Stream manager start failed for item #${itemIdx + 1}:`, e.message)
             }
           }
 
@@ -354,6 +361,7 @@ export async function POST(
               isScheduled: false,
               status: 'Streaming',
               streamKey: firstStreamKey,
+              playlistConfig: JSON.stringify(playlistItems),
               youtubeBroadcastId: allBroadcastIds.join(',')
             }
           })

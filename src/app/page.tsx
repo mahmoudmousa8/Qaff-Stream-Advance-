@@ -629,6 +629,7 @@ export default function Home() {
       setCleaningChannelId(null)
     }
   }
+  const [activeStreamSlots, setActiveStreamSlots] = useState<number[]>([])
   const [storageInfo, setStorageInfo] = useState<{ used: string; free: string; total: string; percent: number } | null>(null)
   const [locale, setLocaleState] = useState<Locale>('en')
   const [isDarkMode, setIsDarkMode] = useState(false)
@@ -1284,7 +1285,16 @@ export default function Home() {
     fetchSlots(); fetchLogs(); fetchStats(); fetchStorage(); fetchTunnelUrl()
 
     const statusInterval = setInterval(async () => {
-      try { await fetch('/api/status'); fetchSlots(); fetchStats() } catch { }
+      try {
+        const res = await fetch('/api/status')
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data.activeStreams)) {
+            setActiveStreamSlots(data.activeStreams)
+          }
+        }
+        fetchSlots(); fetchStats()
+      } catch { }
     }, 5000)
 
     const uiRefreshInterval = setInterval(async () => {
@@ -4631,10 +4641,30 @@ export default function Home() {
                                 {playlistItems.map((item: any, idx: number) => {
                                   const videoName = item.videoPath.split(/[/\\]/).pop() || item.videoPath
                                   const thumbName = item.thumbnailPath ? (item.thumbnailPath.split(/[/\\]/).pop() || item.thumbnailPath) : null
+                                  
+                                  const slotIdx = settingsSlot ?? 0
+                                  const currentSlotObj = slots.find(s => s.slotIndex === slotIdx)
+                                  const subSlotIdx = idx === 0 ? slotIdx : (10000 + slotIdx * 100 + idx)
+                                  const isItemStreaming = (currentSlotObj?.isRunning ?? false) && (activeStreamSlots.includes(subSlotIdx) || activeStreamSlots.includes(slotIdx))
+
                                   return (
                                     <div key={idx} className="flex flex-col gap-2 p-3 bg-card border border-border rounded-lg shadow-sm hover:border-border/80 transition-colors">
                                       <div className="flex justify-between items-center gap-2">
                                         <span className="text-xs font-bold text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">#{idx + 1}</span>
+                                        
+                                        {/* Live Status Indicator Badge */}
+                                        {isItemStreaming ? (
+                                          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full shrink-0 animate-pulse">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                                            {locale === 'ar' ? '((•)) بث مباشر نشط' : '((•)) Live Streaming'}
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted/50 border border-border/50 px-2 py-0.5 rounded-full shrink-0">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                            {locale === 'ar' ? 'جاهز / متوقف' : 'Ready / Stopped'}
+                                          </span>
+                                        )}
+
                                         <span className="text-xs font-bold truncate flex-1 min-w-0" title={item.videoPath}>
                                           {videoName}
                                         </span>
@@ -4693,6 +4723,21 @@ export default function Home() {
                                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 border-t border-border/50 pt-2">
                                         {/* Title Selection */}
                                         <div className="flex flex-col gap-1">
+                                          <div className="flex justify-between items-center">
+                                            <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                                              <Key className="w-3 h-3 text-amber-500" />
+                                              {locale === 'ar' ? 'مفتاح البث المخصص لهذا الفيديو:' : 'Stream Key for this video:'}
+                                            </label>
+                                            {item.streamKey ? (
+                                              <span className="text-[10px] font-bold text-emerald-400 font-mono bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                                                {locale === 'ar' ? '🔑 المفتاح المربوط:' : '🔑 Linked Key:'} {item.streamKey.substring(0, 6)}****
+                                              </span>
+                                            ) : (
+                                              <span className="text-[10px] font-medium text-amber-400 font-mono bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+                                                {locale === 'ar' ? '⚡ إنشاء وتحديث تلقائي فور الإطلاق' : '⚡ Auto-generated & saved on start'}
+                                              </span>
+                                            )}
+                                          </div>
                                           <div className="flex justify-between items-center">
                                             <label className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
                                               <Shuffle className="w-3 h-3 text-pink-500" />
