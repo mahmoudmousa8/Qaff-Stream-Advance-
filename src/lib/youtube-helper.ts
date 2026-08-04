@@ -348,7 +348,7 @@ export async function setupYoutubeLiveStream(
           title: truncatedTitle,
           description: truncatedDesc,
           categoryId: '10', // 10 = Music (موسيقى)
-          defaultLanguage: 'en', // English for Title/Description
+          defaultLanguage: 'ar', // Arabic for Title/Description
           defaultAudioLanguage: 'ar' // Arabic for Stream Audio
         }
       })
