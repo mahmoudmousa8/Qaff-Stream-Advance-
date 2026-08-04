@@ -59,10 +59,23 @@ export async function POST(
       console.error('Failed to connect to stream manager:', error)
     }
 
-    if (slot.isRunning && slot.youtubeChannelId && slot.youtubeBroadcastId && slot.outputType === 'youtube') {
+    if (slot.youtubeChannelId && slot.outputType === 'youtube') {
       try {
-        const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
-        await stopYoutubeLiveStream(slot.youtubeChannelId, slot.youtubeBroadcastId)
+        const { stopYoutubeLiveStream, stopAllActiveBroadcastsForChannel } = await import('@/lib/youtube-helper')
+        
+        if (slot.youtubeBroadcastId) {
+          const bcIds = slot.youtubeBroadcastId.split(',').map(s => s.trim()).filter(Boolean)
+          for (const bId of bcIds) {
+            try {
+              await stopYoutubeLiveStream(slot.youtubeChannelId, bId)
+            } catch (ytErr: any) {
+              console.error(`[Stop Route] YouTube stop failed for broadcast ${bId}:`, ytErr.message)
+            }
+          }
+        }
+        
+        // Also cleanup any remaining active broadcasts on YouTube for this channel
+        await stopAllActiveBroadcastsForChannel(slot.youtubeChannelId)
       } catch (ytErr: any) {
         console.error(`[Stop Route] YouTube stop failed:`, ytErr.message)
       }

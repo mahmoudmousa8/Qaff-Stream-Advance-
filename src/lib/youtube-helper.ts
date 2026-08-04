@@ -134,7 +134,8 @@ export async function setupYoutubeLiveStream(
   description: string,
   thumbnailPath?: string,
   preferredStreamKey?: string,
-  scheduledStartTimeStr?: string
+  scheduledStartTimeStr?: string,
+  excludeStreamKeys?: Set<string>
 ): Promise<{ streamKey: string; rtmpServer: string; broadcastId: string }> {
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
@@ -162,23 +163,19 @@ export async function setupYoutubeLiveStream(
   if (streamsResponse.ok) {
     const streamsData = await streamsResponse.json()
     
-    if (preferredStreamKey) {
+    if (preferredStreamKey && (!excludeStreamKeys || !excludeStreamKeys.has(preferredStreamKey))) {
       // User explicitly chose a stream key — match it strictly by streamName
       selectedStream = streamsData.items?.find((item: any) => 
         item.cdn?.ingestionInfo?.streamName === preferredStreamKey
       )
-      if (!selectedStream) {
-        throw new Error(
-          `مفتاح البث المحدد "${preferredStreamKey.substring(0, 6)}****" غير موجود أو غير نشط على قناة يوتيوب هذه. ` +
-          `تحقق من مفتاح البث المختار في الإعدادات المتقدمة.`
-        )
-      }
-    } else {
-      // No preferred key — auto-select: prefer key named "default", otherwise first available
-      selectedStream = streamsData.items?.find((item: any) => 
-        item.snippet?.title?.toLowerCase().includes('default') || 
-        item.cdn?.ingestionInfo?.streamName
-      ) || streamsData.items?.[0]
+    }
+
+    if (!selectedStream) {
+      // Find an available stream key that is NOT in excludeStreamKeys
+      selectedStream = streamsData.items?.find((item: any) => {
+        const key = item.cdn?.ingestionInfo?.streamName
+        return key && (!excludeStreamKeys || !excludeStreamKeys.has(key))
+      })
     }
 
     if (selectedStream) {
@@ -202,7 +199,8 @@ export async function setupYoutubeLiveStream(
 
   // Create one if we couldn't list or find any
   if (!streamId || !streamKey) {
-    console.log('[YouTube Helper] No active stream key found. Creating a new Default stream key...')
+    const keyTitle = title ? `Key - ${title.substring(0, 30)}` : `Stream Key ${Date.now()}`
+    console.log(`[YouTube Helper] No unused stream key found. Creating a new stream key "${keyTitle}"...`)
     const createStreamResponse = await fetchWithTimeout('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
       method: 'POST',
       headers: {
@@ -210,7 +208,7 @@ export async function setupYoutubeLiveStream(
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        snippet: { title: 'Default Stream Key' },
+        snippet: { title: keyTitle },
         cdn: {
           frameRate: 'variable',
           ingestionType: 'rtmp',
@@ -237,6 +235,10 @@ export async function setupYoutubeLiveStream(
     streamKey = createdStream.cdn?.ingestionInfo?.streamName || ''
     rtmpServer = createdStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
     console.log(`[YouTube Helper] Successfully created new YouTube Live Stream key: ${streamKey.substring(0, 4)}****`)
+  }
+
+  if (excludeStreamKeys && streamKey) {
+    excludeStreamKeys.add(streamKey)
   }
 
   // 3.5 Cleanup any existing active/upcoming broadcasts bound to this streamId
@@ -620,5 +622,28 @@ export async function triggerLiveAdBreak(channelId: string, broadcastId: string)
   } catch (err: any) {
     console.warn(`[YouTube Helper] Failed to trigger live ad break:`, err.message)
     return false
+  }
+}
+
+/**
+ * Fetches all currently active live broadcasts for a YouTube channel and transitions them to complete.
+ */
+export async function stopAllActiveBroadcastsForChannel(channelId: string) {
+  try {
+    const accessToken = await refreshAccessToken(channelId)
+    const url = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=active&part=id&maxResults=50`
+    const res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } }, 5000)
+    if (res.ok) {
+      const data = await res.json()
+      const items: any[] = data.items || []
+      for (const item of items) {
+        if (item.id) {
+          console.log(`[YouTube Helper] Stopping active broadcast ${item.id} for channel ${channelId}...`)
+          await stopYoutubeLiveStream(channelId, item.id)
+        }
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[YouTube Helper] Error stopping active broadcasts for channel:`, e.message)
   }
 }

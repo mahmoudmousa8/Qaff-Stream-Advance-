@@ -238,8 +238,9 @@ export async function POST(
           const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
           const { resolveThumbnailFileFromFolder, resolveVideoFileFromFolder, activeThumbnails, activeMainVideos } = await import('@/lib/run-scheduler')
           
-          let firstBroadcastId = ''
           let firstStreamKey = slot.streamKey
+          const allBroadcastIds: string[] = []
+          const usedStreamKeys = new Set<string>()
 
           // Map to store pre-shuffled title/description pairs per list for random non-repeating selection
           const listShuffledPairsMap = new Map<string, any[]>()
@@ -296,7 +297,7 @@ export async function POST(
             }
 
             // Stream Key & RTMP
-            let itemStreamKey = (item.streamKey && item.streamKey.trim() !== '') ? item.streamKey.trim() : slot.streamKey
+            let itemStreamKey = (item.streamKey && item.streamKey.trim() !== '') ? item.streamKey.trim() : undefined
             let itemRtmpServer = slot.rtmpServer
             let itemBroadcastId = ''
 
@@ -307,14 +308,18 @@ export async function POST(
                   itemTitle,
                   itemDesc,
                   itemThumb,
-                  itemStreamKey
+                  itemStreamKey,
+                  undefined,
+                  usedStreamKeys
                 )
                 itemStreamKey = yt.streamKey || itemStreamKey
                 itemRtmpServer = yt.rtmpServer || itemRtmpServer
                 itemBroadcastId = yt.broadcastId || ''
+                if (itemBroadcastId) {
+                  allBroadcastIds.push(itemBroadcastId)
+                }
                 if (itemIdx === 0) {
-                  firstBroadcastId = itemBroadcastId
-                  firstStreamKey = itemStreamKey
+                  firstStreamKey = itemStreamKey || firstStreamKey
                 }
               } catch (ytErr: any) {
                 console.error(`[Start Route] YT setup failed for playlist item #${itemIdx + 1}:`, ytErr.message)
@@ -347,9 +352,8 @@ export async function POST(
             data: {
               isRunning: true,
               isScheduled: false,
-              status: 'Streaming',
               streamKey: firstStreamKey,
-              youtubeBroadcastId: firstBroadcastId
+              youtubeBroadcastId: allBroadcastIds.join(',')
             }
           })
 
