@@ -1331,11 +1331,13 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               where: { slotIndex: slot.slotIndex },
               data: {
                 lastVideoSwitchTime: now.toISOString(),
-                status: 'Starting'
+                status: 'Starting',
+                isRunning: true
               }
             })
             slot.lastVideoSwitchTime = now.toISOString()
             slot.status = 'Starting'
+            slot.isRunning = true
 
             // Re-launch all streams in group together with new random titles
             launchPlaylistGroupBatch(slot.slotIndex)

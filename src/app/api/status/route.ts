@@ -41,8 +41,8 @@ export async function GET() {
 
             // Fix slots that DB says are running but stream-manager says they are not
             for (const dbSlot of dbRunningSlots) {
-                if (dbSlot.status === 'PreStop') {
-                    // Skip reconciliation for playlist loops waiting in the pre-stop window
+                if (dbSlot.status === 'PreStop' || dbSlot.status === 'Starting') {
+                    // Skip reconciliation for playlist loops waiting in pre-stop or currently starting batch!
                     continue
                 }
                 
