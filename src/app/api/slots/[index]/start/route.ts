@@ -128,7 +128,7 @@ export async function POST(
       where: { slotIndex },
       data: {
         status: 'Starting',
-        isRunning: false,
+        isRunning: true,
         isScheduled: false,
         manuallyStopped: false,
         schedStart: updatedSchedStart,

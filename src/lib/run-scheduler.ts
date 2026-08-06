@@ -698,15 +698,15 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
 }
 
 export function getCycleRandomIntervalMins(slotIndex: number, lastSwitchTime: Date, baseIntervalMins: number): number {
-  let maxJitterMins = 0.75 // ±45 seconds for 10m
+  let maxJitterMins = 0.5 // ±30 seconds for 10m (9.5m to 10.5m)
   if (baseIntervalMins <= 10) {
-    maxJitterMins = 0.75 // ±45 seconds (9.25m to 10.75m)
+    maxJitterMins = 0.5 // ±30 seconds (9.5m to 10.5m)
   } else if (baseIntervalMins <= 15) {
-    maxJitterMins = 1.0 // ±1 minute
+    maxJitterMins = 0.5 // ±30 seconds (14.5m to 15.5m)
   } else if (baseIntervalMins <= 30) {
-    maxJitterMins = 1.5 // ±1.5 minutes
+    maxJitterMins = 1.0 // ±1.0 minute (29.0m to 31.0m)
   } else {
-    maxJitterMins = 3.0 // ±3 minutes
+    maxJitterMins = 2.0 // ±2.0 minutes for 1h+
   }
 
   const seed = (slotIndex + 1) * 77777 + Math.floor(lastSwitchTime.getTime() / 60000)
@@ -716,29 +716,32 @@ export function getCycleRandomIntervalMins(slotIndex: number, lastSwitchTime: Da
   return Math.max(1.0, baseIntervalMins + jitterMins)
 }
 
-export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, intervalMins: number): number {
-  let baseStopOffsetMins = 2 // Stop ~2 minutes before interval
-  let maxJitterMins = 0.5 // ±30 seconds
+export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, baseIntervalMins: number): number {
+  let baseTargetMins = 8.0 // Target 8.0 minutes for 10m cycle
+  let maxJitterMins = 1.0  // ±1.0 minute (7.0m to 9.0m)
 
-  if (intervalMins <= 10) {
-    baseStopOffsetMins = 2 // Stop ~2 minutes before (run for ~8 mins)
-    maxJitterMins = 0.5 // ±30 seconds (7.5m to 8.5m)
-  } else if (intervalMins <= 15) {
-    baseStopOffsetMins = 3
-    maxJitterMins = 0.75
-  } else if (intervalMins <= 30) {
-    baseStopOffsetMins = 4
-    maxJitterMins = 1.0
+  if (baseIntervalMins <= 10) {
+    baseTargetMins = 8.0 // Pre-stop around 8.0 minutes
+    maxJitterMins = 1.0  // ±1.0 minute (7.0m to 9.0m)
+  } else if (baseIntervalMins <= 15) {
+    baseTargetMins = 12.0 // Pre-stop around 12.0 minutes
+    maxJitterMins = 1.0   // ±1.0 minute (11.0m to 13.0m)
+  } else if (baseIntervalMins <= 30) {
+    baseTargetMins = 25.0 // Pre-stop around 25.0 minutes
+    maxJitterMins = 2.0   // ±2.0 minutes (23.0m to 27.0m)
+  } else if (baseIntervalMins <= 60) {
+    baseTargetMins = 53.0 // Pre-stop around 53.0 minutes
+    maxJitterMins = 3.0   // ±3.0 minutes (50.0m to 56.0m)
   } else {
-    baseStopOffsetMins = 7
-    maxJitterMins = 2.0
+    baseTargetMins = baseIntervalMins * 0.88 // 88% of interval
+    maxJitterMins = 5.0
   }
 
   const seed = (slotIndex + 1) * 100000 + Math.floor(lastSwitchTime.getTime() / 60000)
   const x = Math.sin(seed) * 10000
   const randomFactor = x - Math.floor(x)
   const jitterMins = (randomFactor * (maxJitterMins * 2)) - maxJitterMins
-  const stopTarget = Math.max(0.5, (intervalMins - baseStopOffsetMins) + jitterMins)
+  const stopTarget = Math.max(1.0, baseTargetMins + jitterMins)
   return stopTarget
 }
 
@@ -1344,7 +1347,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         else if (slot.repeat12h) baseIntervalMins = 720
 
         const randomizedIntervalMins = getCycleRandomIntervalMins(slot.slotIndex, lastSwitch, baseIntervalMins)
-        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, randomizedIntervalMins)
+        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, baseIntervalMins)
 
         if (elapsedMins >= randomizedIntervalMins) {
           logs.push(`Slot ${slot.slotIndex + 1}: Loop interval reached (${elapsedMins.toFixed(1)}m / target ${randomizedIntervalMins.toFixed(1)}m randomized). Restarting stream with new random title!`)
