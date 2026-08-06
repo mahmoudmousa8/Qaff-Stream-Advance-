@@ -1313,7 +1313,10 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     const isCyclic = slot.playlistLoopEnabled || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h || slot.hourly || slot.daily
     if (slot.isRunning && isCyclic) {
       try {
-        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+        const parsedSchedStart = slot.schedStart ? parseScheduleTime(slot.schedStart) : null
+        const lastSwitch = slot.lastVideoSwitchTime 
+          ? new Date(slot.lastVideoSwitchTime) 
+          : (parsedSchedStart ? getCairoTargetDate(parsedSchedStart, now) : new Date(slot.createdAt))
         const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
         
         let intervalMins = slot.loopIntervalMins || 60

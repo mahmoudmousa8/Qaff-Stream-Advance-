@@ -269,6 +269,7 @@ export async function POST(
           isRunning: true,
           isScheduled: false,
           status: 'Streaming',
+          lastVideoSwitchTime: new Date().toISOString(),
           streamKey: finalStreamKey,
           rtmpServer: finalRtmpServer,
           youtubeBroadcastId: youtubeBroadcastId
