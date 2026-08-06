@@ -140,12 +140,11 @@ export async function setupYoutubeLiveStream(
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
 
-  // 2. Scheduled Start time (must be in the future to avoid Google 400 Bad Request error)
-  let scheduledStartTime = scheduledStartTimeStr || new Date().toISOString()
+  // 2. Scheduled Start time
+  let scheduledStartTime = scheduledStartTimeStr || new Date(Date.now() + 5 * 1000).toISOString()
   const parsedTime = new Date(scheduledStartTime).getTime()
-  // If parsing failed, or it is in the past, or less than 60 seconds in the future, push to 2 minutes in the future
-  if (isNaN(parsedTime) || parsedTime < Date.now() + 60 * 1000) {
-    scheduledStartTime = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+  if (isNaN(parsedTime) || parsedTime < Date.now()) {
+    scheduledStartTime = new Date(Date.now() + 5 * 1000).toISOString()
   }
   console.log(`[YouTube Helper] Scheduling live broadcast start time: ${scheduledStartTime}`)
 

@@ -256,11 +256,11 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     args: [
       '-re',
       '-stream_loop', '-1',
-      '-fflags', '+genpts',
+      '-fflags', '+genpts+igndts+discardcorrupt',
+      '-avoid_negative_ts', 'make_zero',
       '-i', filePath,
       '-c', 'copy',
-      '-avoid_negative_ts', 'make_zero',
-      '-max_muxing_queue_size', '1024',
+      '-max_muxing_queue_size', '2048',
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
