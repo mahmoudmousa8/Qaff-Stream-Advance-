@@ -162,15 +162,16 @@ export async function setupYoutubeLiveStream(
   if (streamsResponse.ok) {
     const streamsData = await streamsResponse.json()
     
-    if (preferredStreamKey && (!excludeStreamKeys || !excludeStreamKeys.has(preferredStreamKey))) {
-      // User explicitly chose a stream key — match it strictly by streamName
+    if (preferredStreamKey && preferredStreamKey.trim() !== '') {
+      const cleanKey = preferredStreamKey.trim()
       selectedStream = streamsData.items?.find((item: any) => 
-        item.cdn?.ingestionInfo?.streamName === preferredStreamKey
+        item.cdn?.ingestionInfo?.streamName?.trim() === cleanKey
       )
-    }
-
-    if (!selectedStream) {
-      // Find an available stream key that is NOT in excludeStreamKeys
+      if (!selectedStream) {
+        throw new Error(`تعذّر العثور على مفتاح البث المحدّد (${cleanKey.substring(0, 6)}...) في حساب يوتيوب. يرجى التحديث وإعادة اختيار مفتاح البث من الإعدادات.`)
+      }
+    } else {
+      // If no preferredStreamKey set, find an available unallocated stream key
       selectedStream = streamsData.items?.find((item: any) => {
         const key = item.cdn?.ingestionInfo?.streamName
         return key && (!excludeStreamKeys || !excludeStreamKeys.has(key))
