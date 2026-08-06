@@ -23,7 +23,7 @@ export async function GET() {
         // Get all slots that think they are running
         const dbRunningSlots = await db.streamSlot.findMany({
             where: { isRunning: true },
-            select: { slotIndex: true, status: true }
+            select: { slotIndex: true, status: true, playlistLoopEnabled: true, playlistConfig: true }
         })
 
         // Get all slots that are in Starting state
@@ -45,7 +45,24 @@ export async function GET() {
                     // Skip reconciliation for playlist loops waiting in the pre-stop window
                     continue
                 }
-                if (!primaryManagerActive.includes(dbSlot.slotIndex) && !primaryManagerQueued.includes(dbSlot.slotIndex)) {
+                
+                let isSlotActive = primaryManagerActive.includes(dbSlot.slotIndex) || primaryManagerQueued.includes(dbSlot.slotIndex)
+                if (!isSlotActive && dbSlot.playlistLoopEnabled && dbSlot.playlistConfig) {
+                    try {
+                        const items = JSON.parse(dbSlot.playlistConfig)
+                        if (Array.isArray(items)) {
+                            for (let idx = 0; idx < items.length; idx++) {
+                                const subIdx = idx === 0 ? dbSlot.slotIndex : (10000 + dbSlot.slotIndex * 100 + idx)
+                                if (managerActiveSlots.includes(subIdx) || managerQueuedSlots.includes(subIdx)) {
+                                    isSlotActive = true
+                                    break
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }
+
+                if (!isSlotActive) {
                     await db.streamSlot.update({
                         where: { slotIndex: dbSlot.slotIndex },
                         data: { isRunning: false, status: 'Stopped' }

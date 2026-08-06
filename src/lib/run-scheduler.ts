@@ -1079,17 +1079,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
-      // A. Check intentional playlist pre-stop window first (NOT a crash!)
+      // A. Check intentional playlist pre-stop window (disabled for multi-video concurrent streams)
       let isPlaylistPreStop = false
-      if (slot.playlistLoopEnabled && slot.playlistConfig) {
-        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
-        const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
-        const intervalMins = slot.loopIntervalMins || 60
-        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
-        if (elapsedMins >= stopTargetMins) {
-          isPlaylistPreStop = true
-        }
-      }
 
       // B. Check natural scheduled stop time (NOT a crash!)
       let isNaturalSchedStop = false
@@ -1300,29 +1291,38 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
-    // ── Playlist Loop Video Switching & Random Pre-Stop ──
-    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig) {
+    // ── Continuous 24/7 Sub-Slot Watchdog & Auto-Recovery ──
+    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig && streamManagerResponded && !isManagerInStartupGrace) {
       try {
-        const playlist = JSON.parse(slot.playlistConfig)
-        if (playlist.length > 0) {
-          const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
-          const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
-          const intervalMins = slot.loopIntervalMins || 60
-          const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+        const items = JSON.parse(slot.playlistConfig)
+        if (Array.isArray(items) && items.length > 0) {
+          for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
+            const item = items[itemIdx]
+            const subSlotIndex = itemIdx === 0 ? slot.slotIndex : (10000 + slot.slotIndex * 100 + itemIdx)
 
-          if (elapsedMins >= intervalMins) {
-            logs.push(`Slot ${slot.slotIndex + 1}: Playlist loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Rotating to next video.`)
-            triggerPlaylistSwitch(slot, playlist, now)
-          } else if (elapsedMins >= stopTargetMins && activeInManager.has(slot.slotIndex)) {
-            logs.push(`Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly until next interval.`)
-            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Playlist random pre-stop triggered at ${elapsedMins.toFixed(1)}m (target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly.`)
+            if (!activeInManager.has(subSlotIndex) && !queuedInManager.has(subSlotIndex)) {
+              console.log(`[Scheduler] Sub-slot ${subSlotIndex} (Item #${itemIdx + 1}: ${item.videoPath}) is not active in manager. Auto-recovering stream...`)
+              logs.push(`Slot ${slot.slotIndex + 1} - Item #${itemIdx + 1}: Auto-recovering sub-slot ${subSlotIndex}`)
 
-            stopSlotStreamFully(slot)
-              .catch(err => console.error(`[Scheduler] Stop error during playlist pre-stop:`, err))
+              const resolvedInputPath = resolveVideoFileFromFolder(item.videoPath, subSlotIndex, 'main')
+              const itemStreamKey = item.streamKey || slot.streamKey
+
+              fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  slotIndex: subSlotIndex,
+                  outputType: slot.outputType,
+                  rtmpServer: slot.rtmpServer,
+                  streamKey: itemStreamKey,
+                  filePath: resolvedInputPath
+                })
+              }, 5000).catch(err => console.error(`[Scheduler] Sub-slot ${subSlotIndex} recovery failed:`, err.message))
+            }
           }
         }
       } catch (e: any) {
-        console.error(`[Scheduler] Playlist loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
+        console.error(`[Scheduler] Sub-slot recovery check failed for slot ${slot.slotIndex + 1}:`, e.message)
       }
     }
 
