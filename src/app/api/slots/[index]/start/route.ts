@@ -136,7 +136,7 @@ export async function POST(
         isSwapped: false,
         lastVideoSwitchTime: new Date().toISOString(),
         filePath: finalInputPath,
-        playlistConfig: null
+        playlistConfig: ""
       }
     })
 
