@@ -252,7 +252,7 @@ export async function setupYoutubeLiveStream(
   console.log(`[YouTube Helper] Creating Live Broadcast: "${truncatedTitle}" (with autoStart & monetization)`)
   const broadcastUrl = 'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails'
   
-  const createPayload = (withMonetization: boolean) => ({
+  const createPayload = {
     snippet: {
       title: truncatedTitle,
       description: truncatedDesc,
@@ -269,10 +269,9 @@ export async function setupYoutubeLiveStream(
       enableAutoStop: false,
       enableDvr: true,
       enableEmbed: true,
-      recordFromStart: true,
-      ...(withMonetization ? { enableMonetization: true } : {})
+      recordFromStart: true
     }
-  })
+  }
 
   let broadcastResponse = await fetchWithTimeout(broadcastUrl, {
     method: 'POST',
@@ -280,21 +279,8 @@ export async function setupYoutubeLiveStream(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify(createPayload(true))
+    body: JSON.stringify(createPayload)
   }, 10000)
-
-  // If monetization flag fails for non-partner channels, fallback without monetization flag
-  if (!broadcastResponse.ok) {
-    console.warn('[YouTube Helper] Creation with enableMonetization failed. Retrying standard broadcast payload...')
-    broadcastResponse = await fetchWithTimeout(broadcastUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(createPayload(false))
-    }, 10000)
-  }
 
   if (!broadcastResponse.ok) {
     const errorText = await broadcastResponse.text()
@@ -522,8 +508,7 @@ export async function setupYoutubeLiveStreamBatch(
           enableAutoStop: false,
           enableDvr: true,
           enableEmbed: true,
-          recordFromStart: true,
-          enableMonetization: true
+          recordFromStart: true
         }
       }
 
@@ -532,15 +517,6 @@ export async function setupYoutubeLiveStreamBatch(
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(createPayload)
       }, 10000)
-
-      if (!broadcastResponse.ok) {
-        delete createPayload.contentDetails.enableMonetization
-        broadcastResponse = await fetchWithTimeout(broadcastUrl, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(createPayload)
-        }, 10000)
-      }
 
       if (!broadcastResponse.ok) {
         throw new Error(`Failed to create broadcast for item ${item.itemIdx + 1}`)
