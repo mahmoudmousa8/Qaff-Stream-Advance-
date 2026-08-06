@@ -697,25 +697,41 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   return result
 }
 
+export function getCycleRandomIntervalMins(slotIndex: number, lastSwitchTime: Date, baseIntervalMins: number): number {
+  let maxJitterMins = 0.75 // ±45 seconds for 10m
+  if (baseIntervalMins <= 10) {
+    maxJitterMins = 0.75 // ±45 seconds (9.25m to 10.75m)
+  } else if (baseIntervalMins <= 15) {
+    maxJitterMins = 1.0 // ±1 minute
+  } else if (baseIntervalMins <= 30) {
+    maxJitterMins = 1.5 // ±1.5 minutes
+  } else {
+    maxJitterMins = 3.0 // ±3 minutes
+  }
+
+  const seed = (slotIndex + 1) * 77777 + Math.floor(lastSwitchTime.getTime() / 60000)
+  const x = Math.sin(seed) * 10000
+  const randomFactor = x - Math.floor(x)
+  const jitterMins = (randomFactor * (maxJitterMins * 2)) - maxJitterMins
+  return Math.max(1.0, baseIntervalMins + jitterMins)
+}
+
 export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, intervalMins: number): number {
-  let baseStopOffsetMins = 7
-  let maxJitterMins = 2.0 // ±2 minutes for 60m+
+  let baseStopOffsetMins = 2 // Stop ~2 minutes before interval
+  let maxJitterMins = 0.5 // ±30 seconds
 
   if (intervalMins <= 10) {
-    baseStopOffsetMins = 2 // Stop 2 minutes before (run for ~8 mins)
-    maxJitterMins = 0.25 // ±15 seconds
+    baseStopOffsetMins = 2 // Stop ~2 minutes before (run for ~8 mins)
+    maxJitterMins = 0.5 // ±30 seconds (7.5m to 8.5m)
   } else if (intervalMins <= 15) {
-    baseStopOffsetMins = 3 // Stop 3 minutes before (run for ~12 mins)
-    maxJitterMins = 0.5 // ±30 seconds
-  } else if (intervalMins <= 20) {
-    baseStopOffsetMins = 4 // Stop 4 minutes before (run for ~16 mins)
-    maxJitterMins = 0.5 // ±30 seconds
+    baseStopOffsetMins = 3
+    maxJitterMins = 0.75
   } else if (intervalMins <= 30) {
-    baseStopOffsetMins = 4 // Stop 4 minutes before (run for ~26 mins)
-    maxJitterMins = 0.5 // ±30 seconds
+    baseStopOffsetMins = 4
+    maxJitterMins = 1.0
   } else {
-    baseStopOffsetMins = 7 // Stop 7 minutes before (run for ~53 mins for 60m)
-    maxJitterMins = 2.0 // ±2 minutes
+    baseStopOffsetMins = 7
+    maxJitterMins = 2.0
   }
 
   const seed = (slotIndex + 1) * 100000 + Math.floor(lastSwitchTime.getTime() / 60000)
@@ -1319,19 +1335,20 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           : (parsedSchedStart ? getCairoTargetDate(parsedSchedStart, now) : new Date(slot.createdAt))
         const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
         
-        let intervalMins = slot.loopIntervalMins || 60
-        if (slot.repeat10m) intervalMins = 10
-        else if (slot.repeat15m) intervalMins = 15
-        else if (slot.repeat30m) intervalMins = 30
-        else if (slot.repeat1h || slot.hourly) intervalMins = 60
-        else if (slot.repeat2h) intervalMins = 120
-        else if (slot.repeat12h) intervalMins = 720
+        let baseIntervalMins = slot.loopIntervalMins || 60
+        if (slot.repeat10m) baseIntervalMins = 10
+        else if (slot.repeat15m) baseIntervalMins = 15
+        else if (slot.repeat30m) baseIntervalMins = 30
+        else if (slot.repeat1h || slot.hourly) baseIntervalMins = 60
+        else if (slot.repeat2h) baseIntervalMins = 120
+        else if (slot.repeat12h) baseIntervalMins = 720
 
-        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+        const randomizedIntervalMins = getCycleRandomIntervalMins(slot.slotIndex, lastSwitch, baseIntervalMins)
+        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, randomizedIntervalMins)
 
-        if (elapsedMins >= intervalMins) {
-          logs.push(`Slot ${slot.slotIndex + 1}: Loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Restarting stream with new random title!`)
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m). Triggering stream restart!`)
+        if (elapsedMins >= randomizedIntervalMins) {
+          logs.push(`Slot ${slot.slotIndex + 1}: Loop interval reached (${elapsedMins.toFixed(1)}m / target ${randomizedIntervalMins.toFixed(1)}m randomized). Restarting stream with new random title!`)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m / target ${randomizedIntervalMins.toFixed(1)}m). Triggering stream restart!`)
           
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
@@ -1349,8 +1366,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           launchPlaylistGroupBatch(slot.slotIndex, staggerDelay)
           continue
         } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Cleanly stopping stream until next interval.`)
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m). Stopping stream cleanly.`)
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m / target ${stopTargetMins.toFixed(1)}m randomized). Cleanly stopping stream until next interval.`)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m / target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly.`)
 
           await stopSlotStreamFully(slot)
           
