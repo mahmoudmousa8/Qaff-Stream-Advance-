@@ -1374,23 +1374,9 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
           await stopSlotStreamFully(slot)
           
-          let nextStartTime = calculateNextRun(
-            slot.schedStart,
-            slot.daily,
-            slot.weekly,
-            slot.hourly,
-            slot.repeat30m,
-            slot.repeat1h,
-            slot.repeat2h,
-            slot.repeat15m,
-            slot.repeat10m,
-            slot.repeat12h
-          )
-          if (!nextStartTime) {
-            const nextDate = new Date(now.getTime() + (baseIntervalMins - elapsedMins) * 60000)
-            const nFields = getCairoNowFields(nextDate)
-            nextStartTime = `${String(nFields.month + 1).padStart(2, '0')}-${String(nFields.day).padStart(2, '0')} ${String(nFields.hour).padStart(2, '0')}:${String(nFields.minute).padStart(2, '0')}`
-          }
+          const nextStartDate = new Date(lastSwitch.getTime() + baseIntervalMins * 60000)
+          const nFields = getCairoNowFields(nextStartDate)
+          const nextStartTime = `${String(nFields.month + 1).padStart(2, '0')}-${String(nFields.day).padStart(2, '0')} ${String(nFields.hour).padStart(2, '0')}:${String(nFields.minute).padStart(2, '0')}`
 
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
