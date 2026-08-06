@@ -1326,6 +1326,17 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             logs.push(`Slot ${slot.slotIndex + 1}: Playlist group loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Restarting ALL ${playlist.length} streams in group together with new random titles!`)
             console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m). Triggering ALL ${playlist.length} streams batch restart!`)
             
+            // IMMEDIATELY update DB state & local variables to prevent rapid 15s re-triggering!
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                lastVideoSwitchTime: now.toISOString(),
+                status: 'Streaming'
+              }
+            })
+            slot.lastVideoSwitchTime = now.toISOString()
+            slot.status = 'Streaming'
+
             // Re-launch all streams in group together with new random titles
             launchPlaylistGroupBatch(slot.slotIndex)
           } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
