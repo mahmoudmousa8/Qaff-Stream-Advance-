@@ -1100,8 +1100,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
-      // A. Check intentional playlist pre-stop window
-      let isPlaylistPreStop = slot.status === 'PreStop'
+      // A. Check intentional playlist pre-stop or starting transition window
+      let isPlaylistPreStop = slot.status === 'PreStop' || slot.status === 'Starting'
 
       // B. Check natural scheduled stop time (NOT a crash!)
       let isNaturalSchedStop = false
