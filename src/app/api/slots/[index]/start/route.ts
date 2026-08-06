@@ -219,7 +219,7 @@ export async function POST(
         console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed:`, ytErr.message)
         await db.streamSlot.update({
           where: { slotIndex },
-          data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+          data: { status: 'Failed', isRunning: false }
         })
         await db.systemLog.create({
           data: { message: `Slot ${slotIndex + 1}: YouTube API Error: ${ytErr.message}` }

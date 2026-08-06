@@ -899,8 +899,12 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
   }
 }
 
-export async function launchPlaylistGroupBatch(slotIndex: number) {
+export async function launchPlaylistGroupBatch(slotIndex: number, delayMs: number = 0) {
   try {
+    if (delayMs > 0) {
+      console.log(`[Scheduler] Delaying batch restart for slot ${slotIndex + 1} by ${delayMs}ms to stagger YouTube API requests...`)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
     console.log(`[Scheduler] Triggering batch start for slot ${slotIndex + 1}...`)
     const res = await fetchWithTimeout(`http://127.0.0.1:3000/api/slots/${slotIndex}/start`, {
       method: 'POST',
@@ -908,15 +912,15 @@ export async function launchPlaylistGroupBatch(slotIndex: number) {
       body: JSON.stringify({ isScheduler: true })
     }, 120000)
     if (res.ok) {
-      console.log(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch successfully restarted.`)
+      console.log(`[Scheduler] Slot ${slotIndex + 1}: Stream restart successful.`)
       await db.systemLog.create({
-        data: { message: `Slot ${slotIndex + 1}: Playlist group batch restarted with new random titles for next interval.` }
+        data: { message: `Slot ${slotIndex + 1}: Stream restarted with new random title for next cycle.` }
       })
     } else {
-      console.error(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch restart returned HTTP ${res.status}`)
+      console.error(`[Scheduler] Slot ${slotIndex + 1}: Stream restart returned HTTP ${res.status}`)
     }
   } catch (e: any) {
-    console.error(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch restart error:`, e.message)
+    console.error(`[Scheduler] Slot ${slotIndex + 1}: Stream restart error:`, e.message)
   }
 }
 
@@ -1338,7 +1342,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           slot.status = 'Starting'
           slot.isRunning = true
 
-          launchPlaylistGroupBatch(slot.slotIndex)
+          const staggerDelay = (slot.slotIndex % 12) * 1500
+          launchPlaylistGroupBatch(slot.slotIndex, staggerDelay)
           continue
         } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
           logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Cleanly stopping stream until next interval.`)
