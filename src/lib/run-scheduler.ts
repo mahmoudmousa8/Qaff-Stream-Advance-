@@ -1368,17 +1368,46 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
           const staggerDelay = (slot.slotIndex % 12) * 1500
           launchPlaylistGroupBatch(slot.slotIndex, staggerDelay)
           continue
-        } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
-          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m / target ${stopTargetMins.toFixed(1)}m randomized). Cleanly stopping stream until next interval.`)
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m / target ${stopTargetMins.toFixed(1)}m). Stopping stream cleanly.`)
+        } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop' && slot.status !== 'Scheduled') {
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m / target ${stopTargetMins.toFixed(1)}m randomized). Cleanly stopping stream and scheduling next cycle!`)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m). Setting up next cycle schedule...`)
 
           await stopSlotStreamFully(slot)
           
+          let nextStartTime = calculateNextRun(
+            slot.schedStart,
+            slot.daily,
+            slot.weekly,
+            slot.hourly,
+            slot.repeat30m,
+            slot.repeat1h,
+            slot.repeat2h,
+            slot.repeat15m,
+            slot.repeat10m,
+            slot.repeat12h
+          )
+          if (!nextStartTime) {
+            const nextDate = new Date(now.getTime() + (baseIntervalMins - elapsedMins) * 60000)
+            const nFields = getCairoNowFields(nextDate)
+            nextStartTime = `${String(nFields.month + 1).padStart(2, '0')}-${String(nFields.day).padStart(2, '0')} ${String(nFields.hour).padStart(2, '0')}:${String(nFields.minute).padStart(2, '0')}`
+          }
+
           await db.streamSlot.update({
             where: { slotIndex: slot.slotIndex },
-            data: { status: 'PreStop', isRunning: true }
+            data: {
+              isRunning: false,
+              isScheduled: true,
+              status: 'Scheduled',
+              schedStart: nextStartTime,
+              nextRunTime: nextStartTime,
+              manuallyStopped: false
+            }
           })
-          slot.status = 'PreStop'
+          slot.status = 'Scheduled'
+          slot.isScheduled = true
+          slot.isRunning = false
+          slot.schedStart = nextStartTime
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Successfully scheduled next cycle to start at ${nextStartTime}`)
         }
       } catch (e: any) {
         console.error(`[Scheduler] Loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
