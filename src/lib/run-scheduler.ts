@@ -997,15 +997,15 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         { isRunning: true },
         // Orphaned daily/weekly/hourly streams: has recurring schedule but got stuck as stopped
         // (e.g. after manual stop, server crash, or schedStop without daily reschedule)
-        { daily: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { weekly: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { hourly: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat15m: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat10m: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat30m: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat1h: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat2h: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
-        { repeat12h: true, isRunning: false, isScheduled: false, schedStart: { not: '' } },
+        { daily: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { weekly: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { hourly: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat15m: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat10m: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat30m: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat1h: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat2h: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
+        { repeat12h: true, isRunning: false, isScheduled: false, manuallyStopped: false, schedStart: { not: '' } },
         // Catch-all: streams that should be running (were not manually stopped)
         {
           manuallyStopped: false,
@@ -1034,15 +1034,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
       // ── Reschedule finished/stopped recurring slots ──
       const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h
-      if (!slot.isScheduled && isRecurring && slot.schedStart) {
-        const parsedStart = parseScheduleTime(slot.schedStart)
-        let shouldReschedule = !slot.manuallyStopped
-        if (parsedStart) {
-          const startDate = getCairoTargetDate(parsedStart, now)
-          if (now >= startDate) {
-            shouldReschedule = true
-          }
-        }
+      if (!slot.isScheduled && isRecurring && slot.schedStart && !slot.manuallyStopped) {
+        let shouldReschedule = true
         
         if (shouldReschedule) {
           console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Rescheduling stopped recurring slot for the next occurrence.`)
