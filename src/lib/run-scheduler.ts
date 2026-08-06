@@ -1305,88 +1305,55 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
-    // ── Multi-Video Playlist Group Hourly Pre-Stop & Batch Restart Loop ──
-    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig) {
+    // ── Single Slot Automated Cycle Loop (Pre-Stop Rest Window & Interval Restart) ──
+    const isCyclic = slot.playlistLoopEnabled || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h || slot.hourly || slot.daily
+    if (slot.isRunning && isCyclic) {
       try {
-        const playlist = JSON.parse(slot.playlistConfig)
-        if (Array.isArray(playlist) && playlist.length > 0) {
-          const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
-          const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
-          const intervalMins = slot.loopIntervalMins || 60
-          const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+        const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+        const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
+        
+        let intervalMins = slot.loopIntervalMins || 60
+        if (slot.repeat10m) intervalMins = 10
+        else if (slot.repeat15m) intervalMins = 15
+        else if (slot.repeat30m) intervalMins = 30
+        else if (slot.repeat1h || slot.hourly) intervalMins = 60
+        else if (slot.repeat2h) intervalMins = 120
+        else if (slot.repeat12h) intervalMins = 720
 
-          if (elapsedMins >= intervalMins) {
-            logs.push(`Slot ${slot.slotIndex + 1}: Playlist group loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Restarting ALL ${playlist.length} streams in group together with new random titles!`)
-            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m). Triggering ALL ${playlist.length} streams batch restart!`)
-            
-            // IMMEDIATELY update DB state & local variables to Starting state to prevent watchdog collision!
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: {
-                lastVideoSwitchTime: now.toISOString(),
-                status: 'Starting',
-                isRunning: true
-              }
-            })
-            slot.lastVideoSwitchTime = now.toISOString()
-            slot.status = 'Starting'
-            slot.isRunning = true
+        const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
 
-            // Re-launch all streams in group together with new random titles
-            launchPlaylistGroupBatch(slot.slotIndex)
-            continue
-          } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
-            logs.push(`Slot ${slot.slotIndex + 1}: Playlist group pre-stop reached (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Cleanly stopping ALL ${playlist.length} streams until next hour.`)
-            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m). Stopping ALL streams cleanly until next hour.`)
-
-            // Stop all streams in the group cleanly
-            await stopSlotStreamFully(slot)
-            
-            // Update status to PreStop in DB
-            await db.streamSlot.update({
-              where: { slotIndex: slot.slotIndex },
-              data: { status: 'PreStop' }
-            })
-            slot.status = 'PreStop'
-          }
-        }
-      } catch (e: any) {
-        console.error(`[Scheduler] Playlist group loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
-      }
-    }
-
-    // ── Continuous Sub-Slot Watchdog & Auto-Recovery (ONLY while actively Streaming, NOT in PreStop) ──
-    if (slot.isRunning && slot.status === 'Streaming' && slot.playlistLoopEnabled && slot.playlistConfig && streamManagerResponded && !isManagerInStartupGrace) {
-      try {
-        const items = JSON.parse(slot.playlistConfig)
-        if (Array.isArray(items) && items.length > 0) {
-          for (let itemIdx = 0; itemIdx < items.length; itemIdx++) {
-            const item = items[itemIdx]
-            const subSlotIndex = itemIdx === 0 ? slot.slotIndex : (10000 + slot.slotIndex * 100 + itemIdx)
-
-            if (!activeInManager.has(subSlotIndex) && !queuedInManager.has(subSlotIndex)) {
-              console.log(`[Scheduler] Sub-slot ${subSlotIndex} (Item #${itemIdx + 1}: ${item.videoPath}) is not active in manager. Auto-recovering stream...`)
-              logs.push(`Slot ${slot.slotIndex + 1} - Item #${itemIdx + 1}: Auto-recovering sub-slot ${subSlotIndex}`)
-
-              const resolvedInputPath = resolveVideoFileFromFolder(item.videoPath, subSlotIndex, 'main')
-              const itemStreamKey = item.streamKey || slot.streamKey
-
-              fetchWithTimeout(`${STREAM_MANAGER_URL}/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  slotIndex: subSlotIndex,
-                  outputType: slot.outputType,
-                  rtmpServer: slot.rtmpServer,
-                  streamKey: itemStreamKey,
-                  filePath: resolvedInputPath
-                })
-              }, 5000).catch(err => console.error(`[Scheduler] Sub-slot ${subSlotIndex} recovery failed:`, err.message))
+        if (elapsedMins >= intervalMins) {
+          logs.push(`Slot ${slot.slotIndex + 1}: Loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Restarting stream with new random title!`)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m). Triggering stream restart!`)
+          
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: {
+              lastVideoSwitchTime: now.toISOString(),
+              status: 'Starting',
+              isRunning: true
             }
-          }
+          })
+          slot.lastVideoSwitchTime = now.toISOString()
+          slot.status = 'Starting'
+          slot.isRunning = true
+
+          launchPlaylistGroupBatch(slot.slotIndex)
+          continue
+        } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
+          logs.push(`Slot ${slot.slotIndex + 1}: Pre-stop reached (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Cleanly stopping stream until next interval.`)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m). Stopping stream cleanly.`)
+
+          await stopSlotStreamFully(slot)
+          
+          await db.streamSlot.update({
+            where: { slotIndex: slot.slotIndex },
+            data: { status: 'PreStop', isRunning: true }
+          })
+          slot.status = 'PreStop'
         }
       } catch (e: any) {
-        console.error(`[Scheduler] Sub-slot recovery check failed for slot ${slot.slotIndex + 1}:`, e.message)
+        console.error(`[Scheduler] Loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
       }
     }
 

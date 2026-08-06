@@ -135,7 +135,8 @@ export async function POST(
         schedStop: updatedSchedStop,
         isSwapped: false,
         lastVideoSwitchTime: new Date().toISOString(),
-        filePath: finalInputPath
+        filePath: finalInputPath,
+        playlistConfig: null
       }
     })
 
