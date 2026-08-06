@@ -196,44 +196,8 @@ export async function setupYoutubeLiveStream(
     console.error('[YouTube Helper] Error fetching Live Streams:', errorMsg)
   }
 
-  // Create one if we couldn't list or find any
   if (!streamId || !streamKey) {
-    const keyTitle = title ? `Key - ${title.substring(0, 30)}` : `Stream Key ${Date.now()}`
-    console.log(`[YouTube Helper] No unused stream key found. Creating a new stream key "${keyTitle}"...`)
-    const createStreamResponse = await fetchWithTimeout('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        snippet: { title: keyTitle },
-        cdn: {
-          frameRate: 'variable',
-          ingestionType: 'rtmp',
-          resolution: 'variable'
-        }
-      })
-    }, 10000)
-
-    if (!createStreamResponse.ok) {
-      const errorText = await createStreamResponse.text()
-      await checkAndLogQuotaError(errorText, 'إنشاء مفتاح بث جديد')
-      let errorMsg = errorText
-      try {
-        const parsed = JSON.parse(errorText)
-        if (parsed.error && parsed.error.message) {
-          errorMsg = parsed.error.message
-        }
-      } catch {}
-      throw new Error(`Failed to create YouTube Live Stream Key: ${errorMsg}`)
-    }
-
-    const createdStream = await createStreamResponse.json()
-    streamId = createdStream.id
-    streamKey = createdStream.cdn?.ingestionInfo?.streamName || ''
-    rtmpServer = createdStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
-    console.log(`[YouTube Helper] Successfully created new YouTube Live Stream key: ${streamKey.substring(0, 4)}****`)
+    throw new Error('تعذّر العثور على مفتاح البث المحدّد للقناة. يرجى اختيار مفتاح بث صالح في إعدادات السلوت والقناة.')
   }
 
   if (excludeStreamKeys && streamKey) {
@@ -256,9 +220,7 @@ export async function setupYoutubeLiveStream(
     snippet: {
       title: truncatedTitle,
       description: truncatedDesc,
-      scheduledStartTime: scheduledStartTime,
-      defaultLanguage: 'en',
-      defaultAudioLanguage: 'ar'
+      scheduledStartTime: scheduledStartTime
     },
     status: {
       privacyStatus: 'public',
@@ -310,35 +272,7 @@ export async function setupYoutubeLiveStream(
   const broadcastId = broadcastData.id
   console.log(`[YouTube Helper] Created Live Broadcast ID: ${broadcastId}`)
 
-  // 4.5 Set Category to Music (10), Audio language to Arabic (ar), Title/Desc language to English (en) via videos.update
-  try {
-    console.log(`[YouTube Helper] Setting category to Music (10), Audio lang: Arabic (ar), Title/Desc lang: English (en) for video ${broadcastId}...`)
-    const updateVideoUrl = 'https://www.googleapis.com/youtube/v3/videos?part=snippet'
-    const videoResponse = await fetchWithTimeout(updateVideoUrl, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        id: broadcastId,
-        snippet: {
-          title: truncatedTitle,
-          description: truncatedDesc,
-          categoryId: '22' // 22 = People & Blogs (المدونات والأشخاص)
-        }
-      })
-    }, 10000)
 
-    if (!videoResponse.ok) {
-      const errText = await videoResponse.text()
-      console.warn(`[YouTube Helper] Non-fatal warning setting video category/language:`, errText)
-    } else {
-      console.log(`[YouTube Helper] Successfully set video category to Music (10), Audio: ar, Title/Desc: en`)
-    }
-  } catch (videoErr: any) {
-    console.warn(`[YouTube Helper] Non-fatal error setting video category/language:`, videoErr.message)
-  }
 
   // 5. Bind Broadcast to Stream Key
   console.log(`[YouTube Helper] Binding Broadcast (${broadcastId}) to Stream Key (${streamId})`)
@@ -469,22 +403,7 @@ export async function setupYoutubeLiveStreamBatch(
     }
 
     if (!streamId || !streamKey) {
-      const keyTitle = `Key - ${item.title.substring(0, 25)}`
-      const createRes = await fetchWithTimeout('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          snippet: { title: keyTitle },
-          cdn: { frameRate: 'variable', ingestionType: 'rtmp', resolution: 'variable' }
-        })
-      }, 10000)
-
-      if (createRes.ok) {
-        const createdStream = await createRes.json()
-        streamId = createdStream.id
-        streamKey = createdStream.cdn?.ingestionInfo?.streamName || ''
-        rtmpServer = createdStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
-      }
+      throw new Error(`تعذّر العثور على مفتاح البث المحدّد للعنصر ${item.itemIdx + 1}. يرجى التحقق من مفاتيح البث المتاحة في القناة.`)
     }
 
     if (streamKey) {
@@ -506,9 +425,7 @@ export async function setupYoutubeLiveStreamBatch(
         snippet: {
           title: truncatedTitle,
           description: truncatedDesc,
-          scheduledStartTime: scheduledStartTime,
-          defaultLanguage: 'en',
-          defaultAudioLanguage: 'ar'
+          scheduledStartTime: scheduledStartTime
         },
         status: {
           privacyStatus: 'public',
