@@ -406,6 +406,195 @@ export async function setupYoutubeLiveStream(
   return { streamKey, rtmpServer, broadcastId }
 }
 
+export interface BatchPlaylistItemInput {
+  itemIdx: number
+  title: string
+  description: string
+  thumbnailPath?: string
+  preferredStreamKey?: string
+}
+
+export interface BatchPlaylistItemResult {
+  itemIdx: number
+  streamKey: string
+  rtmpServer: string
+  broadcastId: string
+}
+
+export async function setupYoutubeLiveStreamBatch(
+  channelId: string,
+  items: BatchPlaylistItemInput[]
+): Promise<BatchPlaylistItemResult[]> {
+  console.log(`[YouTube Helper Batch] Starting high-performance batch setup for ${items.length} items on channel ${channelId}...`)
+  
+  const accessToken = await refreshAccessToken(channelId)
+
+  const streamsListUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn,status&mine=true&maxResults=50'
+  const streamsResponse = await fetchWithTimeout(streamsListUrl, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  }, 10000)
+
+  let availableStreams: any[] = []
+  if (streamsResponse.ok) {
+    const data = await streamsResponse.json()
+    availableStreams = data.items || []
+  }
+
+  const usedStreamKeys = new Set<string>()
+  const allocatedItems: Array<{
+    item: BatchPlaylistItemInput
+    streamId: string
+    streamKey: string
+    rtmpServer: string
+  }> = []
+
+  for (const item of items) {
+    let streamId = ''
+    let streamKey = ''
+    let rtmpServer = 'rtmp://a.rtmp.youtube.com/live2'
+    let selectedStream: any = null
+
+    if (item.preferredStreamKey && !usedStreamKeys.has(item.preferredStreamKey)) {
+      selectedStream = availableStreams.find((s: any) => s.cdn?.ingestionInfo?.streamName === item.preferredStreamKey)
+    }
+
+    if (!selectedStream) {
+      selectedStream = availableStreams.find((s: any) => {
+        const key = s.cdn?.ingestionInfo?.streamName
+        return key && !usedStreamKeys.has(key)
+      })
+    }
+
+    if (selectedStream) {
+      streamId = selectedStream.id
+      streamKey = selectedStream.cdn?.ingestionInfo?.streamName || ''
+      rtmpServer = selectedStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
+    }
+
+    if (!streamId || !streamKey) {
+      const keyTitle = `Key - ${item.title.substring(0, 25)}`
+      const createRes = await fetchWithTimeout('https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snippet: { title: keyTitle },
+          cdn: { frameRate: 'variable', ingestionType: 'rtmp', resolution: 'variable' }
+        })
+      }, 10000)
+
+      if (createRes.ok) {
+        const createdStream = await createRes.json()
+        streamId = createdStream.id
+        streamKey = createdStream.cdn?.ingestionInfo?.streamName || ''
+        rtmpServer = createdStream.cdn?.ingestionInfo?.ingestionAddress || rtmpServer
+      }
+    }
+
+    if (streamKey) {
+      usedStreamKeys.add(streamKey)
+    }
+
+    allocatedItems.push({ item, streamId, streamKey, rtmpServer })
+  }
+
+  const results = await Promise.all(
+    allocatedItems.map(async (alloc) => {
+      const { item, streamId, streamKey, rtmpServer } = alloc
+      const scheduledStartTime = new Date(Date.now() + 5 * 1000).toISOString()
+      const truncatedTitle = item.title.substring(0, 100).trim() || 'Untitled Broadcast'
+      const truncatedDesc = item.description.substring(0, 4500).trim() || 'Live stream powered by Qaff'
+
+      const broadcastUrl = 'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status,contentDetails'
+      const createPayload: any = {
+        snippet: {
+          title: truncatedTitle,
+          description: truncatedDesc,
+          scheduledStartTime: scheduledStartTime,
+          defaultLanguage: 'en',
+          defaultAudioLanguage: 'ar'
+        },
+        status: {
+          privacyStatus: 'public',
+          selfDeclaredMadeForKids: false
+        },
+        contentDetails: {
+          enableAutoStart: true,
+          enableAutoStop: false,
+          enableDvr: true,
+          enableEmbed: true,
+          recordFromStart: true,
+          enableMonetization: true
+        }
+      }
+
+      let broadcastResponse = await fetchWithTimeout(broadcastUrl, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(createPayload)
+      }, 10000)
+
+      if (!broadcastResponse.ok) {
+        delete createPayload.contentDetails.enableMonetization
+        broadcastResponse = await fetchWithTimeout(broadcastUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(createPayload)
+        }, 10000)
+      }
+
+      if (!broadcastResponse.ok) {
+        throw new Error(`Failed to create broadcast for item ${item.itemIdx + 1}`)
+      }
+
+      const broadcastData = await broadcastResponse.json()
+      const broadcastId = broadcastData.id
+
+      const bindUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?id=${broadcastId}&part=id,snippet,contentDetails,status&streamId=${streamId}`
+      await fetchWithTimeout(bindUrl, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Length': '0' }
+      }, 10000)
+
+      if (item.thumbnailPath && existsSync(item.thumbnailPath)) {
+        uploadThumbnailAsync(accessToken, broadcastId, item.thumbnailPath)
+      }
+
+      return {
+        itemIdx: item.itemIdx,
+        streamKey,
+        rtmpServer,
+        broadcastId
+      }
+    })
+  )
+
+  return results
+}
+
+function uploadThumbnailAsync(accessToken: string, videoId: string, thumbnailPath: string) {
+  setTimeout(async () => {
+    try {
+      if (!existsSync(thumbnailPath)) return
+      const thumbnailBuffer = readFileSync(thumbnailPath)
+      if (thumbnailBuffer.length > 2 * 1024 * 1024) return
+      const isJpg = thumbnailPath.toLowerCase().endsWith('.jpg') || thumbnailPath.toLowerCase().endsWith('.jpeg')
+      const contentType = isJpg ? 'image/jpeg' : 'image/png'
+
+      await fetchWithTimeout(`https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': contentType,
+          'Content-Length': thumbnailBuffer.length.toString()
+        },
+        body: thumbnailBuffer
+      }, 15000)
+    } catch (e: any) {
+      console.warn(`[YouTube Helper Batch] Async thumbnail upload warning for video ${videoId}:`, e.message)
+    }
+  }, 100)
+}
+
 export async function stopYoutubeLiveStream(channelId: string, broadcastId: string): Promise<void> {
   if (!broadcastId) return
   try {
