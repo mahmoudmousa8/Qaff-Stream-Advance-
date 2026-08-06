@@ -507,6 +507,10 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   hash = Math.abs(hash)
   let jitterSecs = (hash % 301) - 150
   
+  // For START checks: NEVER allow negative jitter so a stream NEVER triggers before its scheduled minute!
+  if (!isStopCheck) {
+    jitterSecs = Math.max(0, jitterSecs)
+  }
   if (isStopCheck && hasSwapEnabled && jitterSecs < 0) {
     // Prevent stopping early if swap video is enabled to ensure the swap video gets its full 2 minutes
     jitterSecs = 0 
