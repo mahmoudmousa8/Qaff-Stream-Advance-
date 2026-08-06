@@ -63,7 +63,7 @@ export async function POST(
 
     if (slot.youtubeChannelId && slot.outputType === 'youtube') {
       try {
-        const { stopYoutubeLiveStream, stopAllActiveBroadcastsForChannel } = await import('@/lib/youtube-helper')
+        const { stopYoutubeLiveStream } = await import('@/lib/youtube-helper')
         
         if (slot.youtubeBroadcastId) {
           const bcIds = slot.youtubeBroadcastId.split(',').map(s => s.trim()).filter(Boolean)
@@ -75,9 +75,6 @@ export async function POST(
             }
           }
         }
-        
-        // Also cleanup any remaining active broadcasts on YouTube for this channel
-        await stopAllActiveBroadcastsForChannel(slot.youtubeChannelId)
       } catch (ytErr: any) {
         console.error(`[Stop Route] YouTube stop failed:`, ytErr.message)
       }

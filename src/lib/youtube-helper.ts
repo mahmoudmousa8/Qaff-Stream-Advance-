@@ -273,17 +273,28 @@ export async function setupYoutubeLiveStream(
     }
   }
 
-  let broadcastResponse = await fetchWithTimeout(broadcastUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(createPayload)
-  }, 10000)
+  let broadcastResponse: Response | null = null
+  let attempts = 0
+  while (attempts < 3) {
+    attempts++
+    try {
+      broadcastResponse = await fetchWithTimeout(broadcastUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(createPayload)
+      }, 10000)
+      if (broadcastResponse.ok) break
+    } catch (e) {
+      if (attempts >= 3) throw e
+      await new Promise(r => setTimeout(r, 2000))
+    }
+  }
 
-  if (!broadcastResponse.ok) {
-    const errorText = await broadcastResponse.text()
+  if (!broadcastResponse || !broadcastResponse.ok) {
+    const errorText = broadcastResponse ? await broadcastResponse.text() : 'Network Timeout'
     await checkAndLogQuotaError(errorText, 'إنشاء البث المباشر')
     let errorMsg = errorText
     try {
