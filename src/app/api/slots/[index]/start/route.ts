@@ -77,7 +77,7 @@ export async function POST(
     }
 
     let updatedSchedStart = slot.schedStart;
-    if (!updatedSchedStart) {
+    if (!updatedSchedStart || updatedSchedStart === '00-00 00:00' || updatedSchedStart.trim() === '') {
       const now = new Date();
       const sMonth = String(now.getMonth() + 1).padStart(2, '0');
       const sDate = String(now.getDate()).padStart(2, '0');

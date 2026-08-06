@@ -23,6 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'Slot not found' }, { status: 404 })
     }
 
+    const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
     const updatedSlot = await db.streamSlot.update({
       where: { slotIndex },
       data: {
@@ -32,7 +33,8 @@ export async function POST(
         status: 'Stopped',
         nextRunTime: '',
         isSwapped: false,
-        youtubeBroadcastId: ""
+        youtubeBroadcastId: "",
+        ...(!isRecurring ? { schedStart: '00-00 00:00', schedStop: '' } : {})
       }
     })
 
