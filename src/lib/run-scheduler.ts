@@ -899,6 +899,27 @@ async function triggerPlaylistSwitch(slot: any, playlist: any[], now: Date) {
   }
 }
 
+export async function launchPlaylistGroupBatch(slotIndex: number) {
+  try {
+    console.log(`[Scheduler] Triggering batch start for slot ${slotIndex + 1}...`)
+    const res = await fetchWithTimeout(`http://127.0.0.1:3000/api/slots/${slotIndex}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isScheduler: true })
+    }, 120000)
+    if (res.ok) {
+      console.log(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch successfully restarted.`)
+      await db.systemLog.create({
+        data: { message: `Slot ${slotIndex + 1}: Playlist group batch restarted with new random titles for next interval.` }
+      })
+    } else {
+      console.error(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch restart returned HTTP ${res.status}`)
+    }
+  } catch (e: any) {
+    console.error(`[Scheduler] Slot ${slotIndex + 1}: Playlist group batch restart error:`, e.message)
+  }
+}
+
 // ── Main entry point ────────────────────────────────────────────────────────
 
 export interface SchedulerResult {
@@ -1079,8 +1100,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
 
     // ── Smart Auto-Recovery (startup-aware + backoff) ───────────
     if (slot.isRunning && streamManagerResponded && !activeInManager.has(slot.slotIndex) && !queuedInManager.has(slot.slotIndex)) {
-      // A. Check intentional playlist pre-stop window (disabled for multi-video concurrent streams)
-      let isPlaylistPreStop = false
+      // A. Check intentional playlist pre-stop window
+      let isPlaylistPreStop = slot.status === 'PreStop'
 
       // B. Check natural scheduled stop time (NOT a crash!)
       let isNaturalSchedStop = false
@@ -1291,8 +1312,44 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       missCounters.set(`miss_${slot.slotIndex}`, 0)
     }
 
-    // ── Continuous 24/7 Sub-Slot Watchdog & Auto-Recovery ──
-    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig && streamManagerResponded && !isManagerInStartupGrace) {
+    // ── Multi-Video Playlist Group Hourly Pre-Stop & Batch Restart Loop ──
+    if (slot.isRunning && slot.playlistLoopEnabled && slot.playlistConfig) {
+      try {
+        const playlist = JSON.parse(slot.playlistConfig)
+        if (Array.isArray(playlist) && playlist.length > 0) {
+          const lastSwitch = slot.lastVideoSwitchTime ? new Date(slot.lastVideoSwitchTime) : new Date(slot.updatedAt)
+          const elapsedMins = (now.getTime() - lastSwitch.getTime()) / 60000
+          const intervalMins = slot.loopIntervalMins || 60
+          const stopTargetMins = getCycleRandomStopMins(slot.slotIndex, lastSwitch, intervalMins)
+
+          if (elapsedMins >= intervalMins) {
+            logs.push(`Slot ${slot.slotIndex + 1}: Playlist group loop interval reached (${elapsedMins.toFixed(1)}m elapsed). Restarting ALL ${playlist.length} streams in group together with new random titles!`)
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Interval reached (${elapsedMins.toFixed(1)}m). Triggering ALL ${playlist.length} streams batch restart!`)
+            
+            // Re-launch all streams in group together with new random titles
+            launchPlaylistGroupBatch(slot.slotIndex)
+          } else if (elapsedMins >= stopTargetMins && slot.status !== 'PreStop') {
+            logs.push(`Slot ${slot.slotIndex + 1}: Playlist group pre-stop reached (${elapsedMins.toFixed(1)}m elapsed / target ${stopTargetMins.toFixed(1)}m). Cleanly stopping ALL ${playlist.length} streams until next hour.`)
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Pre-stop target reached (${elapsedMins.toFixed(1)}m). Stopping ALL streams cleanly until next hour.`)
+
+            // Stop all streams in the group cleanly
+            await stopSlotStreamFully(slot)
+            
+            // Update status to PreStop in DB
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: { status: 'PreStop' }
+            })
+            slot.status = 'PreStop'
+          }
+        }
+      } catch (e: any) {
+        console.error(`[Scheduler] Playlist group loop check failed for slot ${slot.slotIndex + 1}:`, e.message)
+      }
+    }
+
+    // ── Continuous Sub-Slot Watchdog & Auto-Recovery (ONLY while actively Streaming, NOT in PreStop) ──
+    if (slot.isRunning && slot.status === 'Streaming' && slot.playlistLoopEnabled && slot.playlistConfig && streamManagerResponded && !isManagerInStartupGrace) {
       try {
         const items = JSON.parse(slot.playlistConfig)
         if (Array.isArray(items) && items.length > 0) {
