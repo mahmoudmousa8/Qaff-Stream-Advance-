@@ -236,14 +236,15 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
 
   if (isUrl) {
     log(`  Profile: Live Relay (source is URL: ${filePath})`);
+    const isRtmp = filePath.startsWith('rtmp://') || filePath.startsWith('rtmps://')
+    const protocolArgs = isRtmp
+      ? ['-rw_timeout', '15000000']
+      : ['-rw_timeout', '15000000', '-reconnect', '1', '-reconnect_at_eof', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5']
+
     return {
       profile: 'copy',
       args: [
-        '-rw_timeout', '15000000',
-        '-reconnect', '1',
-        '-reconnect_at_eof', '1',
-        '-reconnect_streamed', '1',
-        '-reconnect_delay_max', '5',
+        ...protocolArgs,
         '-fflags', '+genpts+igndts+discardcorrupt',
         '-i', filePath,
         '-c', 'copy',
