@@ -39,7 +39,7 @@ export async function stopSlotStreamFully(slot: any, logs?: string[]) {
     } catch {}
   }
 
-  // 2. Stop all YouTube live broadcasts for this slot & channel
+  // 2. Stop ONLY this slot's YouTube live broadcast (never touch other slots on the same channel)
   if (slot.youtubeChannelId && slot.outputType === 'youtube') {
     try {
       if (slot.youtubeBroadcastId) {
@@ -53,9 +53,8 @@ export async function stopSlotStreamFully(slot: any, logs?: string[]) {
           }
         }
       }
-      await stopAllActiveBroadcastsForChannel(slot.youtubeChannelId)
     } catch (e: any) {
-      console.warn(`[Scheduler] Full YouTube stop error for slot ${slot.slotIndex + 1}:`, e.message)
+      console.warn(`[Scheduler] YouTube stop error for slot ${slot.slotIndex + 1}:`, e.message)
     }
   }
 }
