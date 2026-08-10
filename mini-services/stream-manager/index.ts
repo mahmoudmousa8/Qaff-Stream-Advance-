@@ -239,10 +239,15 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
     return {
       profile: 'copy',
       args: [
-        '-fflags', '+genpts',
+        '-rw_timeout', '15000000',
+        '-reconnect', '1',
+        '-reconnect_at_eof', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-fflags', '+genpts+igndts+discardcorrupt',
         '-i', filePath,
         '-c', 'copy',
-        '-max_muxing_queue_size', '1024',
+        '-max_muxing_queue_size', '2048',
         '-f', 'flv',
         '-flvflags', 'no_duration_filesize',
         rtmpUrl
