@@ -404,9 +404,8 @@ function calculateNextRun(
     let intervalMins = 0
     if (repeat10m) intervalMins = 10
     else if (repeat15m) intervalMins = 15
-    else if (hourly) intervalMins = 20
     else if (repeat30m) intervalMins = 30
-    else if (repeat1h) intervalMins = 60
+    else if (repeat1h || hourly) intervalMins = 60
     else if (repeat2h) intervalMins = 120
     else if (repeat12h) intervalMins = 720
 
