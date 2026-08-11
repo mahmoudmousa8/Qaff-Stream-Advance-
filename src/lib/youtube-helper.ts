@@ -140,13 +140,9 @@ export async function setupYoutubeLiveStream(
   // 1. Refresh token
   const accessToken = await refreshAccessToken(channelId)
 
-  // 2. Scheduled Start time
-  let scheduledStartTime = scheduledStartTimeStr || new Date(Date.now() + 5 * 1000).toISOString()
-  const parsedTime = new Date(scheduledStartTime).getTime()
-  if (isNaN(parsedTime) || parsedTime < Date.now()) {
-    scheduledStartTime = new Date(Date.now() + 5 * 1000).toISOString()
-  }
-  console.log(`[YouTube Helper] Scheduling live broadcast start time: ${scheduledStartTime}`)
+  // 2. Scheduled Start time — Always set to NOW (now + 5s) so YouTube auto-starts LIVE immediately without sticking in "Upcoming" state
+  const scheduledStartTime = new Date(Date.now() + 5 * 1000).toISOString()
+  console.log(`[YouTube Helper] Scheduling live broadcast start time (INSTANT LIVE): ${scheduledStartTime}`)
 
   // 3. Find or Create Stream Key
   let streamId = ''
