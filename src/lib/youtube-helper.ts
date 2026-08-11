@@ -225,7 +225,7 @@ export async function setupYoutubeLiveStream(
     },
     contentDetails: {
       enableAutoStart: true,
-      enableAutoStop: false,
+      enableAutoStop: true,
       enableDvr: true,
       enableEmbed: true,
       recordFromStart: true
@@ -430,7 +430,7 @@ export async function setupYoutubeLiveStreamBatch(
         },
         contentDetails: {
           enableAutoStart: true,
-          enableAutoStop: false,
+          enableAutoStop: true,
           enableDvr: true,
           enableEmbed: true,
           recordFromStart: true
