@@ -589,6 +589,64 @@ export default function Home() {
     }
   }
 
+  // Rename Stream Key Dialog State
+  const [renameStreamKeyModalOpen, setRenameStreamKeyModalOpen] = useState(false)
+  const [renameStreamKeyTitle, setRenameStreamKeyTitle] = useState('')
+  const [renameStreamKeyId, setRenameStreamKeyId] = useState('')
+  const [renameStreamKeyLoading, setRenameStreamKeyLoading] = useState(false)
+  const [renameStreamKeyError, setRenameStreamKeyError] = useState('')
+
+  const handleRenameStreamKey = async () => {
+    if (!settingsData?.youtubeChannelId || !renameStreamKeyId) {
+      toast({
+        title: locale === 'ar' ? 'تنبيه' : 'Notice',
+        description: locale === 'ar' ? 'يرجى اختيار مفتاح بث لإعادة تسميته' : 'Please select a stream key to rename'
+      })
+      return
+    }
+
+    if (!renameStreamKeyTitle.trim()) {
+      setRenameStreamKeyError(locale === 'ar' ? 'يرجى إدخال الاسم الجديد لمفتاح البث' : 'Please enter new stream key name')
+      return
+    }
+
+    setRenameStreamKeyLoading(true)
+    setRenameStreamKeyError('')
+    try {
+      const res = await fetch('/api/youtube/streams', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: settingsData.youtubeChannelId,
+          streamId: renameStreamKeyId,
+          title: renameStreamKeyTitle.trim()
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        addLog(locale === 'ar' ? `تم إعادة تسمية مفتاح البث إلى: "${data.title}"` : `Renamed stream key to: "${data.title}"`)
+        toast({
+          title: locale === 'ar' ? 'تم إعادة التسمية بنجاح' : 'Stream Key Renamed',
+          description: locale === 'ar' ? `الاسم الجديد: ${data.title}` : `New Title: ${data.title}`
+        })
+
+        // Refresh YouTube stream keys list
+        fetchYtStreamKeys(settingsData.youtubeChannelId, true)
+
+        setRenameStreamKeyModalOpen(false)
+        setRenameStreamKeyTitle('')
+        setRenameStreamKeyId('')
+      } else {
+        setRenameStreamKeyError(data.error || (locale === 'ar' ? 'فشل إعادة تسمية مفتاح البث' : 'Failed to rename stream key'))
+      }
+    } catch (e: any) {
+      console.error(e)
+      setRenameStreamKeyError(locale === 'ar' ? 'حدث خطأ في الاتصال بالسيرفر' : 'Network error')
+    } finally {
+      setRenameStreamKeyLoading(false)
+    }
+  }
+
   const [cleaningChannelId, setCleaningChannelId] = useState<string | null>(null)
 
   const handleCleanupChannelBroadcasts = async (channelId: string) => {
@@ -4223,18 +4281,57 @@ export default function Home() {
                               <span>🔑</span>
                               {locale === 'ar' ? 'مفتاح البث' : 'Stream Key'}
                             </label>
-                            <button
-                              type="button"
-                              onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
-                              disabled={ytStreamKeysLoading}
-                              className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
-                            >
-                              {ytStreamKeysLoading ? (
-                                <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
-                              ) : (
-                                <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCreateStreamKeyTargetIdx(-1)
+                                  setCreateStreamKeyTitle('')
+                                  setCreateStreamKeyModalOpen(true)
+                                }}
+                                className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 hover:text-amber-500 border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 rounded px-2 py-1 transition-all font-semibold"
+                                title={locale === 'ar' ? 'إنشاء مفتاح بث جديد مخصص وتسميته' : 'Create new custom named stream key'}
+                              >
+                                <span>➕</span> {locale === 'ar' ? 'مفتاح جديد' : 'New Key'}
+                              </button>
+
+                              {settingsData.streamKey && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const found = ytStreamKeys.find(k => k.streamKey === settingsData.streamKey)
+                                    if (found) {
+                                      setRenameStreamKeyId(found.id)
+                                      setRenameStreamKeyTitle(found.title)
+                                      setRenameStreamKeyError('')
+                                      setRenameStreamKeyModalOpen(true)
+                                    } else {
+                                      toast({
+                                        title: locale === 'ar' ? 'تنبيه' : 'Notice',
+                                        description: locale === 'ar' ? 'يرجى جلب مفاتيح البث أولاً لتحديد معرف المفتاح' : 'Please fetch stream keys first'
+                                      })
+                                    }
+                                  }}
+                                  className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-500 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all font-semibold"
+                                  title={locale === 'ar' ? 'إعادة تسمية مفتاح البث المSelected' : 'Rename selected stream key'}
+                                >
+                                  <span>✏️</span> {locale === 'ar' ? 'إعادة تسمية' : 'Rename'}
+                                </button>
                               )}
-                            </button>
+
+                              <button
+                                type="button"
+                                onClick={() => fetchYtStreamKeys(settingsData.youtubeChannelId, true)}
+                                disabled={ytStreamKeysLoading}
+                                className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-400 border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 rounded px-2 py-1 transition-all disabled:opacity-50"
+                              >
+                                {ytStreamKeysLoading ? (
+                                  <><span className="animate-spin inline-block">⟳</span> {locale === 'ar' ? 'جارٍ الجلب...' : 'Fetching...'}</>
+                                ) : (
+                                  <><span>↻</span> {locale === 'ar' ? 'تحديث المفاتيح' : 'Fetch Keys'}</>
+                                )}
+                              </button>
+                            </div>
                           </div>
                           <p className="text-xs text-muted-foreground mb-2">
                             {locale === 'ar'
@@ -6766,6 +6863,68 @@ export default function Home() {
                 <><span className="animate-spin inline-block mr-1">⟳</span> {locale === 'ar' ? 'جارٍ الإنشاء على يوتيوب...' : 'Creating on YouTube...'}</>
               ) : (
                 <><Plus className="w-4 h-4" /> {locale === 'ar' ? 'إنشاء المفتاح' : 'Create Key'}</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Stream Key Dialog */}
+      <Dialog open={renameStreamKeyModalOpen} onOpenChange={setRenameStreamKeyModalOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600 font-bold">
+              <Edit3 className="w-5 h-5 text-blue-500" />
+              {locale === 'ar' ? 'إعادة تسمية مفتاح البث على يوتيوب' : 'Rename Stream Key on YouTube'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              {locale === 'ar'
+                ? 'أدخل الاسم الجديد لمفتاح البث لتحديثه فوراً على سيرفرات يوتيوب.'
+                : 'Enter the new name for this stream key to update it on YouTube.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-foreground">
+                {locale === 'ar' ? 'الاسم الجديد لمفتاح البث:' : 'New Stream Key Name:'}
+              </label>
+              <input
+                type="text"
+                value={renameStreamKeyTitle}
+                onChange={(e) => setRenameStreamKeyTitle(e.target.value)}
+                placeholder={locale === 'ar' ? 'أدخل اسم المفتاح الجديد...' : 'Enter new stream key name...'}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+
+            {renameStreamKeyError && (
+              <p className="text-xs text-red-500 font-semibold p-2 bg-red-500/10 rounded-lg">
+                ⚠️ {renameStreamKeyError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRenameStreamKeyModalOpen(false)}
+              disabled={renameStreamKeyLoading}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold gap-1"
+              onClick={handleRenameStreamKey}
+              disabled={renameStreamKeyLoading || !renameStreamKeyTitle.trim()}
+            >
+              {renameStreamKeyLoading ? (
+                <><span className="animate-spin inline-block mr-1">⟳</span> {locale === 'ar' ? 'جارٍ الحفظ على يوتيوب...' : 'Saving on YouTube...'}</>
+              ) : (
+                <><Edit3 className="w-4 h-4" /> {locale === 'ar' ? 'حفظ التسمية' : 'Save Name'}</>
               )}
             </Button>
           </DialogFooter>

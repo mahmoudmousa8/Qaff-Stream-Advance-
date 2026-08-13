@@ -179,3 +179,68 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT /api/youtube/streams
+// Renames an existing YouTube Live Stream key
+export async function PUT(request: NextRequest) {
+  try {
+    const { channelId, streamId, title } = await request.json()
+
+    if (!channelId || !streamId || !title) {
+      return NextResponse.json({ error: 'Missing channelId, streamId, or title' }, { status: 400 })
+    }
+
+    const channel = await db.youtubeChannel.findUnique({
+      where: { id: channelId }
+    })
+
+    if (!channel) {
+      return NextResponse.json({ error: 'YouTube channel not found' }, { status: 404 })
+    }
+
+    const accessToken = await refreshAccessToken(channelId)
+    const newTitle = title.trim()
+
+    const updateUrl = 'https://www.googleapis.com/youtube/v3/liveStreams?part=snippet,cdn'
+    const updateRes = await fetch(updateUrl, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        id: streamId,
+        snippet: {
+          title: newTitle
+        },
+        cdn: {
+          frameRate: 'variable',
+          ingestionType: 'rtmp',
+          resolution: 'variable'
+        }
+      }),
+      signal: AbortSignal.timeout(12000)
+    })
+
+    if (!updateRes.ok) {
+      const errText = await updateRes.text()
+      console.error('[YouTube Streams API] Rename Stream Key failed:', errText)
+      return NextResponse.json({ error: 'Failed to rename stream key on YouTube', details: errText }, { status: updateRes.status })
+    }
+
+    // Invalidate cache for this channel
+    streamsCache.delete(channelId)
+
+    console.log(`[YouTube Streams API] Successfully renamed stream key ${streamId} to "${newTitle}" for channel ${channel.channelTitle}`)
+
+    return NextResponse.json({
+      success: true,
+      id: streamId,
+      title: newTitle
+    })
+  } catch (error: any) {
+    console.error('[YouTube Streams API] Error renaming stream key:', error)
+    return NextResponse.json({ error: 'Failed to rename stream key: ' + error.message }, { status: 500 })
+  }
+}
+
+
