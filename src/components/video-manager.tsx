@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
@@ -346,7 +347,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
     }
   }
 
-  // Upload via XHR — sequential queue per client (one file at a time)
+  // Upload via XHR — parallel concurrent upload (all files at once)
   const handleUpload = (files: File[]) => {
     if (files.length === 0) return
     setUploading(true)
@@ -362,7 +363,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
         targetFolder = targetFolder ? `${targetFolder}/${subfolder}` : subfolder
       }
 
-      // Show all files in the queue immediately — first is 'active', rest are 'queued'
+      // Show all files in the queue immediately as active
       upsertTransfer(id, {
         type: 'upload',
         name: file.name,
@@ -373,32 +374,19 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
       return { id, file, targetFolder }
     })
 
-    // Sequential upload: process one file at a time
-    const uploadNext = async (index: number) => {
-      if (index >= fileEntries.length) {
-        setUploading(false)
-        if (fileInputRef.current) fileInputRef.current.value = ''
-        if (folderInputRef.current) folderInputRef.current.value = ''
-        fetchData(currentFolder)
-        fetchStorage()
-        return
-      }
+    const uploadSingleFile = (entry: { id: string; file: File; targetFolder: string }): Promise<void> => {
+      return new Promise<void>((resolve) => {
+        const { id, file, targetFolder } = entry
+        let lastLoaded = 0
+        let lastTime = Date.now()
 
-      const { id, file, targetFolder } = fileEntries[index]
-      let lastLoaded = 0
-      let lastTime = Date.now()
-
-      // Mark current as active (in case it was shown as queued)
-      upsertTransfer(id, { status: 'active', loaded: 0, progress: 0 })
-
-      await new Promise<void>((resolve) => {
         const formData = new FormData()
         formData.append('encodedName', encodeURIComponent(file.name))
         if (targetFolder) formData.append('folder', targetFolder)
         formData.append('file', file)
 
         const xhr = new XMLHttpRequest()
-        upsertTransfer(id, { xhr })
+        upsertTransfer(id, { xhr, status: 'active', loaded: 0, progress: 0 })
 
         xhr.upload.onprogress = (e) => {
           if (!e.lengthComputable) return
@@ -460,12 +448,16 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
         xhr.open('POST', '/api/upload')
         xhr.send(formData)
       })
-
-      // Move to next file in queue
-      uploadNext(index + 1)
     }
 
-    uploadNext(0)
+    // Upload all files concurrently in parallel
+    Promise.all(fileEntries.map(entry => uploadSingleFile(entry))).finally(() => {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (folderInputRef.current) folderInputRef.current.value = ''
+      fetchData(currentFolder)
+      fetchStorage()
+    })
   }
 
   // Video select
@@ -641,35 +633,56 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
     }
   }
 
-  // Download from URL (Google Drive etc.)
+  // Download from URL (Google Drive etc.) — supports single or multiple URLs simultaneously in parallel
   const startDownload = async () => {
     if (!downloadUrl.trim()) return
-    setDownloadBusy(true)
-    try {
-      const res = await fetch('/api/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: downloadUrl.trim(),
-          filename: downloadFilename.trim() || undefined,
-          folder: currentFolder || undefined
-        })
-      })
-      const data = await res.json()
+    const rawUrls = downloadUrl.split(/[\r\n,]+/).map(u => u.trim()).filter(u => u.length > 0)
+    if (rawUrls.length === 0) return
 
-      if (data.success && data.downloadId) {
-        toast({ title: t('downloadStarted'), description: data.filename })
+    setDownloadBusy(true)
+    let startedCount = 0
+    let lastError = ''
+
+    try {
+      await Promise.all(rawUrls.map(async (singleUrl) => {
+        try {
+          const res = await fetch('/api/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: singleUrl,
+              filename: (rawUrls.length === 1 && downloadFilename.trim()) ? downloadFilename.trim() : undefined,
+              folder: currentFolder || undefined
+            })
+          })
+          const data = await res.json()
+
+          if (data.success && data.downloadId) {
+            startedCount++
+            pollDownload(data.downloadId, data.filename)
+          } else if (data.error) {
+            lastError = data.error
+          }
+        } catch (e: any) {
+          lastError = e?.message || 'Network error'
+        }
+      }))
+
+      if (startedCount > 0) {
+        toast({
+          title: t('downloadStarted'),
+          description: rawUrls.length > 1
+            ? (getLocale() === 'ar' ? `تم بدء تحميل ${startedCount} ملف بالتوازي في الخلفية` : `Started ${startedCount} downloads in parallel`)
+            : (getLocale() === 'ar' ? 'تم بدء التحميل في الخلفية' : 'Download started in background')
+        })
         setDownloadDialog(false)
         setDownloadUrl('')
         setDownloadFilename('')
-
-        // Poll for completion in background
-        pollDownload(data.downloadId, data.filename)
       } else {
-        toast({ title: t('downloadFailed'), description: data.error, variant: 'destructive' })
+        toast({ title: t('downloadFailed'), description: lastError || 'Failed to start downloads', variant: 'destructive' })
       }
-    } catch {
-      toast({ title: t('downloadFailed'), variant: 'destructive' })
+    } catch (e: any) {
+      toast({ title: t('downloadFailed'), description: e?.message || 'Error', variant: 'destructive' })
     } finally {
       setDownloadBusy(false)
     }
@@ -1246,19 +1259,27 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{t('downloadFromUrl')}</DialogTitle>
-            <DialogDescription>{t('enterUrl')}</DialogDescription>
+            <DialogDescription>
+              {getLocale() === 'ar'
+                ? 'أدخل رابط أو عدة روابط (Google Drive أو روابط مباشرة) - رابط في كل سطر لتحميلها معاً في نفس الوقت'
+                : 'Enter one or multiple URLs (Google Drive / direct links) — one per line to download all in parallel.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Input
+            <Textarea
               value={downloadUrl}
               onChange={(e) => setDownloadUrl(e.target.value)}
-              placeholder="https://drive.google.com/file/d/..."
+              placeholder={getLocale() === 'ar'
+                ? "https://drive.google.com/file/d/.../view\nhttps://drive.google.com/file/d/.../view\n(يمكنك لصق عدة روابط هنا ليتم تنزيلها معاً بالتوازي)"
+                : "https://drive.google.com/file/d/...\nhttps://drive.google.com/file/d/...\n(Paste multiple URLs here to download all simultaneously in parallel)"}
+              rows={4}
+              className="font-mono text-xs"
               dir="ltr"
             />
             <Input
               value={downloadFilename}
               onChange={(e) => setDownloadFilename(e.target.value)}
-              placeholder={`${t('fileName')} (${t('cancel')} = auto)`}
+              placeholder={getLocale() === 'ar' ? 'اسم الملف المخصص (اختياري - للرابط الفردي فقط)' : `${t('fileName')} (${t('cancel')} = auto)`}
               dir="auto"
             />
           </div>
@@ -1266,7 +1287,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
             <Button variant="outline" onClick={() => setDownloadDialog(false)}>{t('cancel')}</Button>
             <Button onClick={startDownload} disabled={downloadBusy || !downloadUrl.trim()}>
               {downloadBusy ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Download className="w-4 h-4 mr-1" />}
-              {downloadBusy ? t('downloading') : t('downloadFromUrl')}
+              {downloadBusy ? t('downloading') : (getLocale() === 'ar' ? 'بدء التحميل المتوازي' : t('downloadFromUrl'))}
             </Button>
           </DialogFooter>
         </DialogContent>
