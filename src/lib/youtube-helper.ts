@@ -603,63 +603,68 @@ export async function cleanupUpcomingBroadcasts(channelId: string): Promise<{ de
   let deletedCount = 0
   try {
     const accessToken = await refreshAccessToken(channelId)
-    
-    const itemsToDelete: any[] = []
 
-    // 1. Fetch upcoming broadcasts
-    console.log(`[YouTube Helper] Fetching upcoming broadcasts for channel ${channelId}...`)
-    const listUrlUpcoming = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=upcoming&part=id,snippet&maxResults=50`
-    const listResponseUpcoming = await fetchWithTimeout(listUrlUpcoming, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
+    // 1. Fetch upcoming broadcasts with pagination
+    let pageToken = ''
+    const upcomingItems: any[] = []
+    do {
+      const listUrlUpcoming = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=upcoming&part=id,snippet&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}`
+      const listResponseUpcoming = await fetchWithTimeout(listUrlUpcoming, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }, 10000)
+
+      if (listResponseUpcoming.ok) {
+        const dataUpcoming = await listResponseUpcoming.json()
+        upcomingItems.push(...(dataUpcoming.items || []))
+        pageToken = dataUpcoming.nextPageToken || ''
+      } else {
+        errors.push(`فشل جلب البثوث القادمة: ${await listResponseUpcoming.text()}`)
+        break
       }
-    }, 10000)
+    } while (pageToken)
 
-    if (listResponseUpcoming.ok) {
-      const dataUpcoming = await listResponseUpcoming.json()
-      itemsToDelete.push(...(dataUpcoming.items || []))
-    } else {
-      errors.push(`فشل جلب البثوث القادمة: ${await listResponseUpcoming.text()}`)
-    }
+    // 2. Fetch active broadcasts with pagination
+    pageToken = ''
+    const activeItems: any[] = []
+    do {
+      const listUrlActive = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=active&part=id,snippet&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}`
+      const listResponseActive = await fetchWithTimeout(listUrlActive, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }, 10000)
 
-    // 2. Fetch active broadcasts
-    console.log(`[YouTube Helper] Fetching active broadcasts for channel ${channelId}...`)
-    const listUrlActive = `https://www.googleapis.com/youtube/v3/liveBroadcasts?broadcastStatus=active&part=id,snippet&maxResults=50`
-    const listResponseActive = await fetchWithTimeout(listUrlActive, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
+      if (listResponseActive.ok) {
+        const dataActive = await listResponseActive.json()
+        activeItems.push(...(dataActive.items || []))
+        pageToken = dataActive.nextPageToken || ''
+      } else {
+        errors.push(`فشل جلب البثوث النشطة: ${await listResponseActive.text()}`)
+        break
       }
-    }, 10000)
+    } while (pageToken)
 
-    if (listResponseActive.ok) {
-      const dataActive = await listResponseActive.json()
-      itemsToDelete.push(...(dataActive.items || []))
-    } else {
-      errors.push(`فشل جلب البثوث النشطة: ${await listResponseActive.text()}`)
-    }
+    console.log(`[YouTube Helper] Found ${upcomingItems.length} upcoming & ${activeItems.length} active broadcasts to clean on channel ${channelId}.`)
 
-    // 3. Delete all fetched broadcasts (stop active ones first, then delete)
-    console.log(`[YouTube Helper] Found ${itemsToDelete.length} total broadcasts (active & upcoming) to cleanup. Processing...`)
-    for (const item of itemsToDelete) {
+    // 3. Clean active broadcasts: transition to complete first, then delete
+    for (const item of activeItems) {
       const broadcastId = item.id
-      const title = item.snippet?.title || 'Untitled'
-      console.log(`[YouTube Helper] Cleaning broadcast: ${title} (${broadcastId})`)
-      
-      // Step A: If broadcast is active/live, transition to complete first
       try {
         await stopYoutubeLiveStream(channelId, broadcastId)
       } catch (e: any) {
-        console.warn(`[YouTube Helper] Transition to complete failed for ${broadcastId}:`, e?.message || e)
+        console.warn(`[YouTube Helper] Transition to complete failed for active ${broadcastId}:`, e?.message || e)
       }
-
-      // Step B: Delete the broadcast record from YouTube Studio
       const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
-      if (deleted) {
-        deletedCount++
-      } else {
-        // Even if delete API fails (e.g. YouTube keeps completed archives), stopping it makes it 100% clean
-        deletedCount++
-      }
+      if (deleted) deletedCount++
+    }
+
+    // 4. Clean upcoming broadcasts: delete directly without invalid transition attempts
+    for (const item of upcomingItems) {
+      const broadcastId = item.id
+      const deleted = await deleteYoutubeBroadcast(channelId, broadcastId)
+      if (deleted) deletedCount++
     }
 
   } catch (err: any) {
