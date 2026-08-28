@@ -36,6 +36,14 @@ const isImageFile = (fileName: string) => {
   return ['png', 'jpg', 'jpeg'].includes(ext);
 };
 
+const isMediaFile = (fileName: string) => {
+  if (!fileName) return false;
+  const allowedVideoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.ts', '.m2ts', '.mts', '.m4v', '.3gp', '.ogv', '.mpeg', '.mpg'];
+  const imageExts = ['.png', '.jpg', '.jpeg'];
+  const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+  return [...allowedVideoExts, ...imageExts].includes(ext);
+};
+
 interface VideoFile {
   name: string
   path: string
@@ -348,8 +356,19 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
   }
 
   // Upload via XHR — parallel concurrent upload (all files at once)
-  const handleUpload = (files: File[]) => {
-    if (files.length === 0) return
+  const handleUpload = (rawFiles: File[]) => {
+    // Filter out hidden system files (like desktop.ini, Thumbs.db, .DS_Store, etc.)
+    const files = rawFiles.filter(file => isMediaFile(file.name))
+    if (files.length === 0) {
+      if (rawFiles.length > 0) {
+        toast({
+          title: t('error'),
+          description: getLocale() === 'ar' ? 'المجلد لا يحتوي على أي ملفات فيديو أو صور مدعومة' : 'No supported video or image files found in selection',
+          variant: 'destructive'
+        })
+      }
+      return
+    }
     setUploading(true)
 
     // Build transfer entries immediately so user sees all files in queue
