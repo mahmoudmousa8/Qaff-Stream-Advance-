@@ -50,6 +50,17 @@ export async function GET(request: NextRequest) {
       whereClause.channelName = { contains: search }
     }
 
+    const statusParam = searchParams.get('status') || ''
+    if (statusParam === 'active' || statusParam === 'streaming') {
+      whereClause.OR = [{ isRunning: true }, { status: 'Streaming' }]
+    } else if (statusParam === 'scheduled') {
+      whereClause.isScheduled = true
+      whereClause.isRunning = false
+    } else if (statusParam === 'stopped') {
+      whereClause.isRunning = false
+      whereClause.isScheduled = false
+    }
+
     // If Normal User, limit visible slots to their slotsLimit
     if (user.role === 'user') {
       whereClause.slotIndex = { lt: user.slotsLimit }

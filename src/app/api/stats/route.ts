@@ -7,15 +7,15 @@ export async function GET() {
     const total = await db.streamSlot.count()
 
     const streaming = await db.streamSlot.count({
-      where: { status: 'Streaming' }
+      where: { OR: [{ status: 'Streaming' }, { isRunning: true }] }
     })
 
     const scheduled = await db.streamSlot.count({
-      where: { status: 'Scheduled' }
+      where: { isScheduled: true, isRunning: false }
     })
 
     const stopped = await db.streamSlot.count({
-      where: { status: 'Stopped' }
+      where: { isRunning: false, isScheduled: false }
     })
 
     const completed = await db.streamSlot.count({

@@ -344,7 +344,7 @@ export default function Home() {
   const { toast } = useToast()
   const [user, setUser] = useState<{ role: 'admin' | 'user'; slotsLimit: number; securityKey: string } | null>(null)
   const [slots, setSlots] = useState<StreamSlot[]>([])
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'scheduled'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'scheduled' | 'stopped'>('all')
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [selectedSlots, setSelectedSlots] = useState<number[]>([])
   const [bulkTitleDescOpen, setBulkTitleDescOpen] = useState(false)
@@ -510,8 +510,9 @@ export default function Home() {
   const [stats, setStats] = useState({ streaming: 0, scheduled: 0, stopped: 0, configured: 0, dailyCount: 0, weeklyCount: 0, hourlyCount: 0, renewalDate: null as string | null })
 
   const filteredSlots = slots.filter(slot => {
-    if (filterStatus === 'active') return slot.isRunning
-    if (filterStatus === 'scheduled') return slot.isScheduled
+    if (filterStatus === 'active') return slot.isRunning || slot.status === 'Streaming'
+    if (filterStatus === 'scheduled') return (slot.isScheduled || slot.status === 'Scheduled') && !slot.isRunning
+    if (filterStatus === 'stopped') return !slot.isRunning && !slot.isScheduled && slot.status !== 'Streaming'
     return true
   })
 
@@ -1304,6 +1305,7 @@ export default function Home() {
       qs.set('limit', SLOTS_PER_PAGE.toString())
       qs.set('_t', Date.now().toString())
       if (debouncedSearchQuery) qs.set('search', debouncedSearchQuery)
+      if (filterStatus !== 'all') qs.set('status', filterStatus)
 
       const res = await fetch(`/api/slots?${qs.toString()}`)
       if (res.status === 401) { window.location.href = '/login'; return }
@@ -1312,7 +1314,7 @@ export default function Home() {
       setTotalSlots(data.total || 0)
     } catch { addLog('Error fetching slots') }
     finally { setLoading(false) }
-  }, [currentPage, debouncedSearchQuery])
+  }, [currentPage, debouncedSearchQuery, filterStatus])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -2100,18 +2102,34 @@ export default function Home() {
                 <h1 className="text-lg font-bold text-primary">Qaff Streamer</h1>
               </a>
               <Badge 
-                className={`bg-green-500 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
+                className={`text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
+                  filterStatus === 'all' 
+                    ? 'bg-primary text-primary-foreground font-bold ring-2 ring-primary ring-offset-1 ring-offset-background shadow-md' 
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+                onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+                title={locale === 'ar' ? 'عرض كافة القنوات' : 'Show all streams'}
+              >
+                <List className="w-3 h-3 mr-1" />
+                {stats.streaming + stats.scheduled + stats.stopped} {locale === 'ar' ? 'الكل' : 'All'}
+              </Badge>
+              <Badge 
+                className={`bg-green-500 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 flex items-center gap-1 ${
                   filterStatus === 'active' 
                     ? 'ring-2 ring-green-500 ring-offset-1 ring-offset-background font-bold scale-[1.03] shadow-md shadow-green-500/20' 
                     : filterStatus !== 'all' 
                       ? 'opacity-40 hover:opacity-80' 
                       : 'hover:opacity-90'
                 }`}
-                onClick={() => setFilterStatus(prev => prev === 'active' ? 'all' : 'active')}
-                title={locale === 'ar' ? 'تصفية البثوث النشطة' : 'Filter active streams'}
+                onClick={() => { setFilterStatus(prev => prev === 'active' ? 'all' : 'active'); setCurrentPage(1); }}
+                title={locale === 'ar' ? 'تصفية: بث مباشر فقط' : 'Filter: Live streams only'}
               >
-                <Play className="w-3 h-3 mr-1" />
-                {stats.streaming} {t('active')}
+                <span className="relative flex h-2 w-2 mr-0.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                </span>
+                <Play className="w-3 h-3 mr-0.5 fill-current" />
+                {stats.streaming} {locale === 'ar' ? 'بث مباشر' : t('active')}
               </Badge>
               <Badge 
                 className={`bg-orange-500 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
@@ -2121,11 +2139,25 @@ export default function Home() {
                       ? 'opacity-40 hover:opacity-80' 
                       : 'hover:opacity-90'
                 }`}
-                onClick={() => setFilterStatus(prev => prev === 'scheduled' ? 'all' : 'scheduled')}
-                title={locale === 'ar' ? 'تصفية البثوث المجدولة' : 'Filter scheduled streams'}
+                onClick={() => { setFilterStatus(prev => prev === 'scheduled' ? 'all' : 'scheduled'); setCurrentPage(1); }}
+                title={locale === 'ar' ? 'تصفية: المجدول فقط' : 'Filter: Scheduled streams only'}
               >
                 <Calendar className="w-3 h-3 mr-1" />
-                {stats.scheduled} {t('scheduled')}
+                {stats.scheduled} {locale === 'ar' ? 'مجدول' : t('scheduled')}
+              </Badge>
+              <Badge 
+                className={`bg-slate-600 dark:bg-slate-700 text-white text-xs cursor-pointer select-none transition-all hover:scale-105 active:scale-95 ${
+                  filterStatus === 'stopped' 
+                    ? 'ring-2 ring-slate-400 ring-offset-1 ring-offset-background font-bold scale-[1.03] shadow-md shadow-slate-500/20' 
+                    : filterStatus !== 'all' 
+                      ? 'opacity-40 hover:opacity-80' 
+                      : 'hover:opacity-90'
+                }`}
+                onClick={() => { setFilterStatus(prev => prev === 'stopped' ? 'all' : 'stopped'); setCurrentPage(1); }}
+                title={locale === 'ar' ? 'تصفية: المتوقف فقط' : 'Filter: Stopped streams only'}
+              >
+                <Square className="w-3 h-3 mr-1 fill-current" />
+                {stats.stopped} {locale === 'ar' ? 'متوقف' : 'Stopped'}
               </Badge>
               {stats.renewalDate && (
                 <Badge className={`${(daysRemaining ?? 0) <= 0 ? 'bg-red-600 animate-pulse' : (daysRemaining ?? 0) <= 5 ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs transition-colors cursor-default`}>
@@ -2665,28 +2697,101 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <CardTitle className="text-base">{t('slots')}</CardTitle>
-                  <div className="relative font-normal flex items-center gap-2">
+                  <div className="relative font-normal flex items-center gap-2 flex-wrap">
                     <div className="relative">
                       <Search className="w-4 h-4 absolute inset-y-0 start-2 my-auto text-muted-foreground" />
                       <Input 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         placeholder={locale === 'ar' ? 'بحث في الملاحظات...' : 'Search notes...'}
-                        className="h-7 w-[200px] ps-8 text-xs focus-visible:ring-1"
+                        className="h-7 w-[170px] ps-8 text-xs focus-visible:ring-1"
                       />
                     </div>
+
+                    {/* Quick Status Filter Buttons Group */}
+                    <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border/50 text-xs">
+                      <Button
+                        size="sm"
+                        variant={filterStatus === 'all' ? 'secondary' : 'ghost'}
+                        className={`h-6 px-2 text-xs font-medium rounded-md transition-all ${
+                          filterStatus === 'all' 
+                            ? 'bg-background shadow-xs text-foreground font-semibold' 
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
+                        title={locale === 'ar' ? 'عرض الكل' : 'Show all'}
+                      >
+                        <List className="w-3 h-3 mr-1" />
+                        {locale === 'ar' ? 'الكل' : 'All'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={filterStatus === 'active' ? 'secondary' : 'ghost'}
+                        className={`h-6 px-2 text-xs font-medium rounded-md transition-all ${
+                          filterStatus === 'active' 
+                            ? 'bg-green-500/15 text-green-600 dark:text-green-400 font-semibold shadow-xs border border-green-500/30' 
+                            : 'text-muted-foreground hover:text-green-600'
+                        }`}
+                        onClick={() => { setFilterStatus('active'); setCurrentPage(1); }}
+                        title={locale === 'ar' ? 'عرض البثوث المباشرة فقط' : 'Show live streaming only'}
+                      >
+                        <span className="relative flex h-1.5 w-1.5 mr-1">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                        </span>
+                        <Play className="w-2.5 h-2.5 mr-0.5 fill-current" />
+                        {locale === 'ar' ? 'بث مباشر' : 'Streaming'} ({stats.streaming})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={filterStatus === 'scheduled' ? 'secondary' : 'ghost'}
+                        className={`h-6 px-2 text-xs font-medium rounded-md transition-all ${
+                          filterStatus === 'scheduled' 
+                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 font-semibold shadow-xs border border-orange-500/30' 
+                            : 'text-muted-foreground hover:text-orange-600'
+                        }`}
+                        onClick={() => { setFilterStatus('scheduled'); setCurrentPage(1); }}
+                        title={locale === 'ar' ? 'عرض المجدول فقط' : 'Show scheduled only'}
+                      >
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {locale === 'ar' ? 'مجدول' : 'Scheduled'} ({stats.scheduled})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={filterStatus === 'stopped' ? 'secondary' : 'ghost'}
+                        className={`h-6 px-2 text-xs font-medium rounded-md transition-all ${
+                          filterStatus === 'stopped' 
+                            ? 'bg-slate-500/15 text-slate-700 dark:text-slate-300 font-semibold shadow-xs border border-slate-500/30' 
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                        onClick={() => { setFilterStatus('stopped'); setCurrentPage(1); }}
+                        title={locale === 'ar' ? 'عرض المتوقف فقط' : 'Show stopped only'}
+                      >
+                        <Square className="w-2.5 h-2.5 mr-1 fill-current" />
+                        {locale === 'ar' ? 'متوقف' : 'Stopped'} ({stats.stopped})
+                      </Button>
+                    </div>
+
                     {filterStatus !== 'all' && (
                       <Badge 
                         variant="secondary" 
-                        className={`h-7 px-2 cursor-pointer transition-all hover:bg-destructive/15 hover:text-destructive flex items-center gap-1 text-[11px] border border-dashed select-none shrink-0 ${
+                        className={`h-6 px-2 cursor-pointer transition-all hover:bg-destructive/15 hover:text-destructive flex items-center gap-1 text-[11px] border border-dashed select-none shrink-0 ${
                           filterStatus === 'active' 
                             ? 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400' 
-                            : 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                            : filterStatus === 'scheduled'
+                              ? 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400'
+                              : 'border-slate-500 bg-slate-500/10 text-slate-600 dark:text-slate-400'
                         }`}
-                        onClick={() => setFilterStatus('all')}
+                        onClick={() => { setFilterStatus('all'); setCurrentPage(1); }}
                         title={locale === 'ar' ? 'إزالة التصفية' : 'Clear filter'}
                       >
-                        <span>{filterStatus === 'active' ? (locale === 'ar' ? 'نشط فقط' : 'Active Only') : (locale === 'ar' ? 'مجدول فقط' : 'Scheduled Only')}</span>
+                        <span>
+                          {filterStatus === 'active' 
+                            ? (locale === 'ar' ? 'بث مباشر فقط' : 'Streaming Only') 
+                            : filterStatus === 'scheduled'
+                              ? (locale === 'ar' ? 'مجدول فقط' : 'Scheduled Only')
+                              : (locale === 'ar' ? 'متوقف فقط' : 'Stopped Only')}
+                        </span>
                         <X className="w-3 h-3 ml-0.5" />
                       </Badge>
                     )}
