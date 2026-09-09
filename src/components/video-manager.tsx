@@ -26,7 +26,7 @@ import {
 import {
   FolderOpen, File, Upload, Download, Trash2, Edit3, Move,
   ChevronRight, FolderPlus, ArrowLeft, Home, RefreshCw, Link2, Loader2,
-  Check, AlertCircle, Play, HardDrive, X, Zap, Search, Image
+  Check, AlertCircle, Play, HardDrive, X, Zap, Search, Image, Eye
 } from 'lucide-react'
 import { t, getLocale, type TranslationKey } from '@/lib/i18n'
 
@@ -1085,9 +1085,23 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                 )}
 
                 {isImageFile(video.name) ? (
-                  <Image className="w-5 h-5 text-purple-500 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPreviewVideo(video); }}
+                    className="p-1 rounded hover:bg-muted/80 text-purple-500 hover:text-purple-400 transition-colors"
+                    title={getLocale() === 'ar' ? 'معاينة الصورة' : 'Preview Image'}
+                  >
+                    <Image className="w-5 h-5 shrink-0" />
+                  </button>
                 ) : (
-                  <File className="w-5 h-5 text-blue-500 shrink-0" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setPreviewVideo(video); }}
+                    className="p-1 rounded hover:bg-muted/80 text-blue-500 hover:text-blue-400 transition-colors"
+                    title={getLocale() === 'ar' ? 'معاينة الفيديو' : 'Preview Video'}
+                  >
+                    <File className="w-5 h-5 shrink-0" />
+                  </button>
                 )}
 
                 {/* Name — click to select in select mode */}
@@ -1107,16 +1121,22 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                 {/* Action buttons */}
                 <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                   {mode === 'select' && (
-                    <Button size="sm" variant="default" className="h-7" onClick={() => handleSelect(video.path)}>
-                      <Check className="w-3.5 h-3.5 mr-1" />
-                      {t('select')}
-                    </Button>
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title={isImageFile(video.name) ? (getLocale() === 'ar' ? 'معاينة الصورة' : 'Preview Image') : (getLocale() === 'ar' ? 'معاينة الفيديو' : 'Preview Video')}
+                        onClick={(e) => { e.stopPropagation(); setPreviewVideo(video); }}>
+                        <Eye className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                      </Button>
+                      <Button size="sm" variant="default" className="h-7" onClick={() => handleSelect(video.path)}>
+                        <Check className="w-3.5 h-3.5 mr-1" />
+                        {t('select')}
+                      </Button>
+                    </>
                   )}
                   {mode === 'manage' && (
                     <>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" title={isImageFile(video.name) ? "View Image" : "Preview"}
+                      <Button size="icon" variant="ghost" className="h-7 w-7" title={isImageFile(video.name) ? (getLocale() === 'ar' ? 'معاينة الصورة' : 'Preview Image') : (getLocale() === 'ar' ? 'معاينة الفيديو' : 'Preview Video')}
                         onClick={() => setPreviewVideo(video)}>
-                        {isImageFile(video.name) ? <Image className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                        {isImageFile(video.name) ? <Image className="w-3.5 h-3.5 text-purple-500" /> : <Play className="w-3.5 h-3.5 text-blue-500" />}
                       </Button>
                       <a href={`/api/videos/stream?path=${encodeURIComponent(video.path)}&download=1`} download={video.name} target="_blank" rel="noopener noreferrer">
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600" title={getLocale() === 'ar' ? 'تحميل مباشر' : 'Direct Download'}>
@@ -1311,24 +1331,30 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {/* ═══ Video Preview Dialog ═══ */}
+      {/* ═══ Media Preview Dialog (Images & Videos) ═══ */}
       <Dialog open={!!previewVideo} onOpenChange={(open) => !open && setPreviewVideo(null)}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[95vh] flex flex-col">
+        <DialogContent className="sm:max-w-4xl w-[95vw] max-h-[95vh] flex flex-col p-4">
           <DialogHeader className="shrink-0">
-            <DialogTitle className="flex items-center gap-2 truncate" dir="auto">
-              <Play className="w-4 h-4 shrink-0" />
-              {previewVideo?.name}
+            <DialogTitle className="flex items-center gap-2 truncate" dir="ltr">
+              {previewVideo && isImageFile(previewVideo.name) ? (
+                <Image className="w-5 h-5 text-purple-500 shrink-0" />
+              ) : (
+                <Play className="w-5 h-5 text-blue-500 shrink-0" />
+              )}
+              <span className="truncate">{previewVideo?.name}</span>
             </DialogTitle>
             <DialogDescription>
-              {previewVideo?.sizeFormatted} — Double-click to preview
+              {previewVideo?.sizeFormatted} — {previewVideo && isImageFile(previewVideo.name)
+                ? (getLocale() === 'ar' ? 'معاينة الصورة' : 'Image Preview')
+                : (getLocale() === 'ar' ? 'معاينة الفيديو' : 'Video Preview')}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 flex items-center justify-center bg-black rounded-lg overflow-hidden min-h-0">
+          <div className="flex-1 flex items-center justify-center bg-black/90 rounded-lg overflow-hidden min-h-[300px] max-h-[70vh] p-2">
             {previewVideo && (
               isImageFile(previewVideo.name) ? (
                 <img
                   key={previewVideo.path}
-                  className="max-w-full max-h-[70vh] object-contain"
+                  className="max-w-full max-h-[65vh] object-contain rounded shadow-lg"
                   src={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}`}
                   alt={previewVideo.name}
                 />
@@ -1337,7 +1363,7 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
                   key={previewVideo.path}
                   controls
                   autoPlay
-                  className="max-w-full max-h-[70vh] w-full"
+                  className="max-w-full max-h-[65vh] w-full rounded shadow-lg"
                   src={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}`}
                 >
                   Your browser does not support the video tag.
@@ -1345,13 +1371,35 @@ export function VideoManager({ onVideoSelect, onClose, mode = 'manage' }: VideoM
               )
             )}
           </div>
-          <DialogFooter className="shrink-0">
-            <Button variant="outline" onClick={() => setPreviewVideo(null)}>Close</Button>
-            {onVideoSelect && previewVideo && (
-              <Button onClick={() => { onVideoSelect(previewVideo.path); setPreviewVideo(null) }}>
-                <Check className="w-4 h-4 mr-1" /> Select This Video
+          <DialogFooter className="shrink-0 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-2">
+              {previewVideo && (
+                <a
+                  href={`/api/videos/stream?path=${encodeURIComponent(previewVideo.path)}&download=1`}
+                  download={previewVideo.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="secondary" size="sm" className="gap-1.5 text-green-600 dark:text-green-400">
+                    <Download className="w-4 h-4" />
+                    {getLocale() === 'ar' ? 'تحميل' : 'Download'}
+                  </Button>
+                </a>
+              )}
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button variant="outline" size="sm" onClick={() => setPreviewVideo(null)}>
+                {t('close')}
               </Button>
-            )}
+              {onVideoSelect && previewVideo && (
+                <Button size="sm" onClick={() => { onVideoSelect(previewVideo.path); setPreviewVideo(null) }}>
+                  <Check className="w-4 h-4 mr-1" />
+                  {isImageFile(previewVideo.name)
+                    ? (getLocale() === 'ar' ? 'اختيار هذه الصورة' : 'Select This Image')
+                    : (getLocale() === 'ar' ? 'اختيار هذا الفيديو' : 'Select This Video')}
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
