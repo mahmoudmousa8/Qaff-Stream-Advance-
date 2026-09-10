@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
 import { getAuthUser } from '@/lib/auth-helper'
+import { inFlightStartingSlots } from '@/lib/run-scheduler'
+import { deleteYoutubeBroadcast } from '@/lib/youtube-helper'
 
 const BULK_STREAM_MANAGER = STREAM_MANAGER_URL
 
@@ -152,6 +154,13 @@ export async function POST(request: NextRequest) {
           const batch = slotsToStart.slice(i, i + BATCH_SIZE)
 
           await Promise.all(batch.map(async (slot) => {
+            if (inFlightStartingSlots.has(slot.slotIndex)) {
+              results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: 'Slot is already starting' } })
+              return
+            }
+
+            inFlightStartingSlots.add(slot.slotIndex)
+            let createdBroadcastId = ""
             try {
               let finalInputPath = slot.filePath
               if (slot.inputType === 'live') {
@@ -215,11 +224,12 @@ export async function POST(request: NextRequest) {
                   finalStreamKey = yt.streamKey || finalStreamKey
                   finalRtmpServer = yt.rtmpServer || finalRtmpServer
                   youtubeBroadcastId = yt.broadcastId || ""
+                  createdBroadcastId = yt.broadcastId || ""
                 } catch (ytErr: any) {
                   console.error(`[Bulk Start] Slot ${slot.slotIndex}: YouTube setup failed:`, ytErr.message)
                   await db.streamSlot.update({
                     where: { slotIndex: slot.slotIndex },
-                    data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+                    data: { status: 'Failed', isRunning: false, manuallyStopped: true, youtubeBroadcastId: '' }
                   })
                   await db.systemLog.create({
                     data: { message: `Slot ${slot.slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
@@ -260,21 +270,39 @@ export async function POST(request: NextRequest) {
                 verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
                 results.push({ status: 'fulfilled', value: { success: true, slotIndex: slot.slotIndex } })
               } else {
+                if (createdBroadcastId && slot.youtubeChannelId) {
+                  console.warn(`[Bulk Start] Rollback: Deleting orphaned YouTube broadcast ${createdBroadcastId} for slot ${slot.slotIndex + 1}`)
+                  try {
+                    await deleteYoutubeBroadcast(slot.youtubeChannelId, createdBroadcastId)
+                  } catch (delErr: any) {
+                    console.error(`[Bulk Start] Failed to rollback broadcast ${createdBroadcastId}:`, delErr.message)
+                  }
+                }
                 await db.streamSlot.update({
                   where: { slotIndex: slot.slotIndex },
-                  data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+                  data: { status: 'Failed', isRunning: false, manuallyStopped: true, youtubeBroadcastId: '' }
                 })
                 results.push({ status: 'fulfilled', value: { success: false, slotIndex: slot.slotIndex, message: result.message } })
               }
             } catch (error: any) {
+              if (createdBroadcastId && slot.youtubeChannelId) {
+                console.warn(`[Bulk Start] Rollback: Deleting orphaned YouTube broadcast ${createdBroadcastId} for slot ${slot.slotIndex + 1}`)
+                try {
+                  await deleteYoutubeBroadcast(slot.youtubeChannelId, createdBroadcastId)
+                } catch (delErr: any) {
+                  console.error(`[Bulk Start] Failed to rollback broadcast ${createdBroadcastId}:`, delErr.message)
+                }
+              }
               await db.streamSlot.update({
                 where: { slotIndex: slot.slotIndex },
-                data: { status: 'Failed', isRunning: false, manuallyStopped: true }
+                data: { status: 'Failed', isRunning: false, manuallyStopped: true, youtubeBroadcastId: '' }
               })
               await db.systemLog.create({
                 data: { message: `Slot ${slot.slotIndex + 1}: ${error.message || 'فشل بدء البث'}` }
               })
               results.push({ status: 'rejected', reason: error })
+            } finally {
+              inFlightStartingSlots.delete(slot.slotIndex)
             }
           }))
 

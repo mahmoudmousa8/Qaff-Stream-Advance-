@@ -10,7 +10,7 @@
 
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
-import { setupYoutubeLiveStream, stopYoutubeLiveStream, stopAllActiveBroadcastsForChannel } from '@/lib/youtube-helper'
+import { setupYoutubeLiveStream, stopYoutubeLiveStream, stopAllActiveBroadcastsForChannel, deleteYoutubeBroadcast } from '@/lib/youtube-helper'
 import { getCairoNowFields, getCairoTargetDate, getAbsoluteDateFromCairoFields } from '@/lib/timezone-helper'
 import fs from 'fs'
 import path from 'path'
@@ -92,6 +92,9 @@ interface FolderQueue {
 
 if (!g.__qaffFolderQueues) g.__qaffFolderQueues = new Map<string, FolderQueue>()
 const folderQueues: Map<string, FolderQueue> = g.__qaffFolderQueues
+
+if (!g.__qaffInFlightStartingSlots) g.__qaffInFlightStartingSlots = new Set<number>()
+export const inFlightStartingSlots: Set<number> = g.__qaffInFlightStartingSlots
 
 function shuffleArray<T>(array: T[]): T[] {
   const arr = [...array]
@@ -887,7 +890,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       activeSwapVideos.delete(slot.slotIndex)
 
       // ── Reschedule finished/stopped recurring slots ──
-      const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h
+      const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
       if (!slot.isScheduled && isRecurring && slot.schedStart && !slot.manuallyStopped) {
         let shouldReschedule = true
         
@@ -1405,54 +1408,68 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     const state = recoveryStates.get(stateKey)
     const isBackoffActive = state && state.pendingUntil > Date.now()
 
-    if (slot.isScheduled && !slot.isRunning && slot.schedStart && hasDestination && hasInput) {
-      if (isBackoffActive) {
-        const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Start bypassed because backoff is active (${waitSec}s remaining)`)
-      } else {
-        // Exact trigger: within 5 minutes of the exact scheduled start time
-        const exactTrigger = shouldTrigger(slot.schedStart, slot.slotIndex, false)
+    // ── Guard against duplicate start triggers ──
+    // If the slot is already streaming in stream-manager, queued, or currently in-flight starting,
+    // do NOT attempt to start it again under any circumstance!
+    const isAlreadyActiveOrStarting =
+      activeInManager.has(slot.slotIndex) ||
+      queuedInManager.has(slot.slotIndex) ||
+      inFlightStartingSlots.has(slot.slotIndex)
 
-        // Window trigger: now is inside [schedStart, schedStop) window
-        // Handles both "MM-DD HH:MM" and "DUR HH:MM" schedStop formats
-        const withinWindow = slot.schedStop
-          ? isWithinActiveWindow(slot.schedStart, slot.schedStop)
-          : false
+    if (!isAlreadyActiveOrStarting) {
+      if (slot.isScheduled && !slot.isRunning && slot.schedStart && hasDestination && hasInput) {
+        if (isBackoffActive) {
+          const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Start bypassed because backoff is active (${waitSec}s remaining)`)
+        } else {
+          // Exact trigger: within 5 minutes of the exact scheduled start time
+          const exactTrigger = shouldTrigger(slot.schedStart, slot.slotIndex, false)
 
-        if (exactTrigger || withinWindow) {
-          slotsToStart.push(slot)
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Queued for start (exactTrigger=${exactTrigger}, withinWindow=${withinWindow})`)
-        }
-      }
-    }
+          // Window trigger: now is inside [schedStart, schedStop) window
+          // Handles both "MM-DD HH:MM" and "DUR HH:MM" schedStop formats
+          const withinWindow = slot.schedStop
+            ? isWithinActiveWindow(slot.schedStart, slot.schedStop)
+            : false
 
-    // ── Orphaned / Crashed streams recovery (manual Stop guard) ──
-    if (slot.isRunning === false && slot.manuallyStopped === false && hasInput && hasDestination) {
-      if (isBackoffActive) {
-        const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Recovery start bypassed because backoff is active (${waitSec}s remaining)`)
-      } else {
-        let shouldRun = false;
-        if (!slot.daily && !slot.weekly && !slot.hourly && !slot.repeat10m && !slot.repeat15m && !slot.repeat30m && !slot.repeat1h && !slot.repeat2h && !slot.repeat12h && !slot.schedStart) {
-          // It's a completely manual 24/7 stream. If manuallyStopped is false, it MUST run!
-          shouldRun = true;
-        } else if (slot.schedStart && slot.isScheduled) {
-          if (slot.schedStop) {
-            shouldRun = isWithinActiveWindow(slot.schedStart, slot.schedStop);
-          } else {
-            // It has a schedStart but no stop. It runs forever once started.
-            const parsedStart = parseScheduleTime(slot.schedStart);
-            if (parsedStart) {
-              const startDate = getCairoTargetDate(parsedStart, now);
-              if (now >= startDate) shouldRun = true;
-            }
+          if (exactTrigger || withinWindow) {
+            slotsToStart.push(slot)
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Queued for start (exactTrigger=${exactTrigger}, withinWindow=${withinWindow})`)
           }
         }
+      }
 
-        if (shouldRun && !slotsToStart.find(s => s.slotIndex === slot.slotIndex)) {
-          slotsToStart.push(slot);
-          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Auto-restarting because manuallyStopped=false`)
-          logs.push(`Slot ${slot.slotIndex + 1}: Auto-restarting (manuallyStopped is false)`);
+      // ── Orphaned / Crashed streams recovery (manual Stop guard) ──
+      if (slot.isRunning === false && slot.manuallyStopped === false && hasInput && hasDestination) {
+        if (isBackoffActive) {
+          const waitSec = Math.round((state.pendingUntil - Date.now()) / 1000)
+          console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Recovery start bypassed because backoff is active (${waitSec}s remaining)`)
+        } else {
+          let shouldRun = false;
+          const isRecurring = !!(slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h);
+
+          if (!isRecurring && !slot.schedStart) {
+            // It's a completely manual 24/7 stream. If manuallyStopped is false, it MUST run!
+            shouldRun = true;
+          } else if (slot.schedStart && slot.isScheduled && !isRecurring) {
+            // ONLY non-recurring streams can use this crash-recovery fallback.
+            // Recurring streams have scheduled rest intervals and are triggered exclusively by exactTrigger or withinWindow!
+            if (slot.schedStop) {
+              shouldRun = isWithinActiveWindow(slot.schedStart, slot.schedStop);
+            } else {
+              // Non-recurring stream with schedStart but no stop: runs forever once started.
+              const parsedStart = parseScheduleTime(slot.schedStart);
+              if (parsedStart) {
+                const startDate = getCairoTargetDate(parsedStart, now);
+                if (now >= startDate) shouldRun = true;
+              }
+            }
+          }
+
+          if (shouldRun && !slotsToStart.find(s => s.slotIndex === slot.slotIndex)) {
+            slotsToStart.push(slot);
+            console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Auto-restarting because manuallyStopped=false`)
+            logs.push(`Slot ${slot.slotIndex + 1}: Auto-restarting (manuallyStopped is false)`);
+          }
         }
       }
     }
@@ -1467,6 +1484,12 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     const batch = slotsToStart.slice(i, i + BATCH_SIZE)
 
     await Promise.all(batch.map(async (slot) => {
+      // Guard against starting if already in-flight or already streaming in stream-manager
+      if (inFlightStartingSlots.has(slot.slotIndex) || activeInManager.has(slot.slotIndex) || queuedInManager.has(slot.slotIndex)) {
+        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Skipped batch start — already in-flight or streaming in stream-manager`)
+        return
+      }
+
       let finalInputPath = slot.filePath
       if (slot.inputType === 'live') {
         finalInputPath = `rtmp://127.0.0.1/live/${securityKey}`
@@ -1528,6 +1551,8 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         return
       }
 
+      inFlightStartingSlots.add(slot.slotIndex)
+      let createdBroadcastId = ''
       try {
         // If a YouTube channel is bound to this slot, run the YouTube Live broadcast setup
         let finalStreamKey = slot.streamKey
@@ -1611,6 +1636,7 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
             finalStreamKey = yt.streamKey || finalStreamKey
             finalRtmpServer = yt.rtmpServer || finalRtmpServer
             youtubeBroadcastId = yt.broadcastId || ''
+            createdBroadcastId = yt.broadcastId || ''
             // Persist the fresh stream key, rtmp server, and broadcastId so the swap uses the same session
             await db.streamSlot.update({
               where: { slotIndex: slot.slotIndex },
@@ -1735,6 +1761,16 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         lastActionTokens.set(slot.slotIndex, token)
         verifyStreamStatusAfterDelay(slot.slotIndex, 'start', token)
       } catch (e: any) {
+        // Rollback: If a YouTube broadcast was created, delete it immediately so it doesn't stay orphaned on YouTube!
+        if (createdBroadcastId && slot.youtubeChannelId) {
+          console.warn(`[Scheduler] Rollback: Deleting orphaned YouTube broadcast ${createdBroadcastId} for slot ${slot.slotIndex + 1}`)
+          try {
+            await deleteYoutubeBroadcast(slot.youtubeChannelId, createdBroadcastId)
+          } catch (delErr: any) {
+            console.error(`[Scheduler] Failed to rollback/delete broadcast ${createdBroadcastId}:`, delErr.message)
+          }
+        }
+
         // Increment recovery state crash count because starting failed
         const stateKey = `state_${slot.slotIndex}`
         const state = recoveryStates.get(stateKey) ?? { crashCount: 0, backoffLevel: 0, pendingUntil: 0 }
@@ -1803,11 +1839,14 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
               isScheduled: isRecurring ? true : false,
               status: 'Scheduled',
               schedStop: slot.schedStop,
+              youtubeBroadcastId: '',
               manuallyStopped: false
             }
           })
           logs.push(`Slot ${slot.slotIndex + 1}: Failed to auto-start: ${e.message || 'Stream manager error'}. Retrying in ${Math.round(delay/1000)}s (Crash ${state.crashCount}/${MAX_CRASH_COUNT})`)
         }
+      } finally {
+        inFlightStartingSlots.delete(slot.slotIndex)
       }
     }))
 

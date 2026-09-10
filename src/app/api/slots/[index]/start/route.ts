@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { STREAM_MANAGER_URL } from '@/lib/paths'
+import { inFlightStartingSlots } from '@/lib/run-scheduler'
+import { deleteYoutubeBroadcast } from '@/lib/youtube-helper'
 
 // POST - Start streaming
 export async function POST(
@@ -13,6 +15,26 @@ export async function POST(
 
     if (isNaN(slotIndex) || slotIndex < 0 || slotIndex >= 500) {
       return NextResponse.json({ error: 'Invalid slot index' }, { status: 400 })
+    }
+
+    // Mutex check: is this slot already in the middle of starting?
+    if (inFlightStartingSlots.has(slotIndex)) {
+      return NextResponse.json({ error: 'البث قيد البدء بالفعل، يرجى الانتظار ثوانٍ معدودة...' }, { status: 409 })
+    }
+
+    // Check if slot is already running or queued in stream-manager
+    try {
+      const statusRes = await fetch(`${STREAM_MANAGER_URL}/status`, { signal: AbortSignal.timeout(3000) })
+      if (statusRes.ok) {
+        const statusData = await statusRes.json()
+        const activeStreams = Array.isArray(statusData.activeStreams) ? statusData.activeStreams : []
+        const queuedStreams = Array.isArray(statusData.queuedStreams) ? statusData.queuedStreams : []
+        if (activeStreams.includes(slotIndex) || queuedStreams.includes(slotIndex)) {
+          return NextResponse.json({ error: 'البث يعمل بالفعل حالياً' }, { status: 400 })
+        }
+      }
+    } catch {
+      // Ignore if stream-manager is unreachable or starting
     }
 
     const slot = await db.streamSlot.findUnique({
@@ -148,164 +170,189 @@ export async function POST(
 
 
 
-    let finalStreamKey = slot.streamKey
-    let finalRtmpServer = slot.rtmpServer
-    let youtubeBroadcastId = ""
-    if (slot.youtubeChannelId && outputType === 'youtube') {
-      try {
-        console.log(`[Start Route] Slot ${slotIndex}: Setting up single YouTube Live broadcast...`)
-        const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
-        const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
-        let resolvedThumbnailPath = currentThumbnailPath || slot.youtubeThumbnailPath || undefined
-        if (resolvedThumbnailPath) {
-          resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slotIndex)
-          activeThumbnails.set(slotIndex, resolvedThumbnailPath)
-        }
+    inFlightStartingSlots.add(slotIndex)
+    let createdBroadcastId = ""
+    try {
+      let finalStreamKey = slot.streamKey
+      let finalRtmpServer = slot.rtmpServer
+      let youtubeBroadcastId = ""
+      if (slot.youtubeChannelId && outputType === 'youtube') {
+        try {
+          console.log(`[Start Route] Slot ${slotIndex}: Setting up single YouTube Live broadcast...`)
+          const { setupYoutubeLiveStream } = await import('@/lib/youtube-helper')
+          const { resolveThumbnailFileFromFolder, activeThumbnails } = await import('@/lib/run-scheduler')
+          let resolvedThumbnailPath = currentThumbnailPath || slot.youtubeThumbnailPath || undefined
+          if (resolvedThumbnailPath) {
+            resolvedThumbnailPath = resolveThumbnailFileFromFolder(resolvedThumbnailPath, slotIndex)
+            activeThumbnails.set(slotIndex, resolvedThumbnailPath)
+          }
 
-        let finalTitle = slot.youtubeTitle || 'Live Stream'
-        let finalDescription = slot.youtubeDescription || ''
+          let finalTitle = slot.youtubeTitle || 'Live Stream'
+          let finalDescription = slot.youtubeDescription || ''
 
-        if (currentTitleDescListId) {
-          try {
-            const tdList = await db.titleDescList.findUnique({
-              where: { id: currentTitleDescListId }
-            })
-            if (tdList) {
-              const listData = JSON.parse(tdList.items)
-              const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
-              const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
-              if (validPairs.length > 0) {
-                const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)]
-                finalTitle = randomPair.title
-                finalDescription = randomPair.description || ''
+          if (currentTitleDescListId) {
+            try {
+              const tdList = await db.titleDescList.findUnique({
+                where: { id: currentTitleDescListId }
+              })
+              if (tdList) {
+                const listData = JSON.parse(tdList.items)
+                const pairs = Array.isArray(listData) ? listData : (listData.pairs || [])
+                const validPairs = pairs.filter((p: any) => p && p.title && p.title.trim() !== '')
+                if (validPairs.length > 0) {
+                  const randomPair = validPairs[Math.floor(Math.random() * validPairs.length)]
+                  finalTitle = randomPair.title
+                  finalDescription = randomPair.description || ''
+                }
               }
+            } catch (e: any) {
+              console.error(`[Start Route] Failed to fetch/parse title desc list for slot ${slot.slotIndex}:`, e.message)
             }
-          } catch (e: any) {
-            console.error(`[Start Route] Failed to fetch/parse title desc list for slot ${slot.slotIndex}:`, e.message)
+          }
+
+          // Auto-increment Episode Number if {Add} exists
+          const epNum = (slot as any).episodeNumber || 1;
+          const episodeRegex = /\{add\}/gi;
+          const titleHasEp = episodeRegex.test(finalTitle);
+          const descHasEp = episodeRegex.test(finalDescription);
+          
+          if (titleHasEp || descHasEp) {
+            finalTitle = finalTitle.replace(episodeRegex, epNum.toString());
+            finalDescription = finalDescription.replace(episodeRegex, epNum.toString());
+            
+            await db.streamSlot.update({
+              where: { slotIndex },
+              data: { episodeNumber: { increment: 1 } }
+            });
+          }
+
+          const yt = await setupYoutubeLiveStream(
+            slot.youtubeChannelId,
+            finalTitle,
+            finalDescription,
+            resolvedThumbnailPath,
+            slot.streamKey
+          )
+          finalStreamKey = yt.streamKey || finalStreamKey
+          finalRtmpServer = yt.rtmpServer || finalRtmpServer
+          youtubeBroadcastId = yt.broadcastId || ""
+          createdBroadcastId = yt.broadcastId || ""
+          console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
+
+          if (youtubeBroadcastId && slot.youtubeChannelId) {
+            const chId = slot.youtubeChannelId
+            const bcId = youtubeBroadcastId
+            setTimeout(async () => {
+              const { triggerLiveAdBreak } = await import('@/lib/youtube-helper')
+              triggerLiveAdBreak(chId, bcId)
+            }, 20000)
+          }
+        } catch (ytErr: any) {
+          console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed:`, ytErr.message)
+          await db.streamSlot.update({
+            where: { slotIndex },
+            data: { status: 'Failed', isRunning: false, youtubeBroadcastId: '' }
+          })
+          await db.systemLog.create({
+            data: { message: `Slot ${slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
+          })
+          return NextResponse.json({ error: `YouTube API Error: ${ytErr.message}` }, { status: 400 })
+        }
+      }
+
+      // Call stream manager — single stream
+      try {
+        let resolvedInputPath = finalInputPath
+        if (slot.inputType !== 'live' && finalInputPath) {
+          const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
+          if (slot.playlistLoopEnabled) {
+            activeMainVideos.set(slotIndex, resolvedInputPath)
+          } else if (slot.filePath) {
+            resolvedInputPath = resolveVideoFileFromFolder(slot.filePath, slotIndex, 'main')
+            activeMainVideos.set(slotIndex, resolvedInputPath)
           }
         }
 
-        // Auto-increment Episode Number if {Add} exists
-        const epNum = (slot as any).episodeNumber || 1;
-        const episodeRegex = /\{add\}/gi;
-        const titleHasEp = episodeRegex.test(finalTitle);
-        const descHasEp = episodeRegex.test(finalDescription);
-        
-        if (titleHasEp || descHasEp) {
-          finalTitle = finalTitle.replace(episodeRegex, epNum.toString());
-          finalDescription = finalDescription.replace(episodeRegex, epNum.toString());
-          
+        const response = await fetch(`${STREAM_MANAGER_URL}/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slotIndex,
+            outputType,
+            rtmpServer: finalRtmpServer,
+            streamKey: finalStreamKey,
+            filePath: resolvedInputPath
+          })
+        })
+
+        const result = await response.json()
+
+        if (!result.success) {
+          // Rollback: If YouTube broadcast was created, delete it so it is not orphaned!
+          if (createdBroadcastId && slot.youtubeChannelId) {
+            console.warn(`[Start Route] Rollback: Deleting orphaned YouTube broadcast ${createdBroadcastId} for slot ${slotIndex}`)
+            try {
+              await deleteYoutubeBroadcast(slot.youtubeChannelId, createdBroadcastId)
+            } catch (delErr: any) {
+              console.error(`[Start Route] Failed to rollback broadcast ${createdBroadcastId}:`, delErr.message)
+            }
+          }
           await db.streamSlot.update({
             where: { slotIndex },
-            data: { episodeNumber: { increment: 1 } }
-          });
+            data: { status: 'Failed', isRunning: false, manuallyStopped: true, youtubeBroadcastId: '' }
+          })
+          return NextResponse.json({ error: result.message }, { status: 400 })
         }
 
-        const yt = await setupYoutubeLiveStream(
-          slot.youtubeChannelId,
-          finalTitle,
-          finalDescription,
-          resolvedThumbnailPath,
-          slot.streamKey
-        )
-        finalStreamKey = yt.streamKey || finalStreamKey
-        finalRtmpServer = yt.rtmpServer || finalRtmpServer
-        youtubeBroadcastId = yt.broadcastId || ""
-        console.log(`[Start Route] Slot ${slotIndex}: YouTube Live broadcast ready. Stream key: ${finalStreamKey.substring(0, 4)}****`)
+        const updatedSlot = await db.streamSlot.update({
+          where: { slotIndex },
+          data: {
+            isRunning: true,
+            isScheduled: false,
+            status: 'Streaming',
+            lastVideoSwitchTime: new Date().toISOString(),
+            streamKey: finalStreamKey,
+            rtmpServer: finalRtmpServer,
+            youtubeBroadcastId: youtubeBroadcastId
+          }
+        })
 
-        if (youtubeBroadcastId && slot.youtubeChannelId) {
-          const chId = slot.youtubeChannelId
-          const bcId = youtubeBroadcastId
-          setTimeout(async () => {
-            const { triggerLiveAdBreak } = await import('@/lib/youtube-helper')
-            triggerLiveAdBreak(chId, bcId)
-          }, 20000)
+        const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
+        const token = Math.random().toString(36).substring(7)
+        lastActionTokens.set(slotIndex, token)
+        verifyStreamStatusAfterDelay(slotIndex, 'start', token)
+
+        return NextResponse.json({
+          success: true,
+          slot: updatedSlot,
+          message: result.message || 'streamRunning'
+        })
+      } catch (error: any) {
+        console.error('Failed to start stream:', error)
+        // Rollback: If YouTube broadcast was created, delete it so it is not orphaned!
+        if (createdBroadcastId && slot.youtubeChannelId) {
+          console.warn(`[Start Route] Rollback: Deleting orphaned YouTube broadcast ${createdBroadcastId} for slot ${slotIndex}`)
+          try {
+            await deleteYoutubeBroadcast(slot.youtubeChannelId, createdBroadcastId)
+          } catch (delErr: any) {
+            console.error(`[Start Route] Failed to rollback broadcast ${createdBroadcastId}:`, delErr.message)
+          }
         }
-      } catch (ytErr: any) {
-        console.error(`[Start Route] Slot ${slotIndex}: YouTube setup failed:`, ytErr.message)
         await db.streamSlot.update({
           where: { slotIndex },
-          data: { status: 'Failed', isRunning: false }
+          data: { status: 'Failed', isRunning: false, manuallyStopped: true, youtubeBroadcastId: '' }
         })
+        // Write the error into the System Logs database
         await db.systemLog.create({
-          data: { message: `Slot ${slotIndex + 1}: YouTube API Error: ${ytErr.message}` }
+          data: { message: `Slot ${slotIndex + 1}: ${error.message || 'فشل بدء البث'}` }
         })
-        return NextResponse.json({ error: `YouTube API Error: ${ytErr.message}` }, { status: 400 })
+        
+        const isManagerError = error.message && (error.message.includes('fetch') || error.message.includes('connect'));
+        const userMessage = isManagerError ? 'Stream manager not available' : (error.message || 'streamFailed');
+        return NextResponse.json({ error: userMessage }, { status: 500 })
       }
-    }
-
-    // Call stream manager — single stream
-    try {
-      let resolvedInputPath = finalInputPath
-      if (slot.inputType !== 'live' && finalInputPath) {
-        const { resolveVideoFileFromFolder, activeMainVideos } = await import('@/lib/run-scheduler')
-        if (slot.playlistLoopEnabled) {
-          activeMainVideos.set(slotIndex, resolvedInputPath)
-        } else if (slot.filePath) {
-          resolvedInputPath = resolveVideoFileFromFolder(slot.filePath, slotIndex, 'main')
-          activeMainVideos.set(slotIndex, resolvedInputPath)
-        }
-      }
-
-      const response = await fetch(`${STREAM_MANAGER_URL}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slotIndex,
-          outputType,
-          rtmpServer: finalRtmpServer,
-          streamKey: finalStreamKey,
-          filePath: resolvedInputPath
-        })
-      })
-
-      const result = await response.json()
-
-      if (!result.success) {
-        await db.streamSlot.update({
-          where: { slotIndex },
-          data: { status: 'Failed', isRunning: false, manuallyStopped: true }
-        })
-        return NextResponse.json({ error: result.message }, { status: 400 })
-      }
-
-      const updatedSlot = await db.streamSlot.update({
-        where: { slotIndex },
-        data: {
-          isRunning: true,
-          isScheduled: false,
-          status: 'Streaming',
-          lastVideoSwitchTime: new Date().toISOString(),
-          streamKey: finalStreamKey,
-          rtmpServer: finalRtmpServer,
-          youtubeBroadcastId: youtubeBroadcastId
-        }
-      })
-
-      const { verifyStreamStatusAfterDelay, lastActionTokens } = await import('@/lib/run-scheduler')
-      const token = Math.random().toString(36).substring(7)
-      lastActionTokens.set(slotIndex, token)
-      verifyStreamStatusAfterDelay(slotIndex, 'start', token)
-
-      return NextResponse.json({
-        success: true,
-        slot: updatedSlot,
-        message: result.message || 'streamRunning'
-      })
-    } catch (error: any) {
-      console.error('Failed to start stream:', error)
-      await db.streamSlot.update({
-        where: { slotIndex },
-        data: { status: 'Failed', isRunning: false, manuallyStopped: true }
-      })
-      // Write the error into the System Logs database
-      await db.systemLog.create({
-        data: { message: `Slot ${slotIndex + 1}: ${error.message || 'فشل بدء البث'}` }
-      })
-      
-      const isManagerError = error.message && (error.message.includes('fetch') || error.message.includes('connect'));
-      const userMessage = isManagerError ? 'Stream manager not available' : (error.message || 'streamFailed');
-      return NextResponse.json({ error: userMessage }, { status: 500 })
+    } finally {
+      inFlightStartingSlots.delete(slotIndex)
     }
   } catch (error) {
     console.error('Error starting stream:', error)
