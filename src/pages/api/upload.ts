@@ -3,6 +3,7 @@ import { createWriteStream, existsSync, unlinkSync, mkdirSync, statSync, readdir
 import path from 'path'
 import Busboy from 'busboy'
 import { VIDEOS_DIR, APP_DATA_DIR } from '@/lib/paths'
+import { optimizeImageFile } from '@/lib/image-optimizer'
 
 function getDirectorySize(dirPath: string): number {
     let size = 0
@@ -206,10 +207,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             // Track bytes for progress/reporting
             file.on('data', (chunk) => {
                 bytesWritten += chunk.length
-                if (imageExts.includes(ext) && bytesWritten > 1992294) { // 1.9MB limit for images
+                if (imageExts.includes(ext) && bytesWritten > 30 * 1024 * 1024) { // 30MB initial limit for images
                     file.pause()
                     writeStream.destroy()
-                    sendError(400, 'Image file size must be less than 1.9MB')
+                    sendError(400, 'Image file size must be less than 30MB')
                     return
                 }
                 if (currentStorageUsed + bytesWritten > maxStorageBytes) {
@@ -236,9 +237,20 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             })
 
             // Only send success AFTER the write has fully flushed to disk
-            writeStream.on('finish', () => {
-                // All files: skip validation and transcoding — accept as-is
-                console.log(`[upload] File ${originalName} uploaded successfully (no processing).`)
+            writeStream.on('finish', async () => {
+                // Automatically optimize uploaded images in-place
+                if (imageExts.includes(ext)) {
+                    try {
+                        const optRes = await optimizeImageFile(filepath)
+                        if (optRes.success && optRes.optimizedSize > 0) {
+                            bytesWritten = optRes.optimizedSize
+                            console.log(`[upload] Image ${originalName} optimized: ${optRes.originalSize} -> ${optRes.optimizedSize} bytes (${optRes.savedPercent}% saved)`)
+                        }
+                    } catch (optErr: any) {
+                        console.warn(`[upload] Image optimization warning for ${originalName}:`, optErr?.message || optErr)
+                    }
+                }
+                console.log(`[upload] File ${originalName} uploaded successfully.`)
                 sendSuccess()
             })
 
