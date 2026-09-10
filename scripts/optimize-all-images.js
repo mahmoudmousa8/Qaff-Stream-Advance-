@@ -5,7 +5,7 @@
  * Preserves original filenames and extensions so zero database/slot references break.
  * 
  * Usage:
- *   node scripts/optimize-all-images.js [target_directory]
+ *   node scripts/optimize-all-images.js [target_directory] [concurrency]
  */
 
 const fs = require('fs')
@@ -25,6 +25,7 @@ try {
 }
 
 const targetDir = process.argv[2] || process.env.VIDEOS_DIR || '/var/lib/qaff-stream/videos'
+const CONCURRENCY = parseInt(process.argv[3], 10) || 4
 const MAX_WIDTH = 1920
 const MAX_HEIGHT = 1080
 
@@ -63,18 +64,25 @@ async function optimizeOne(filePath) {
 
   let optBuffer
   if (ext === '.png') {
-    let candidate = await pipeline
-      .clone()
-      .png({ compressionLevel: 9, effort: 10 })
-      .toBuffer()
-
-    if (candidate.length > 1.2 * 1024 * 1024) {
-      candidate = await pipeline
+    if (originalSize > 1.2 * 1024 * 1024) {
+      optBuffer = await pipeline
         .clone()
-        .png({ compressionLevel: 9, effort: 10, palette: true, quality: 92 })
+        .png({ compressionLevel: 9, effort: 7, palette: true, quality: 92 })
         .toBuffer()
+    } else {
+      let candidate = await pipeline
+        .clone()
+        .png({ compressionLevel: 9, effort: 7 })
+        .toBuffer()
+
+      if (candidate.length > 1.2 * 1024 * 1024) {
+        candidate = await pipeline
+          .clone()
+          .png({ compressionLevel: 9, effort: 7, palette: true, quality: 92 })
+          .toBuffer()
+      }
+      optBuffer = candidate
     }
-    optBuffer = candidate
   } else {
     optBuffer = await pipeline
       .clone()
@@ -83,7 +91,7 @@ async function optimizeOne(filePath) {
   }
 
   if (optBuffer.length > 0 && optBuffer.length < originalSize) {
-    const tmp = `${filePath}.opt_tmp_${Date.now()}`
+    const tmp = `${filePath}.opt_tmp_${Date.now()}_${Math.random().toString(36).substring(7)}`
     fs.writeFileSync(tmp, optBuffer)
     fs.renameSync(tmp, filePath)
     return {
@@ -107,6 +115,7 @@ async function main() {
   console.log('       Qaff Stream Image Optimizer           ')
   console.log('=============================================')
   console.log(`Scanning directory: ${targetDir}`)
+  console.log(`Worker concurrency: ${CONCURRENCY}`)
 
   const images = await findImages(targetDir)
   console.log(`Found ${images.length} images to check and optimize.\n`)
@@ -120,29 +129,40 @@ async function main() {
   let totalOptimized = 0
   let optimizedCount = 0
   let errorCount = 0
+  let processedCount = 0
 
   const startTime = Date.now()
 
-  for (let i = 0; i < images.length; i++) {
-    const imgPath = images[i]
-    try {
-      const res = await optimizeOne(imgPath)
-      totalOriginal += res.originalSize
-      totalOptimized += res.newSize
-      if (res.optimized) {
-        optimizedCount++
+  // Concurrency pool
+  let idx = 0
+  async function worker() {
+    while (idx < images.length) {
+      const currentIdx = idx++
+      const imgPath = images[currentIdx]
+      try {
+        const res = await optimizeOne(imgPath)
+        totalOriginal += res.originalSize
+        totalOptimized += res.newSize
+        if (res.optimized) optimizedCount++
+      } catch (err) {
+        errorCount++
+        console.error(`Error on ${path.basename(imgPath)}:`, err.message)
+      } finally {
+        processedCount++
+        if (processedCount % 50 === 0 || processedCount === images.length) {
+          const pct = ((processedCount / images.length) * 100).toFixed(1)
+          const savedMb = ((totalOriginal - totalOptimized) / (1024 * 1024)).toFixed(1)
+          console.log(`[${processedCount}/${images.length} (${pct}%)] Processed... Current Space Saved: ${savedMb} MB`)
+        }
       }
-
-      if ((i + 1) % 50 === 0 || i === images.length - 1) {
-        const pct = (((i + 1) / images.length) * 100).toFixed(1)
-        const savedMb = ((totalOriginal - totalOptimized) / (1024 * 1024)).toFixed(1)
-        console.log(`[${i + 1}/${images.length} (${pct}%)] Processed... Current Space Saved: ${savedMb} MB`)
-      }
-    } catch (err) {
-      errorCount++
-      console.error(`Error on ${path.basename(imgPath)}:`, err.message)
     }
   }
+
+  const workers = []
+  for (let w = 0; w < CONCURRENCY; w++) {
+    workers.push(worker())
+  }
+  await Promise.all(workers)
 
   const durationSec = ((Date.now() - startTime) / 1000).toFixed(1)
   const totalSavedBytes = totalOriginal - totalOptimized

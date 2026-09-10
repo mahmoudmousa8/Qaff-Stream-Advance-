@@ -72,21 +72,28 @@ export async function optimizeImageFile(filePath: string): Promise<ImageOptimiza
     let optimizedBuffer: Buffer
 
     if (ext === '.png') {
-      // First try standard high-effort lossless PNG compression
-      let candidate = await pipeline
-        .clone()
-        .png({ compressionLevel: 9, effort: 10 })
-        .toBuffer()
-
-      // If still > 1.2MB, apply near-lossless palette quantization
-      // (ensures it stays well under YouTube's strict 2MB limit while retaining full crispness)
-      if (candidate.length > 1.2 * 1024 * 1024) {
-        candidate = await pipeline
+      if (originalSize > 1.2 * 1024 * 1024) {
+        // Large PNG (e.g. 1.5MB - 2MB): directly apply high-quality 8-bit palette quantization
+        // This yields crystal clear crispness at 400-650KB, well under YouTube's 2MB limit
+        optimizedBuffer = await pipeline
           .clone()
-          .png({ compressionLevel: 9, effort: 10, palette: true, quality: 92 })
+          .png({ compressionLevel: 9, effort: 7, palette: true, quality: 92 })
           .toBuffer()
+      } else {
+        // Smaller PNG: try standard lossless first
+        let candidate = await pipeline
+          .clone()
+          .png({ compressionLevel: 9, effort: 7 })
+          .toBuffer()
+
+        if (candidate.length > 1.2 * 1024 * 1024) {
+          candidate = await pipeline
+            .clone()
+            .png({ compressionLevel: 9, effort: 7, palette: true, quality: 92 })
+            .toBuffer()
+        }
+        optimizedBuffer = candidate
       }
-      optimizedBuffer = candidate
     } else {
       // JPEG format (.jpg, .jpeg)
       optimizedBuffer = await pipeline
