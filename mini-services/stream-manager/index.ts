@@ -281,9 +281,9 @@ function buildFfmpegArgs(filePath: string, rtmpUrl: string, options?: StreamOpti
 function buildRtmpUrl(outputType: string, rtmpServer: string, streamKey: string, slotIndex: number = 0): string {
   switch (outputType) {
     case 'youtube': {
-      // Round-robin: distribute load across YouTube's two ingest endpoints
-      const endpoint = slotIndex % 2 === 0 ? 'a' : 'b'
-      return `rtmp://${endpoint}.rtmp.youtube.com/live2/${streamKey}`
+      // Primary YouTube RTMP endpoint: always use official primary address to avoid backup ingestion drops
+      const base = (rtmpServer && rtmpServer.trim()) ? rtmpServer.trim() : 'rtmp://a.rtmp.youtube.com/live2'
+      return `${base.replace(/\/+$/, '')}/${streamKey}`
     }
     case 'facebook':
       return `rtmps://live-api-s.facebook.com:443/rtmp/${streamKey}`
@@ -386,6 +386,11 @@ function startStreamImmediate(slotIndex: number, rtmpUrl: string, streamKey: str
       if (statSync(filePath).isDirectory()) {
         updateDbSlotStatus(slotIndex, false, 'Failed')
         return { success: false, message: `Path is a directory, not a video file: ${filePath}` }
+      }
+      const lower = filePath.toLowerCase()
+      if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.webp')) {
+        updateDbSlotStatus(slotIndex, false, 'Failed')
+        return { success: false, message: `Cannot stream image file (${filePath}) as a video. Please select a valid video file (.mp4, .mkv, etc.).` }
       }
     } catch (err: any) {
       updateDbSlotStatus(slotIndex, false, 'Failed')

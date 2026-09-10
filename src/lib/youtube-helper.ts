@@ -331,6 +331,11 @@ export async function setupYoutubeLiveStream(
     }
   }
 
+  // 7. Grace period: Give YouTube CDN ingestion edge servers 4 seconds to propagate the stream key binding
+  // This ensures that when FFmpeg connects to RTMP, YouTube is fully initialized and immediately marks the broadcast live
+  console.log('[YouTube Helper] Waiting 4s for YouTube CDN edge to propagate stream key binding...')
+  await new Promise(r => setTimeout(r, 4000))
+
   return { streamKey, rtmpServer, broadcastId }
 }
 
@@ -468,6 +473,10 @@ export async function setupYoutubeLiveStreamBatch(
       }
     })
   )
+
+  // Wait 4 seconds for YouTube CDN ingestion edge servers to propagate stream key bindings
+  console.log('[YouTube Helper Batch] Waiting 4s for YouTube CDN edge to propagate stream key bindings...')
+  await new Promise(r => setTimeout(r, 4000))
 
   return results
 }

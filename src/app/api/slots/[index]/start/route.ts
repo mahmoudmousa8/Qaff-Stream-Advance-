@@ -123,6 +123,12 @@ export async function POST(
       }
     }
 
+    if (finalInputPath && /\.(png|jpg|jpeg|webp)$/i.test(finalInputPath)) {
+      return NextResponse.json({
+        error: 'الملف المختار هو صورة وليس ملف فيديو. يرجى اختيار ملف فيديو صالح (.mp4, .mkv, etc.).'
+      }, { status: 400 })
+    }
+
     // Set status to Starting
     await db.streamSlot.update({
       where: { slotIndex },
