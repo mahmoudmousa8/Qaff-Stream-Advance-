@@ -225,7 +225,7 @@ export async function setupYoutubeLiveStream(
     },
     contentDetails: {
       enableAutoStart: true,
-      enableAutoStop: false,
+      enableAutoStop: true,
       enableDvr: true,
       enableEmbed: true,
       recordFromStart: true
@@ -435,7 +435,7 @@ export async function setupYoutubeLiveStreamBatch(
         },
         contentDetails: {
           enableAutoStart: true,
-          enableAutoStop: false,
+          enableAutoStop: true,
           enableDvr: true,
           enableEmbed: true,
           recordFromStart: true
@@ -507,32 +507,8 @@ function uploadThumbnailAsync(accessToken: string, videoId: string, thumbnailPat
 
 export async function stopYoutubeLiveStream(channelId: string, broadcastId: string): Promise<void> {
   if (!broadcastId || !channelId) return
-  let attempts = 0
-  while (attempts < 3) {
-    attempts++
-    try {
-      const accessToken = await refreshAccessToken(channelId)
-      console.log(`[YouTube Helper] Transitioning broadcast ${broadcastId} to status: complete (attempt ${attempts})...`)
-      const transitionUrl = `https://www.googleapis.com/youtube/v3/liveBroadcasts/transition?broadcastStatus=complete&id=${broadcastId}&part=id,status`
-      const response = await fetchWithTimeout(transitionUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      }, 10000)
-      if (response.ok) {
-        console.log(`[YouTube Helper] Broadcast ${broadcastId} successfully completed and closed on YouTube!`)
-        return
-      } else {
-        const errMsg = await response.text()
-        console.warn(`[YouTube Helper] Failed to transition broadcast ${broadcastId} to complete (attempt ${attempts}): ${errMsg}`)
-      }
-    } catch (err: any) {
-      console.error(`[YouTube Helper] Error in stopYoutubeLiveStream (attempt ${attempts}):`, err?.message || err)
-    }
-    await new Promise(r => setTimeout(r, 2000))
-  }
+  console.log(`[YouTube Helper] (Auto-Stop Mode) Skipping explicit API transition to complete for broadcast ${broadcastId}. Relying on YouTube native enableAutoStop upon RTMP disconnection.`)
+  return
 }
 
 export async function uploadYoutubeThumbnail(
