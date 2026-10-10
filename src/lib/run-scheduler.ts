@@ -512,9 +512,13 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   if (!isStopCheck) {
     jitterSecs = Math.max(0, jitterSecs)
   }
-  if (isStopCheck && hasSwapEnabled && jitterSecs < 0) {
-    // Prevent stopping early if swap video is enabled to ensure the swap video gets its full 2 minutes
-    jitterSecs = 0 
+  // For STOP checks: NEVER allow positive jitter so a stream NEVER delays into the safety buffer!
+  if (isStopCheck) {
+    jitterSecs = Math.min(0, jitterSecs)
+    if (hasSwapEnabled) {
+      // Prevent stopping early if swap video is enabled to ensure the swap video gets its full 2 minutes
+      jitterSecs = 0 
+    }
   }
   
   // Fully timezone-safe timestamp jitter adjustment
@@ -552,30 +556,40 @@ export function getCycleRandomIntervalMins(slotIndex: number, lastSwitchTime: Da
 
 export function getCycleRandomStopMins(slotIndex: number, lastSwitchTime: Date, baseIntervalMins: number): number {
   let baseTargetMins = 8.0 // Target 8.0 minutes for 10m cycle
-  let maxJitterMins = 1.0  // ±1.0 minute (7.0m to 9.0m)
+  let maxJitterMins = 1.0  // ±1.0 minute
 
   if (baseIntervalMins <= 10) {
-    baseTargetMins = 8.0 // Pre-stop around 8.0 minutes
-    maxJitterMins = 1.0  // ±1.0 minute (7.0m to 9.0m)
+    baseTargetMins = 7.5 // Pre-stop around 7.5 minutes (7.0m to 8.0m)
+    maxJitterMins = 0.5
   } else if (baseIntervalMins <= 15) {
-    baseTargetMins = 12.0 // Pre-stop around 12.0 minutes
-    maxJitterMins = 1.0   // ±1.0 minute (11.0m to 13.0m)
+    baseTargetMins = 11.5 // Pre-stop around 11.5 minutes (11.0m to 12.0m)
+    maxJitterMins = 0.5
   } else if (baseIntervalMins <= 30) {
-    baseTargetMins = 25.0 // Pre-stop around 25.0 minutes
-    maxJitterMins = 2.0   // ±2.0 minutes (23.0m to 27.0m)
+    // 30-minute cycle: Pre-stop around 24.5 minutes (23.5m to 25.5m)
+    // Strictly stops at least 4.5 minutes before next run (min 4.0m buffer strictly guaranteed)
+    baseTargetMins = 24.5
+    maxJitterMins = 1.0
   } else if (baseIntervalMins <= 60) {
-    baseTargetMins = 53.0 // Pre-stop around 53.0 minutes
-    maxJitterMins = 3.0   // ±3.0 minutes (50.0m to 56.0m)
+    // 60-minute cycle (1 hour): Pre-stop around 53.5 minutes (51.5m to 55.5m)
+    // Strictly stops at least 4.5 minutes before next run (min 4.0m buffer strictly guaranteed)
+    baseTargetMins = 53.5
+    maxJitterMins = 2.0
   } else {
     baseTargetMins = baseIntervalMins * 0.88 // 88% of interval
-    maxJitterMins = 5.0
+    maxJitterMins = 3.0
   }
 
   const seed = (slotIndex + 1) * 100000 + Math.floor(lastSwitchTime.getTime() / 60000)
   const x = Math.sin(seed) * 10000
   const randomFactor = x - Math.floor(x)
   const jitterMins = (randomFactor * (maxJitterMins * 2)) - maxJitterMins
-  const stopTarget = Math.max(1.0, baseTargetMins + jitterMins)
+
+  // Strict Safety Margin: Enforce at least 4.0 guaranteed minutes of safe idle buffer
+  // for intervals of 30m and 60m so that NO random jitter can ever cross into the final 4 minutes.
+  const minSafeBufferMins = 4.0
+  const maxAllowedStop = Math.max(1.0, baseIntervalMins - minSafeBufferMins)
+  const stopTarget = Math.min(maxAllowedStop, Math.max(1.0, baseTargetMins + jitterMins))
+
   return stopTarget
 }
 
