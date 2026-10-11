@@ -146,6 +146,13 @@ npx prisma generate 2>&1 | tail -2
 npx prisma db push 2>&1 | tail -2
 echo -e "  ✅ Dependencies & Database schema successfully updated."
 
+# Setup Hourly Log Rotation
+if [ -f "$PROJECT_DIR/scripts/qaff-log-rotate.sh" ]; then
+    sudo cp "$PROJECT_DIR/scripts/qaff-log-rotate.sh" /etc/cron.hourly/qaff-log-rotate
+    sudo chmod +x /etc/cron.hourly/qaff-log-rotate
+    echo -e "  ✅ Automated hourly log rotation configured in /etc/cron.hourly/qaff-log-rotate"
+fi
+
 # 4. Compiling the Next.js Production App
 echo -e "\n${CYAN}[4/5] Building the Next.js application natively...${NC}"
 # Kill any hung build processes

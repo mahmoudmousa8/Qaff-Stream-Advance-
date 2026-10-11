@@ -452,6 +452,13 @@ if [ -n "$PM2_STARTUP_CMD" ]; then
 fi
 pm2 save --force
 
+# Setup Hourly Log Rotation
+if [ -f "$PROJECT_DIR/scripts/qaff-log-rotate.sh" ]; then
+    sudo cp "$PROJECT_DIR/scripts/qaff-log-rotate.sh" /etc/cron.hourly/qaff-log-rotate
+    sudo chmod +x /etc/cron.hourly/qaff-log-rotate
+    echo -e "  ✅ Automated hourly log rotation configured in /etc/cron.hourly/qaff-log-rotate"
+fi
+
 # Final statistics
 SERVER_IP=$(hostname -I | awk '{print $1}')
 echo -e "\n${BOLD}════════════════════════════════════════════${NC}"
