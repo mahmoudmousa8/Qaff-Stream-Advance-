@@ -485,9 +485,7 @@ function isWithinActiveWindow(schedStart: string, schedStop: string): boolean {
   if (!stopDate) return false
 
   // We're in the window: start has passed, stop hasn't yet
-  const result = startDate <= now && now < stopDate
-  console.log(`[Scheduler] isWithinActiveWindow: start=${startDate.toISOString()}, stop=${stopDate.toISOString()}, now=${now.toISOString()}, result=${result}`)
-  return result
+  return startDate <= now && now < stopDate
 }
 
 function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, hasSwapEnabled = false): boolean {
@@ -530,7 +528,9 @@ function shouldTrigger(sched: string, slotIndex: number, isStopCheck = false, ha
   const graceSecs = 300
 
   const result = diffSecs >= 0 && diffSecs <= graceSecs
-  console.log(`[Scheduler] shouldTrigger(Slot ${slotIndex + 1}, ${isStopCheck ? 'STOP' : 'START'}): sched="${sched}", jitter=${jitterSecs}s, diffSecs=${diffSecs}, target=${target.toLocaleTimeString('en-US', { timeZone: 'Africa/Cairo' })}, trigger=${result}`)
+  if (result) {
+    console.log(`[Scheduler] shouldTrigger(Slot ${slotIndex + 1}, ${isStopCheck ? 'STOP' : 'START'}): sched="${sched}", jitter=${jitterSecs}s, diffSecs=${diffSecs}, target=${target.toLocaleTimeString('en-US', { timeZone: 'Africa/Cairo' })}, trigger=true`)
+  }
 
   return result
 }
@@ -827,7 +827,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
   })
   const securityKey = clientUser?.securityKey || 'qaff-key-123'
 
-  console.log(`[Scheduler] Tick at ${now.toISOString()}`)
   const logs: string[] = []
   let startedCount = 0
   let stoppedCount = 0
@@ -889,11 +888,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
       ]
     }
   })
-
-  console.log(`[Scheduler] Found ${slots.length} slot(s) to evaluate`)
-  for (const s of slots) {
-    console.log(`[Scheduler]   Slot ${s.slotIndex + 1}: isScheduled=${s.isScheduled}, isRunning=${s.isRunning}, schedStart="${s.schedStart}", schedStop="${s.schedStop}"`)
-  }
 
   // Collect slots-to-start separately for sequential processing.
   // Stops are processed inline (must happen before potential next-day re-queue).
@@ -1260,7 +1254,6 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
         const minsRemaining = msRemaining / (1000 * 60)
         // Fixed 2-minute swap threshold: always trigger 2 minutes before stop
         const swapThresholdMins = 2
-        console.log(`[Scheduler] Slot ${slot.slotIndex + 1}: Swap check — ${minsRemaining.toFixed(2)}m remain, threshold=2m`)
         if (minsRemaining <= swapThresholdMins && minsRemaining > 0) {
           const resolvedPath = resolveSwapVideoFile(slot.swapVideoPath, slot.slotIndex)
           activeSwapVideos.set(slot.slotIndex, resolvedPath)

@@ -21,7 +21,6 @@ export function startServerScheduler() {
 }
 
 async function tick() {
-  console.log(`[ServerScheduler] Tick triggered at ${new Date().toISOString()}`)
   try {
     const result = await runSchedulerTick()
     if (result.logs.length > 0) {
