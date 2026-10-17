@@ -897,9 +897,22 @@ export async function runSchedulerTick(): Promise<SchedulerResult> {
     if (!slot.isRunning) {
       activeSwapVideos.delete(slot.slotIndex)
 
-      // ── Reschedule finished/stopped recurring slots ──
+      // ── Reschedule finished/stopped recurring slots or slots stuck in the past ──
       const isRecurring = slot.daily || slot.weekly || slot.hourly || slot.repeat10m || slot.repeat15m || slot.repeat30m || slot.repeat1h || slot.repeat2h || slot.repeat12h
-      if (!slot.isScheduled && isRecurring && slot.schedStart && !slot.manuallyStopped) {
+      let isStuckInPast = false
+      if (slot.isScheduled && isRecurring && slot.schedStart && !slot.manuallyStopped) {
+        const parsed = parseScheduleTime(slot.schedStart)
+        if (parsed) {
+          const target = getCairoTargetDate(parsed, now)
+          const diffSecs = Math.floor((now.getTime() - target.getTime()) / 1000)
+          // If scheduled start passed > 10 minutes ago and stream is not running
+          if (diffSecs > 600) {
+            isStuckInPast = true
+          }
+        }
+      }
+
+      if ((!slot.isScheduled || isStuckInPast) && isRecurring && slot.schedStart && !slot.manuallyStopped) {
         let shouldReschedule = true
         
         if (shouldReschedule) {
