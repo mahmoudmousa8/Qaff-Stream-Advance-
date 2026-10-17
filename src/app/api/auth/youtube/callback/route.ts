@@ -94,6 +94,56 @@ export async function GET(request: NextRequest) {
         }
       })
       console.log(`[YouTube Auth Callback] Updated existing channel: ${channelTitle}`)
+
+      // Proactively wake up and stagger all non-running slots bound to this re-authenticated channel
+      try {
+        const boundSlots = await db.streamSlot.findMany({
+          where: {
+            youtubeChannelId: existing.id,
+            isRunning: false,
+            manuallyStopped: false
+          },
+          orderBy: { slotIndex: 'asc' }
+        })
+
+        if (boundSlots.length > 0) {
+          const now = new Date()
+          const cairoNow = new Date(now.toLocaleString("en-US", { timeZone: "Africa/Cairo" }))
+          let offsetMins = 1
+          let batchCount = 0
+
+          for (const slot of boundSlots) {
+            const targetDate = new Date(cairoNow.getTime() + offsetMins * 60 * 1000)
+            const tMonth = String(targetDate.getMonth() + 1).padStart(2, '0')
+            const tDay = String(targetDate.getDate()).padStart(2, '0')
+            const tHour = String(targetDate.getHours()).padStart(2, '0')
+            const tMinute = String(targetDate.getMinutes()).padStart(2, '0')
+            const newSchedStart = `${tMonth}-${tDay} ${tHour}:${tMinute}`
+
+            await db.streamSlot.update({
+              where: { slotIndex: slot.slotIndex },
+              data: {
+                isScheduled: true,
+                status: 'Scheduled',
+                isRunning: false,
+                manuallyStopped: false,
+                schedStart: newSchedStart,
+                nextRunTime: newSchedStart,
+                youtubeBroadcastId: ''
+              }
+            })
+
+            batchCount++
+            if (batchCount >= 2) {
+              batchCount = 0
+              offsetMins++
+            }
+          }
+          console.log(`[YouTube Auth Callback] Auto-rescheduled ${boundSlots.length} bound slots for ${channelTitle} starting in ${offsetMins}m`)
+        }
+      } catch (err: any) {
+        console.error('[YouTube Auth Callback] Error waking up bound slots:', err.message)
+      }
     } else {
       if (!refresh_token) {
         // If it's a new channel, we MUST have a refresh token!
